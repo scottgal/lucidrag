@@ -1,0 +1,213 @@
+{
+  "EmbeddingBackend": 0,
+  "Onnx": {
+    "ModelDirectory": "C:\\Blog\\mostlylucidweb\\Mostlylucid.DocSummarizer\\bin\\Debug\\net10.0\\win-x64\\models",
+    "EmbeddingModel": 0,
+    "UseQuantized": true,
+    "MaxEmbeddingSequenceLength": 256,
+    "InferenceThreads": 0,
+    "ExecutionProvider": 0,
+    "GpuDeviceId": 0,
+    "EmbeddingBatchSize": 32,
+    "UseParallelExecution": true,
+    "InterOpThreads": 0
+  },
+  "Ollama": {
+    "BaseUrl": "http://localhost:11434",
+    "Model": "llama3.2:3b",
+    "EmbedModel": "nomic-embed-text",
+    "ClassifierModel": "tinyllama",
+    "Temperature": 0.3,
+    "TimeoutSeconds": 1200
+  },
+  "Bert": {
+    "Lambda": 0.7,
+    "ExtractionRatio": 0.15,
+    "MinSentences": 3,
+    "MaxSentences": 30,
+    "UsePositionWeighting": true
+  },
+  "Docling": {
+    "BaseUrl": "http://localhost:5001",
+    "TimeoutSeconds": 1200,
+    "EnableSplitProcessing": true,
+    "PagesPerChunk": 50,
+    "MaxConcurrentChunks": 2,
+    "PdfBackend": "pypdfium2",
+    "OcrPdfBackend": "docling",
+    "EnableOcrFallback": true,
+    "MinPagesForSplit": 60,
+    "AutoDetectGpu": true
+  },
+  "Qdrant": {
+    "Host": "localhost",
+    "Port": 6334,
+    "CollectionName": "documents",
+    "VectorSize": 384,
+    "DeleteCollectionAfterSummarization": true
+  },
+  "Processing": {
+    "MaxHeadingLevel": 2,
+    "MaxChunkSize": 2000,
+    "ChunkOverlap": 100,
+    "MaxConcurrentChunks": 4,
+    "EnableSplitProcessing": true,
+    "MaxLlmParallelism": 2,
+    "TargetChunkTokens": 1500,
+    "MinChunkTokens": 200,
+    "Memory": {
+      "EnableDiskStorage": true,
+      "DiskStorageThreshold": 100,
+      "StreamingThresholdBytes": 5242880,
+      "EmbeddingBatchSize": 10,
+      "GcIntervalChunks": 50,
+      "MaxMemoryMB": 0
+    },
+    "ChunkCache": {
+      "EnableChunkCache": true,
+      "CacheDirectory": "C:\\Users\\scott\\.docsummarizer\\chunks",
+      "RetentionDays": 14,
+      "VersionToken": "v2",
+      "LazyLoadContent": true,
+      "LazyLoadThreshold": 20
+    },
+    "SummaryLength": {
+      "MinWordsForSummary": 150,
+      "Tiny": {
+        "Name": "tiny",
+        "MaxWords": 600,
+        "Topics": 2,
+        "ChunksPerTopic": 2,
+        "BulletCount": 2,
+        "WordsPerBullet": 18,
+        "TopClaims": 5,
+        "MaxCharacters": 4,
+        "MaxLocations": 3,
+        "MaxOther": 2
+      },
+      "Small": {
+        "Name": "small",
+        "MaxWords": 2000,
+        "Topics": 3,
+        "ChunksPerTopic": 3,
+        "BulletCount": 3,
+        "WordsPerBullet": 20,
+        "TopClaims": 8,
+        "MaxCharacters": 5,
+        "MaxLocations": 4,
+        "MaxOther": 3
+      },
+      "Medium": {
+        "Name": "medium",
+        "MaxWords": 6000,
+        "Topics": 4,
+        "ChunksPerTopic": 3,
+        "BulletCount": 3,
+        "WordsPerBullet": 20,
+        "TopClaims": 10,
+        "MaxCharacters": 6,
+        "MaxLocations": 4,
+        "MaxOther": 3
+      },
+      "Large": {
+        "Name": "large",
+        "MaxWords": 20000,
+        "Topics": 5,
+        "ChunksPerTopic": 4,
+        "BulletCount": 4,
+        "WordsPerBullet": 20,
+        "TopClaims": 12,
+        "MaxCharacters": 8,
+        "MaxLocations": 5,
+        "MaxOther": 4
+      },
+      "VeryLarge": {
+        "Name": "very large",
+        "MaxWords": 2147483647,
+        "Topics": 6,
+        "ChunksPerTopic": 5,
+        "BulletCount": 5,
+        "WordsPerBullet": 18,
+        "TopClaims": 15,
+        "MaxCharacters": 10,
+        "MaxLocations": 6,
+        "MaxOther": 5
+      }
+    }
+  },
+  "Output": {
+    "Format": 0,
+    "Verbose": false,
+    "IncludeTrace": false,
+    "IncludeTopics": true,
+    "IncludeOpenQuestions": false,
+    "IncludeChunkIndex": false
+  },
+  "WebFetch": {
+    "Enabled": false,
+    "Mode": 0,
+    "TimeoutSeconds": 30,
+    "UserAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36 DocSummarizer/1.0"
+  },
+  "Batch": {
+    "FileExtensions": [
+      ".txt",
+      ".md",
+      ".pdf",
+      ".docx",
+      ".xlsx",
+      ".pptx",
+      ".html",
+      ".csv",
+      ".png",
+      ".jpg",
+      ".tiff",
+      ".vtt",
+      ".adoc"
+    ],
+    "Recursive": false,
+    "MaxConcurrentFiles": 4,
+    "ContinueOnError": true,
+    "IncludePatterns": [],
+    "ExcludePatterns": []
+  },
+  "Embedding": {
+    "RequestsPerSecond": 2,
+    "MaxRetries": 5,
+    "InitialRetryDelayMs": 1000,
+    "MaxRetryDelayMs": 30000,
+    "DelayBetweenRequestsMs": 100,
+    "EnableCircuitBreaker": true,
+    "CircuitBreakerThreshold": 3,
+    "CircuitBreakerDurationSeconds": 30
+  },
+  "BertRag": {
+    "VectorStore": 2,
+    "CollectionName": "docsummarizer",
+    "PersistVectors": true,
+    "ReuseExistingEmbeddings": true
+  },
+  "Extraction": {
+    "ExtractionRatio": 0.15,
+    "MinSegments": 10,
+    "MaxSegments": 100,
+    "MaxSegmentsToEmbed": 200,
+    "MmrLambda": 0.7
+  },
+  "Retrieval": {
+    "TopK": 25,
+    "FallbackCount": 5,
+    "UseRRF": true,
+    "RrfK": 60,
+    "UseHybridSearch": true,
+    "Alpha": 0.6,
+    "MinSimilarity": 0.3
+  },
+  "AdaptiveRetrieval": {
+    "Enabled": true,
+    "MinCoveragePercent": 5,
+    "MinTopK": 15,
+    "MaxTopK": 100,
+    "NarrativeBoost": 1.5
+  }
+}

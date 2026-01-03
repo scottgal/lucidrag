@@ -1,0 +1,270 @@
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
+using Mostlylucid.DocSummarizer;
+using Mostlylucid.DocSummarizer.Services;
+using LucidRAG.Config;
+using LucidRAG.Data;
+using LucidRAG.Entities;
+
+namespace LucidRAG.Services.Background;
+
+public class DocumentQueueProcessor(
+    DocumentProcessingQueue queue,
+    IServiceScopeFactory scopeFactory,
+    ILogger<DocumentQueueProcessor> logger) : BackgroundService
+{
+    // Maximum time to process a single document before timing out
+    private static readonly TimeSpan DocumentProcessingTimeout = TimeSpan.FromMinutes(30);
+
+    // How often to run cleanup for abandoned progress channels
+    private static readonly TimeSpan CleanupInterval = TimeSpan.FromMinutes(15);
+
+    protected override async Task ExecuteAsync(CancellationToken stoppingToken)
+    {
+        logger.LogInformation("Document queue processor started");
+
+        // Clean up failed documents from previous runs
+        await CleanupFailedDocumentsAsync(stoppingToken);
+
+        // Start cleanup timer
+        var cleanupTimer = new PeriodicTimer(CleanupInterval);
+        _ = RunCleanupLoopAsync(cleanupTimer, stoppingToken);
+
+        while (!stoppingToken.IsCancellationRequested)
+        {
+            try
+            {
+                var job = await queue.DequeueAsync(stoppingToken);
+
+                // Create a linked token with timeout for this specific document
+                using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(stoppingToken);
+                timeoutCts.CancelAfter(DocumentProcessingTimeout);
+
+                try
+                {
+                    await ProcessDocumentAsync(job, timeoutCts.Token);
+                }
+                catch (OperationCanceledException) when (!stoppingToken.IsCancellationRequested)
+                {
+                    // Document processing timed out
+                    logger.LogWarning("Document {DocumentId} processing timed out after {Timeout}",
+                        job.DocumentId, DocumentProcessingTimeout);
+                    await MarkDocumentFailedAsync(job.DocumentId, "Processing timed out", stoppingToken);
+                    queue.CompleteProgressChannel(job.DocumentId);
+                }
+            }
+            catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+            {
+                break;
+            }
+            catch (Exception ex)
+            {
+                logger.LogError(ex, "Error processing document from queue");
+            }
+        }
+
+        cleanupTimer.Dispose();
+        logger.LogInformation("Document queue processor stopped");
+    }
+
+    private async Task RunCleanupLoopAsync(PeriodicTimer timer, CancellationToken ct)
+    {
+        try
+        {
+            while (await timer.WaitForNextTickAsync(ct))
+            {
+                var cleaned = queue.CleanupAbandonedProgressChannels();
+                if (cleaned > 0)
+                {
+                    logger.LogInformation("Cleaned up {Count} abandoned progress channels", cleaned);
+                }
+
+                // Log queue stats periodically
+                logger.LogDebug("Queue stats: {QueueDepth} documents queued, {ActiveChannels} active progress channels",
+                    queue.QueueDepth, queue.ActiveProgressChannels);
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            // Expected on shutdown
+        }
+    }
+
+    private async Task MarkDocumentFailedAsync(Guid documentId, string message, CancellationToken ct)
+    {
+        try
+        {
+            using var scope = scopeFactory.CreateScope();
+            var db = scope.ServiceProvider.GetRequiredService<RagDocumentsDbContext>();
+
+            var document = await db.Documents.FindAsync([documentId], ct);
+            if (document is not null)
+            {
+                document.Status = DocumentStatus.Failed;
+                document.StatusMessage = message;
+                await db.SaveChangesAsync(ct);
+            }
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Failed to mark document {DocumentId} as failed", documentId);
+        }
+    }
+
+    /// <summary>
+    /// Clean up failed and stuck documents on startup
+    /// </summary>
+    private async Task CleanupFailedDocumentsAsync(CancellationToken ct)
+    {
+        try
+        {
+            using var scope = scopeFactory.CreateScope();
+            var db = scope.ServiceProvider.GetRequiredService<RagDocumentsDbContext>();
+
+            // Find all failed documents and documents stuck in processing
+            var failedDocs = await db.Documents
+                .Where(d => d.Status == DocumentStatus.Failed ||
+                           (d.Status == DocumentStatus.Processing && d.CreatedAt < DateTimeOffset.UtcNow.AddHours(-1)))
+                .ToListAsync(ct);
+
+            if (failedDocs.Count == 0)
+            {
+                logger.LogInformation("No failed documents to clean up");
+                return;
+            }
+
+            logger.LogInformation("Cleaning up {Count} failed/stuck documents on startup", failedDocs.Count);
+
+            foreach (var doc in failedDocs)
+            {
+                try
+                {
+                    // Delete the uploaded file if it exists
+                    if (!string.IsNullOrEmpty(doc.FilePath) && File.Exists(doc.FilePath))
+                    {
+                        var directory = Path.GetDirectoryName(doc.FilePath);
+                        if (!string.IsNullOrEmpty(directory) && Directory.Exists(directory))
+                        {
+                            Directory.Delete(directory, recursive: true);
+                            logger.LogDebug("Deleted upload directory for document {DocumentId}", doc.Id);
+                        }
+                    }
+
+                    // Remove from database
+                    db.Documents.Remove(doc);
+                }
+                catch (Exception ex)
+                {
+                    logger.LogWarning(ex, "Failed to clean up document {DocumentId}", doc.Id);
+                }
+            }
+
+            await db.SaveChangesAsync(ct);
+            logger.LogInformation("Cleaned up {Count} failed documents", failedDocs.Count);
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Error during failed document cleanup");
+        }
+    }
+
+    private async Task ProcessDocumentAsync(DocumentProcessingJob job, CancellationToken ct)
+    {
+        using var scope = scopeFactory.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<RagDocumentsDbContext>();
+        var summarizer = scope.ServiceProvider.GetRequiredService<IDocumentSummarizer>();
+        var vectorStore = scope.ServiceProvider.GetRequiredService<IVectorStore>();
+        var entityGraph = scope.ServiceProvider.GetRequiredService<IEntityGraphService>();
+
+        var document = await db.Documents.FindAsync([job.DocumentId], ct);
+        if (document is null)
+        {
+            logger.LogWarning("Document {DocumentId} not found, skipping", job.DocumentId);
+            return;
+        }
+
+        var progressChannel = queue.GetOrCreateProgressChannel(job.DocumentId);
+
+        try
+        {
+            document.Status = DocumentStatus.Processing;
+            document.ProcessingProgress = 0;
+            await db.SaveChangesAsync(ct);
+
+            // Report start
+            await progressChannel.Writer.WriteAsync(
+                ProgressUpdates.Stage("Processing", "Starting document processing...", 0, 0), ct);
+
+            // Process document using DocSummarizer
+            var result = await summarizer.SummarizeFileAsync(
+                job.FilePath,
+                progressChannel.Writer,
+                cancellationToken: ct);
+
+            // Update document with initial results
+            document.SegmentCount = result.Trace.TotalChunks;
+            document.ProcessingProgress = 80;
+            await db.SaveChangesAsync(ct);
+
+            // Report entity extraction starting
+            progressChannel.Writer.TryWrite(
+                ProgressUpdates.Stage("Entities", "Extracting entities...", 0, 0));
+
+            // Get segments from vector store and extract entities
+            try
+            {
+                var segments = await vectorStore.GetDocumentSegmentsAsync(
+                    "ragdocuments", // Collection name used by DocSummarizer
+                    result.Trace.DocumentId,
+                    ct);
+
+                if (segments.Count > 0)
+                {
+                    var entityResult = await entityGraph.ExtractAndStoreEntitiesAsync(
+                        job.DocumentId,
+                        segments,
+                        ct);
+
+                    document.EntityCount = entityResult.EntitiesExtracted;
+                    logger.LogInformation(
+                        "Extracted {EntityCount} entities and {RelCount} relationships for document {DocumentId}",
+                        entityResult.EntitiesExtracted, entityResult.RelationshipsCreated, job.DocumentId);
+                }
+            }
+            catch (Exception ex)
+            {
+                // Entity extraction failure shouldn't fail the whole document processing
+                logger.LogWarning(ex, "Entity extraction failed for document {DocumentId}, continuing", job.DocumentId);
+            }
+
+            // Mark complete
+            document.Status = DocumentStatus.Completed;
+            document.ProcessingProgress = 100;
+            document.ProcessedAt = DateTimeOffset.UtcNow;
+            await db.SaveChangesAsync(ct);
+
+            // Report completion (channel may already be completed by summarizer)
+            progressChannel.Writer.TryWrite(
+                ProgressUpdates.Completed($"Completed! {document.SegmentCount} segments, {document.EntityCount} entities.", 0));
+
+            logger.LogInformation("Document {DocumentId} processed successfully with {SegmentCount} segments, {EntityCount} entities",
+                job.DocumentId, document.SegmentCount, document.EntityCount);
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Failed to process document {DocumentId}", job.DocumentId);
+
+            document.Status = DocumentStatus.Failed;
+            document.StatusMessage = ex.Message;
+            await db.SaveChangesAsync(ct);
+
+            // Channel may already be completed
+            progressChannel.Writer.TryWrite(
+                ProgressUpdates.Error("Processing", $"Failed: {ex.Message}", 0));
+        }
+        finally
+        {
+            queue.CompleteProgressChannel(job.DocumentId);
+        }
+    }
+}

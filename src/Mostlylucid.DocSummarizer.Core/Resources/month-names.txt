@@ -1,0 +1,3753 @@
+# Month names from .NET CultureInfo (all cultures)
+# Auto-generated from .NET's globalization data
+# Generated: 2025-12-24 13:21:44 UTC
+# Total: 3748 entries
+
+1-Kysã
+1-р сар
+10 ᠊ᠷ ᠰᠠᠷ᠎ᠠ
+10-Kysã
+10-р сар
+10Ky
+10月
+10월
+11 ᠊ᠷ ᠰᠠᠷ᠎ᠠ
+11-Kysã
+11-р сар
+11Ky
+11᠊ᠷ ᠰᠠᠷ᠎ᠠ
+11月
+11월
+12
+12 ᠊ᠷ ᠰᠠᠷ᠎ᠠ
+12-Kysã
+12-р сар
+12Ky
+12᠊ᠷ ᠰᠠᠷ᠎ᠠ
+12月
+12월
+1Ky
+1 ᠊ᠷ ᠰᠠᠷ᠎ᠠ
+1月
+1월
+2-Kysã
+2-р сар
+2Ky
+2 ᠊ᠷ ᠰᠠᠷ᠎ᠠ
+2月
+2월
+3-Kysã
+3-р сар
+3Ky
+3᠊ᠷ ᠰᠠᠷ᠎ᠠ
+3月
+3월
+4-Kysã
+4-р сар
+4Ky
+4 ᠊ᠷ ᠰᠠᠷ᠎ᠠ
+4月
+4월
+5-Kysã
+5-р сар
+5Ky
+5 ᠊ᠷ ᠰᠠᠷ᠎ᠠ
+5月
+5월
+6-Kysã
+6-р сар
+6Ky
+6 ᠊ᠷ ᠰᠠᠷ᠎ᠠ
+6月
+6월
+7-Kysã
+7-р сар
+7Ky
+7 ᠊ᠷ ᠰᠠᠷ᠎ᠠ
+7月
+7월
+8-Kysã
+8-р сар
+8Ky
+8᠊ᠷ ᠰᠠᠷ᠎ᠠ
+8 ᠊ᠷ ᠰᠠᠷ᠎ᠠ
+8月
+8월
+9 ᠊ᠷ ᠰᠠᠷ᠎ᠠ
+9-Kysã
+9-р сар
+9Ky
+9 ᠊ᠷ ᠰᠠᠷ᠎ᠠ
+9月
+9월
+A-K
+Ab
+Aban
+abe
+abendua
+Abr
+Abriil
+abril
+abrile
+Abrille
+Abrëll
+abu
+Aburil
+abuztua
+ade
+adeɛmekpɔxe
+Ado
+Adooleessa
+Afi
+Afirilu
+afɔ
+afɔfĩe
+ag
+AGA
+Agasti
+aggusti
+aggustip
+Ago
+agost
+Agosti
+Agosto
+agostu
+Ags
+Agt
+Agu
+Agusito
+Agusta
+Agusti
+Agustus
+Agɛ
+Agɛmɔ
+Agẹ
+Agẹmọ
+Aib
+Aibreán
+Am Faoilleach
+Am Màrt
+Ama
+Amajjii
+An Cèitean
+An Dàmhair
+An Dùbhlachd
+An Gearran
+An Giblean
+An Lùnastal
+An t-Iuchar
+An t-Samhain
+An t-Sultain
+An t-Ògmhios
+any
+anyɔnyɔ
+Aog
+Aogositra
+août
+Aoǁkhuumûǁkhâb
+api
+apirila
+Apiriri
+apl
+Aplili
+Apr
+aprel
+Aprell
+apriili
+apriilip
+April
+aprile
+Aprili
+aprilie
+aprill
+aprilo
+Aprily
+Aprilyi
+apryl
+apryla
+apríl
+apríla
+aprīlis
+Apu
+Apuli
+Ara
+Aralık
+Ará
+Arát
+Aug
+Auguscht
+August
+augusta
+augusti
+augusto
+augusts
+Augustus
+augusztus
+aus
+austu
+Averil
+avg
+avgust
+Avi
+avientu
+Avo
+Avost
+avq
+avqust
+avr
+avrigl
+avril
+Avrril
+Avrîl
+avust
+awg
+awgust
+awgusta
+awi
+Awiril
+awirili
+Awr
+Awril
+Awst
+Aww
+Awwissu
+Ayɛwoho-Kitawonsa
+aza
+Azar
+azaroa
+Ağu
+Ağustos
+aŭg
+aŭgusto
+Bahman
+bal
+balandis
+balandžio
+Beal
+Bealtaine
+bio
+birž
+birželio
+birželis
+Bisha Afraad
+Bisha Koobaad
+Bisha Kow iyo Tobnaad
+Bisha Laba iyo Tobnaad
+Bisha Labaad
+Bisha Lixaad
+Bisha Saddexaad
+Bisha Sagaalaad
+Bisha Shanaad
+Bisha Sideedaad
+Bisha Tobnaad
+Bisha Todobaad
+Bit
+Bitooteessa
+Boaldyn
+borg
+borgemánnu
+bow
+bowte
+Brá
+Bráčet
+Bur
+Bureet
+Bé
+Bél
+Bélú
+Bêl
+Bêläwü
+Bìòôm
+bře
+březen
+března
+Bɔ́r
+bṛa
+bṛayṛ
+Caamsa
+cab
+cabudanni
+Cam
+Can
+Chanuari
+Che
+Chg
+Chikumi
+Chikunguru
+Chivabvu
+Chk
+Chr
+Chrištmánet
+Chulai
+Chv
+Chw
+Chwef
+Chwefror
+Cio
+Ciongo
+Cis
+Ciswà
+CKI
+CLA
+Cokcwaklaŋne
+Cokcwaklii
+col
+colte
+Cte
+Ctembeṛ
+Cul
+cuo
+cuoŋ
+cuoŋománnu
+cut
+cutanbir
+Cutenber
+cuáŋui
+cuáŋuimáánu
+cze
+czerwca
+czerwiec
+Cèit
+Cʼhwe
+Cʼhwevrer
+D-Ɔ
+da december
+da fanadur
+da favrer
+da mars
+da matg
+da november
+da schaner
+da settember
+da zercladur
+DAB
+DAC
+DAD
+DAG
+DAH
+Dal
+dam
+dama
+DAN
+DAO
+DAP
+DAR
+Dat
+DAU
+De
+de des
+de desembre
+de febr
+de febrer
+de febreru
+de gen
+de gener
+de jul
+de juliol
+de juny
+de maig
+de marzu
+de març
+de mayu
+de nov
+de novembre
+de payares
+de set
+de setembre
+de setiembre
+de xineru
+de xunetu
+de xunu
+dea
+deasiamime
+Dec
+decembar
+decembari
+decembarip
+December
+decembra
+decembre
+decembrie
+decembris
+decembro
+Dee
+Deesanbur
+Deireadh Fómhair
+dek
+dekabr
+Des
+desam
+Desambra
+desanburu
+Desemba
+Desember
+desembre
+Desimber
+Desàmbar
+dets
+detsember
+Dey
+Dez
+Dezember
+dezembro
+Dezämber
+DFómh
+DGI
+dhen Chèitean
+dhen Dàmhair
+dhen Dùbhlachd
+dhen Fhaoilleach
+dhen Ghearran
+dhen Ghiblean
+dhen Iuchar
+dhen Lùnastal
+dhen Mhàrt
+dhen t-Samhain
+dhen t-Sultain
+dhen Ògmhios
+dhj
+dhjetor
+di
+Diba
+Dibatsela
+Dibo
+Dibokwane
+dic
+Dicemba
+Dicembar
+dicembre
+diciembre
+Difuu-Ɔsandaa
+dimɔ́di
+dip
+Dipha
+Diphalane
+Dis
+Disamba
+Disambar
+Diseembar
+Disemba
+Disember
+Disyembre
+Disẹ́mba
+DIT
+Diz
+Dizenbru
+Diċ
+Diċembru
+diŋ
+diŋgindi
+diɓ
+diɓáɓá
+DOC
+Doy
+dsb
+Du
+dub
+duben
+dubna
+duj
+dujanbir
+dum
+Dun
+duu
+duujal
+Duä
+Duät
+Duɔ̱ɔ̱
+Duɔ̱ɔ̱ŋ
+Duǧ
+Duǧembeṛ
+Dwe mar Abich
+Dwe mar Abiriyo
+Dwe mar Aboro
+Dwe mar Achiel
+Dwe mar Adek
+Dwe mar Ang’wen
+Dwe mar Apar
+Dwe mar Apar gi ariyo
+Dwe mar Ariyo
+Dwe mar Auchiel
+Dwe mar gi achiel
+Dwe mar Ochiko
+dzd
+Dzi
+Dzivamisoko
+dzm
+dzodze
+dzome
+dzove
+dzu
+dzv
+Dàmh
+déc
+décembre
+Dés
+Désémber
+Dìpɔ̀s
+Dùbh
+d’abr
+d’abril
+d’ag
+d’agost
+d’agostu
+d’avientu
+d’avrigl
+d’avust
+d’ochobre
+d’oct
+d’october
+d’octubre
+E-K
+E-O
+E-Ɔ
+Ean
+Eanáir
+Ebr
+Ebrel
+Ebrill
+Ebɔbira-Oforisuo
+Ebɔw-Ɔbenem
+efute
+eka
+ekaina
+Eki
+Ekim
+Elb
+Elba
+elo
+elok
+elokuu
+elokuuta
+elá
+eláŋgɛ́
+emi
+emiasele
+Ene
+Enero
+ensil, oóli ú kátánuɛ
+Eost
+Epe
+Epeeso
+Eph
+Ephreli
+Epr
+Epreel
+Epreli
+Epreo
+Esfand
+Est
+Esusow Aketseaba-Kɔtɔnimba
+esɔ
+esɔpɛsɔpɛ
+Eyl
+Eylül
+F-Ɛ
+Fab
+Faburairu
+fan
+fanadur
+Fankwa-Ɛbɔ
+Faoi
+Farvardin
+favr
+favrer
+fbl
+FDE
+Fe
+Feabh
+Feabhra
+Feb
+febbraio
+Febluali
+febr
+Febraayo
+Febreiro
+febrer
+febrero
+febreru
+Febrewaris
+Febroary
+februaari
+februaarip
+februar
+februara
+Februari
+Februarie
+februario
+februaro
+February
+Februwari
+február
+februára
+februāris
+febrúar
+Febrụwarị
+Feburari
+Feburuarĩ
+feburuye
+Febwaliyo
+Fee
+Feewiriye
+Fer
+Ferikgong
+fev
+fevereiro
+fevral
+Fevreiro
+fevriye
+Fevrâr
+Few
+Fewral
+Fewriyee
+FGW
+FLO
+FMF
+FMU
+Fra
+Frar
+fre
+freàrgiu
+Ful
+fulu
+Fulundïgi
+Fur
+Furar
+Fuulbana
+Fuṛar
+fwo
+FYU
+Fäb
+Fäbrowa
+Fébirie
+fév
+févr
+février
+Fön
+Föndo
+Fúngatɨ
+Fēp
+Fēpueli
+Fĩi Dǝɓlii
+Fĩi Gwahlle
+Fĩi Loo
+Fĩi Marfoo
+Fĩi Mundaŋ
+Fĩi Yuru
+fɔe
+fɛ
+Fẹ́b
+Fẹ́búári
+galo
+Gamaǀaeb
+Gan
+Gas
+Gashyantare
+Gat
+Gearr
+geas
+geassemánnu
+geg
+gegužė
+gegužės
+Gen
+gener
+gennaio
+Genver
+ghe
+ghennàrgiu
+Ghu
+Ghuct
+Gibl
+Gic
+Gicurasi
+Gitugutu
+giu
+giugno
+golg
+golggotmánnu
+goo
+Gor
+Gorff
+Gorffennaf
+Goue
+Gouere
+gru
+grudnia
+grudzień
+gruod
+gruodis
+gruodžio
+Guak
+Gum
+Gumiguru
+Gun
+Gunyana
+guov
+guovvamánnu
+Gur
+Guraandhala
+gush
+gusht
+Gwen
+Gwengolo
+Gwn
+Gís
+Hag
+Hagayya
+Han
+Haz
+Haziran
+Hed
+Hei
+heinä
+heinäk
+heinäkuu
+heinäkuuta
+Heiwet
+helmi
+helmik
+helmikuu
+helmikuuta
+Hep
+Hepetema
+Her
+Herbštmánet
+Here
+hik
+hil
+Hlak
+Hlakola
+Hlakubele
+Hor
+Hornig
+huhti
+huhtik
+huhtikuu
+huhtikuuta
+Huk
+Hukuri
+Hul
+Hulyo
+Hun
+Hune
+Hunyo
+Hut
+Hwe
+Hyd
+Hydref
+Hìkaŋ
+Hìlòndɛ̀
+Hôasoreǁkhâb
+Hān
+Hānuere
+Hūr
+Hūrae
+Ian
+Ianuali
+ianuarie
+ibr
+ibrir
+id
+Idwaata
+Igi
+Ike
+Iku
+Ikúmi
+Ile
+Imb
+Ime
+imeg mbəŋchubi
+imeg àbùbì
+Imw
+iməg fog
+iməg ichiibɔd
+iməg ichika
+iməg krizmed
+iməg kud
+iməg mbegtug
+iməg ngwə̀t
+iməg tèsiʼe
+iməg zò
+iməg àdùmbə̀ŋ
+imɛŋ i putúk,oóli ú kátíɛ
+imɛŋ i puɔs
+inn
+innayr
+Inyambala
+Inyi
+Ion
+Ionawr
+ira
+iraila
+irũdí
+Isi
+Iuch
+Iul
+Iulai
+iulie
+Iun
+Iune
+iunie
+Iwi
+Iwo
+Iwootkuut
+iyl
+iyn
+iyul
+iyun
+Iúil
+Iýul
+Iýun
+Ištáwičhayazaŋ Wí
+J-fouyir
+J-guer
+J-souree
+jaan
+jaanuar
+Jan
+Janairu
+janar
+janeiro
+Janeru
+Jannaayo
+Jannar
+Jannewa
+Jannewaris
+Janoary
+januaari
+januaarip
+Januali
+januar
+januara
+Januari
+Januarie
+januario
+januaro
+January
+Januarĩ
+Januwari
+január
+januára
+janv
+janvier
+janvāris
+Janwaliyo
+Janyuwari
+janúar
+Jasyapy
+Jasykõi
+Jasypa
+Jasypakõi
+Jasypateĩ
+Jasypo
+Jasypoapy
+Jasypokõi
+Jasyporundy
+Jasypoteĩ
+Jasyrundy
+Jasyteĩ
+Jen
+Jenner
+Jenụwarị
+Jerrey-fouyir
+Jerrey-geuree
+Jerrey-souree
+jol
+jolal
+Jolay
+Jon
+Jona
+joulu
+jouluk
+joulukuu
+joulukuuta
+Jug
+Jugn
+jui
+juil
+juill
+juillet
+juin
+juk
+juko
+Jul
+Julaayi
+Julai
+Julayi
+Julaị
+julho
+Julhu
+juli
+Julie
+julij
+julija
+julio
+juliol
+July
+Julyai
+Jun
+June
+junho
+Junhu
+Juni
+Junie
+junij
+junija
+junio
+juny
+Junyi
+juov
+juovlamánnu
+juovlâ
+juovlâmáánu
+Juu
+juuli
+juulip
+Juun
+juuni
+juunip
+juŋ
+Jän
+Jänner
+Jén
+Jénúári
+júl
+júla
+július
+júlí
+jún
+júna
+június
+júní
+jūl
+jūlijs
+jūn
+jūnijs
+K-Ɔ
+kaa
+Kab
+Kabàlàshìpù
+Kad
+Kai
+Kak
+Kakauka
+Kam
+Kamena
+Kan
+Kanama
+Kar
+Kas
+Kaswèkèsè
+Kasım
+Kat
+Kaw
+KBR
+KBZ
+Keenda
+Kek
+Kekemapa
+kel
+kele
+Ken
+kenpkato ɓololɔ
+Kep
+Kepakemapa
+Kerzu
+kesi
+kesimáánu
+kesä
+kesäk
+kesäkuu
+kesäkuuta
+Kev
+Kho
+Khordad
+Khotavuxika
+Kigarama
+Kipsuunde ne taai
+Kipsuunde nebo aeng’
+Kiptaamo
+KKM
+KKN
+Kmb
+Kmj
+KMK
+KMN
+KMS
+KMW
+KNB
+Knd
+KNK
+Knn
+kol
+kolovoz
+kolovoza
+kor
+Kornyoot
+korr
+korrik
+korse
+kov
+kovas
+kovo
+Kpa
+Kpt
+kris
+krísimin
+KST
+KTN
+ktu
+ktubr
+Ktũ
+Kub
+Kubvumbi
+Kuk
+Kukadzi
+Kul
+Kum
+kuovâ
+kuovâmáánu
+Kur
+Kurume
+kuŋgwɛ
+kvě
+květen
+května
+Kwa
+Kwakwar-Ɔgyefuo
+kwi
+kwiecień
+kwietnia
+Kwiidwaata
+Kwiikumi
+Kwiinyambála
+Kwiinyi
+Kzu
+Kújúɔrɔk
+Kús
+Kúshîn
+Kük
+Kükürü
+kɔn
+kɔnde
+Kɔndɔŋ
+kɨz
+Kʉfúngatɨ
+Kʉkeenda
+Kʉmʉʉnchɨ
+Kʉnaanɨ
+Kʉsaano
+Kʉsaatʉ
+Kʉsasatʉ
+Kʉvɨɨrɨ
+Kṭu
+Kṭuber
+Laa
+Laath
+Lab
+Lapa le ile
+Lapa le imet
+Lapa le isiet
+Lapa le obo
+Lapa le okuni
+Lapa le ong’wan
+Lapa le saal
+Lapa le sapa
+Lapa le tomon
+Lapa le tomon obo
+Lapa le tomon waare
+Lapa le waare
+lapkr
+lapkritis
+lapkričio
+led
+leden
+ledna
+Len
+Lengua
+Leo
+Leotshe
+Lewe
+Lewedi
+liep
+liepa
+liepos
+lip
+lipanj
+lipca
+lipiec
+lipnja
+lis
+listopad
+listopada
+listopadu
+liɓ
+loka
+lokak
+lokakuu
+lokakuuta
+Luanistyn
+Luf
+Lufuimi
+lug
+luglio
+Lui
+Lul
+Lulju
+Lum
+Lumùngùlù
+Lun
+Lungùdi
+Lus
+Lush
+Lusòlo
+Lut
+lutego
+Lutongolo
+luty
+luukao kemã
+luukao lɔma
+Luuliyo
+Lwe
+Lwetse
+Lwezi
+làm
+làmpadas
+Lép
+Lìbuy li ńyèe
+Lùishi
+Lùna
+Lùshìkà
+Lún
+Lúnasa
+lɔm
+M-fouyir
+M-Houney
+M-Nollick
+M-souree
+M-Ɔ
+M01
+M02
+M03
+M04
+M05
+M06
+M07
+M08
+M09
+M1
+M10
+M11
+M12
+M2
+M3
+M4
+M5
+M6
+M7
+M8
+M9
+Ma
+Maa
+Maachị
+Maaie
+maaji
+maajip
+maalis
+maalisk
+maaliskuu
+maaliskuuta
+Maarso
+Maart
+Maayi
+Mab
+Mabasa
+Mac
+Mach
+Machi
+mad
+madiɓɛ́díɓɛ́
+Madǝmbii
+Madǝǝuutǝbijaŋ
+Mae
+mag
+maggio
+Magu
+Mai
+maiatza
+maig
+maijs
+Maio
+Maiu
+maj
+maja
+majo
+maju
+makandikɛ
+Mal
+Malaki
+Mam
+Mamuut
+Mamǝŋgwãafahbii
+Mamǝŋgwãalii
+Manth
+Manthole
+Mar
+marca
+March
+Marco
+marec
+Maret
+Maris
+marisi
+marras
+marrask
+marraskuu
+marraskuuta
+Mars
+Marsi
+marsip
+Marso
+Marsu
+mart
+martie
+martio
+marto
+marts
+Martsa
+martxoa
+martzu
+marzec
+marzo
+marzu
+març
+março
+mas
+masa
+Mashi
+mat
+Mata
+matg
+Matshi
+Maw
+Mawrth
+Mawuwani
+May
+Mayo
+Mayrnt
+mayu
+Mayyu
+mayésɛ́
+Mayıs
+maí
+Maý
+Maʻa
+Maʻasi
+maṛ
+maṛṣ
+Mbe
+mbegtug
+MBI
+Mbimbitho
+mbiyɔ mɛndoŋgɔ
+mbo
+mbooy
+Mbu
+Mbudzi
+Mbä
+Mbängü
+Me
+Mean-fouyir
+Mean-souree
+Medi
+Mee
+Mee Houney
+Mee ny Nollick
+Megh
+Meghres
+Meh
+Mehefin
+Mehr
+Mei
+Meije
+Meith
+Meitheamh
+mej
+meja
+meje
+Mejju
+mesiŋ, oóli ú kénie
+Met
+Meu
+Meur
+Meurzh
+Mey
+Meyi
+Mezh
+Mezheven
+Meán Fómhair
+Meɣ
+Meɣres
+Mfu
+Mfumfu
+MFómh
+Mha
+Mhawuri
+mies
+miessemánnu
+mis Du
+mis Ebrel
+mis Est
+mis Genver
+mis Gortheren
+mis Gwynngala
+mis Hedra
+mis Hwevrer
+mis Kevardhu
+mis Me
+mis Metheven
+mis Meurth
+mk
+MLI
+Mme
+Mmese
+Moc
+Mod
+Moj
+Mok
+Mokhu
+Moo
+Mop
+Mopi
+Mopitlo
+mor
+Mora
+Moranang
+Mordad
+Mori ghwa ikenda
+Mori ghwa ikumi
+Mori ghwa ikumi na imweri
+Mori ghwa ikumi na iwi
+Mori ghwa imbiri
+Mori ghwa kadadu
+Mori ghwa kana
+Mori ghwa karandadu
+Mori ghwa kasanu
+Mori ghwa kawi
+Mori ghwa mfungade
+Mori ghwa wunyanya
+morso
+Mose
+Mosegemanye
+Mot
+Motsheanong
+Motsheganang
+Mpal
+Mpalakazi
+Mpan
+Mpandula
+Mpg
+Mph
+Mphalane
+mpu
+Mrt
+ms
+Msh
+msi
+Msp
+mto
+Mud
+Muddee
+Mudyaxihi
+Mug
+Muh
+Muhaano
+Muj
+Mujimbi
+Muk
+Mukakaro
+mukũi
+Mul
+Mulgul
+Mumu-Ɔpɛnimba
+Mun
+Munyense
+Munyi
+Munyonyo
+Mup
+Mupalangulwa
+Mupuguto
+Mus
+musapíri
+Mushende
+Mushende Magali
+Mushipepo
+Musongandembwe
+Mut
+Mutarama
+Muu
+Mvu
+Mvuka
+Mwai wa kana
+Mwai wa katano
+Mwai wa katatũ
+Mwai wa kelĩ
+Mwai wa kenda
+Mwai wa mbee
+Mwai wa muonza
+Mwai wa nyaanya
+Mwai wa thanthatũ
+Mwai wa ĩkumi
+Mwai wa ĩkumi na ilĩ
+Mwai wa ĩkumi na ĩmwe
+Mwedi Ntandi
+Mwedi wa Nchechi
+Mwedi wa Nnyano
+Mwedi wa Nnyano na Mitatu
+Mwedi wa Nnyano na Mivili
+Mwedi wa Nnyano na Nchechi
+Mwedi wa Nnyano na Nnyano
+Mwedi wa Nnyano na Nnyano na M
+Mwedi wa Nnyano na Nnyano na U
+Mwedi wa Nnyano na Umo
+Mwedi wa Pili
+Mwedi wa Tatu
+Mwere wa gatandatũ
+Mwere wa gatano
+Mwere wa gatatũ
+Mwere wa ikũmi
+Mwere wa ikũmi na ũmwe
+Mwere wa kana
+Mwere wa kanana
+Mwere wa kenda
+Mwere wa kerĩ
+Mwere wa mũgwanja
+Mweri wa gatano
+Mweri wa gatantatũ
+Mweri wa ikumi
+Mweri wa ikumi na mbili
+Mweri wa ikumi na moja
+Mweri wa ikũmi
+Mweri wa ikũmi na Kaĩrĩ
+Mweri wa ikũmi na ũmwe
+Mweri wa kaana
+Mweri wa kaili
+Mweri wa kana
+Mweri wa kanana
+Mweri wa katatu
+Mweri wa kathatũ
+Mweri wa kaĩri
+Mweri wa kenda
+Mweri wa kwanza
+Mweri wa mbere
+Mweri wa mũgwanja
+Mweri wa nane
+Mweri wa saba
+Mweri wa sita
+Mweri wa tanu
+Mweri wa tisa
+Mweri wo kumi
+Mweri wo kumi na moja
+Mweri wo kumi na yel’li
+Mweri wo kwanza
+Mweri wo nane
+Mweri wo saba
+Mweri wo thanu na mocha
+Mweri wo tisa
+Mweri wo unayeli
+Mweri wo unecheshe
+Mweri wo uneraru
+Mweri wo unethanu
+Mwi
+Mwitope
+Mye
+Màcɛ̂l
+Màrt
+Màtop
+Màtùmb
+Màyɛsèp
+máj
+mája
+május
+márc
+március
+Márta
+Mäe
+Mäerz
+Mär
+märts
+März
+Märze
+Mäz
+Määz
+Méi
+Mórusásin
+Mùuyà
+Māe
+Māehe
+Mē
+měr
+měrc
+měrca
+Mĩĩ
+Mɔnɔ ŋgbanja
+mɛ
+Mʉʉnchɨ
+M̀puyɛ
+Naanɨ
+Nab
+Nabändüru
+nad
+nadale
+Nan
+Ncw
+Ncwabakazi
+Ndamukiza
+Ndi
+Ndira
+Ndithemba
+Nduŋmbi Saŋ
+Ndz
+Ndzhati
+ndzɔ̀ŋèfwòo
+ndzɔ̀ŋèsèe
+ndzɔ̀ŋɔ̀chwaʔàkaa wo
+ndzɔ̀ŋɔ̀dùmlo
+ndzɔ̀ŋɔ̀ghǔuwelɔ̀m
+ndzɔ̀ŋɔ̀kwîfɔ̀e
+ndzɔ̀ŋɔ̀kƗ̀zùʔ
+ndzɔ̀ŋɔ̀nzùghò
+ndzɔ̀ŋɔ̀nùm
+ndzɔ̀ŋɔ̀tƗ̀dʉ̀ghà
+ndzɔ̀ŋɔ̀tƗ̀fʉ̀ghàdzughù
+ndzɔ̀ŋɔ̀tǎafʉ̄ghā
+ng1
+ng10
+ng11
+ng2
+ng3
+ng4
+ng5
+ng6
+ng7
+ng8
+ng9
+nga
+ngab
+ngad
+Ngat
+ngb
+Ngberere
+nge
+ngl
+ngm
+ngn
+ngo
+ngs
+ngt
+Ngu
+Ngubùe
+Ngw
+Ngwanatsele
+ngwɛn hɛmbuɛrí
+ngwɛn lɔmbi
+ngwɛn matáhra
+ngwɛn rɛbvuâ
+ngwɛn wum
+ngwɛn wum navǔr
+ngwɛn ńlal
+ngwɛn ńmba
+ngwɛn ńna
+ngwɛn ńtan
+ngwɛn ńtuó
+ngz
+ngɔn awóm
+ngɔn awóm ai bɛ̌
+ngɔn awóm ai dziá
+ngɔn bɛ̌
+ngɔn ebulú
+ngɔn lála
+ngɔn mwom
+ngɔn nyina
+ngɔn osú
+ngɔn saməna
+ngɔn tána
+ngɔn zamgbála
+Ng’atyaato
+Ng’eiyeet
+Nhl
+Nhla
+Nhlangula
+Nhlo
+Nhlolanja
+Nis
+Nisan
+njapi
+nje
+Njenuarĩ
+NJR
+NJU
+njuhčâ
+njuhčâmáánu
+njuk
+njukčamánnu
+Njuni
+Njuraĩ
+Njèbà
+Nkw
+Nkwenkwezi
+No
+Nob
+Nobemba
+Nobyembre
+Noem
+Noema
+Nof
+noiembrie
+Noll
+Nollaig
+Noo
+Noofeembar
+Noowanbur
+Nop
+Nopémber
+Nov
+novam
+Novambra
+Novemba
+novembar
+novembari
+novembarip
+November
+novembra
+novembre
+novembris
+novembro
+Novembru
+noviembre
+Novimber
+Novämber
+now
+nowanburu
+Nowemapa
+nowember
+nowembra
+Nowàmbar
+noy
+noyabr
+Noý
+Noýabr
+Ntu
+Ntulikazi
+Ntwarante
+Ntʉ́
+Ntʉ́ŋʉ́s
+Nun
+Nunember
+Nunembeṛ
+Nuv
+Nuvenbru
+Nuw
+Nuwamba
+nuwanbir
+nvb
+Nwa
+Nwanbir
+Nya
+Nyakanga
+Nyamavhuvhu
+Nyandagaro
+Nyaŋgwɛ ŋgbanja
+Nye
+Nyenyankulu
+Nyenye
+Nyenyenyani
+nyukul
+Nyɔlɔmbɔŋgɔ
+nyɛt
+nyɛtɛki
+Nze
+Nzeli
+Nzero
+nzu
+nën
+nëntor
+nóv
+nóvember
+nùm
+Nōv
+Nōvema
+Nọv
+Nọvẹ́mba
+N’w
+N’wendzamhala
+O-A
+o.1
+o.10
+o.11
+o.12
+o.2
+o.3
+o.4
+o.5
+o.6
+o.7
+o.8
+o.9
+Obirade-Ayɛwohomumu
+Obo
+Oca
+Ocak
+Och
+ochobre
+Oct
+October
+octobre
+octombrie
+octubre
+Odung’el
+Oga
+Ogasti
+Ogo
+Ogos
+Ogosto
+Ogs
+Ojola
+Ok
+Oke
+Oketopa
+Oki
+Okitoba
+Okitobba
+Okt
+Oktabr
+Okthoba
+Okthobha
+oktob
+Oktoba
+oktobar
+oktobari
+oktobarip
+Oktober
+oktobra
+oktobris
+oktobro
+Oktohber
+Oktoobar
+oktoober
+Oktoobur
+Oktubre
+oktyabr
+október
+októbra
+Oktýabr
+Oktũba
+Oku
+Okwaikumi
+Okwaikumi na ibiri
+Okwaikumi na kumwe
+Okwakabiri
+Okwakana
+Okwakashatu
+Okwakataana
+Okwamg’
+Okwamukaaga
+Okwamunaana
+Okwamushanju
+Okwamwenda
+Okwokubanza
+Olabor
+Oladalʉ́
+Olgísan
+Olodoyíóríê inkókúâ
+Oloilépūnyīē inkókúâ
+Omaruk
+Omodok’king’ol
+Omuk
+Ong
+Onk
+Onkololeessa
+Opedel
+Opoo
+Orara
+Ordibehesht
+Oshù Agɛmɔ
+Oshù Bélú
+Oshù Owewe
+Oshù Shɛ́rɛ́
+Oshù Èrèlè
+Oshù Ìgbé
+Oshù Ògún
+Oshù Òkúdu
+Oshù Ɔ̀pɛ̀
+Oshù Ɔ̀wàrà
+Oshù Ɛrɛ̀nà
+Oshù Ɛ̀bibi
+Osokosokoma
+Otibar
+ots
+otsaila
+ott
+ottobre
+Ottubru
+Otu
+Otubar
+Otubro
+Otubru
+Ouj
+Oujoß
+Out
+Outubro
+Ow
+Owe
+Owewe
+ođđajagemánnu
+ođđj
+ožu
+ožujak
+ožujka
+Oṣù Agẹmọ
+Oṣù Bélú
+Oṣù Owewe
+Oṣù Èrèlè
+Oṣù Ìgbé
+Oṣù Ògún
+Oṣù Òkúdu
+Oṣù Ṣẹ́rẹ́
+Oṣù Ẹrẹ̀nà
+Oṣù Ẹ̀bibi
+Oṣù Ọ̀pẹ̀
+Oṣù Ọ̀wàrà
+pa mwedzi gwa hutala
+pa mwedzi gwa kumi
+pa mwedzi gwa kumi na mbili
+pa mwedzi gwa kumi na moja
+pa mwedzi gwa nane
+pa mwedzi gwa saba
+pa mwedzi gwa sita
+pa mwedzi gwa tisa
+pa mwedzi gwa wudatu
+pa mwedzi gwa wuhanu
+pa mwedzi gwa wutai
+pa mwedzi gwa wuvili
+Paa
+Paagi
+pamba
+Pay
+Pay yie̱tni
+payares
+paź
+październik
+października
+Peb
+Pebrero
+Ped
+Pep
+Pepeluali
+Pha
+Phata
+Phato
+Phatwe
+Phe
+Phere
+Pherekgong
+Phesekgong
+Phu
+Phukwi
+Phupjane
+Phupu
+pi
+pikítíkítie, oólí ú kutúan
+pilɔndɔ́
+pisuyú
+pm
+Poo
+porge
+porgemáánu
+pri
+prill
+pro
+prosinac
+prosinca
+prosince
+prosinec
+ps
+pu
+Pun
+Pundungwane
+py
+Péb
+Pébruari
+pú
+pú-irũdí
+pú-mukũi
+pú-musapíri
+pú-yepé
+Pēp
+Pēpuere
+Pɛsaŋ Ntsɔ̌pmɔ́
+Pɛsaŋ Ntsɔ̌ppá
+Pɛsaŋ Nɛgɛ́m
+Pɛsaŋ Pataa
+Pɛsaŋ Pɛ́nɛ́fɔm
+Pɛsaŋ Pɛ́nɛ́kwa
+Pɛsaŋ Pɛ́nɛ́ntúkú
+Pɛsaŋ Pɛ́nɛ́pfúꞋú
+Pɛsaŋ Pɛ́pá
+Pɛsaŋ Pɛ́tát
+Pɛsaŋ Saambá
+Pɛt
+Pȟežítȟo Wí
+Pʉshʉ́ka
+qer
+qershor
+Rar
+Rhag
+Rhagfyr
+Rok
+Roo
+Rooptui
+roovvâd
+roovvâdmáánu
+rugp
+rugpjūtis
+rugpjūčio
+rugs
+rugsėjis
+rugsėjo
+Ruheshi
+Ruhuhuma
+ruj
+rujan
+rujna
+Rusama
+S-Ɔ
+Sa
+Saa
+saah
+Saano
+Saatʉ
+Sab
+Sad
+Sadaasa
+Sam
+Samh
+Samhain
+Samwiyee
+Sanda-Ɔpɛpɔn
+santandria
+santugaine
+Sanvie
+Sap
+Sasatʉ
+Sat
+Satumba
+saus
+sausio
+sausis
+saŋ cÿó
+saŋ kàg ngwóŋ
+saŋ lepyè shúm
+saŋ lùm
+saŋ mbʉ̀ŋ
+saŋ mejwoŋó
+saŋ ngwɔ̀ʼ mbÿɛ
+saŋ njÿoláʼ
+saŋ tsetsɛ̀ɛ lùm
+saŋ tsɛ̀ɛ cÿó
+saŋ tyɛ̀b tyɛ̀b mbʉ̀ŋ
+saŋ tàŋa tsetsáʼ
+schan
+schaner
+Se
+Seb
+Sebteembar
+Sebuttemba
+Sed
+Sedimonthole
+see
+Seetebosigo
+seeɗto
+Sek
+Sektanbur
+sen
+Sentabr
+sentyabr
+Sentýabr
+Sep
+Sepitema
+Sept
+septam
+Septambra
+Septemba
+septembar
+septembari
+septembarip
+September
+septembra
+septembre
+septembrie
+septembris
+septembro
+Septhemba
+septiembre
+Septimber
+Septämber
+Set
+Setembar
+setembre
+Setembro
+Setenbru
+setiembre
+sett
+Settembar
+settember
+settembre
+Settembru
+Setyembre
+Shahrivar
+shk
+shkurt
+sht
+shtator
+Shɛ́
+Shɛ́r
+Shɛ́rɛ́
+Shʉ́
+sia
+siamlɔm
+sie
+sierpień
+sierpnia
+sii
+siilo
+siilto
+sij
+siječanj
+siječnja
+Sit
+Siu
+Siulai
+siɛyɛ́, oóli ú kándíɛ
+skammâ
+skammâmáánu
+skáb
+skábmamánnu
+slt
+Sok
+spal
+spalio
+spalis
+SPT
+srp
+srpanj
+srpen
+srpna
+srpnja
+stA
+stb
+stG
+stu
+studeni
+studenoga
+sty
+styczeń
+stycznia
+Su
+Sueŋ
+Sul
+Sulet
+Sult
+Sun
+Sune
+Sunguti
+suoi
+suoidnemánnu
+Suw
+Suwe
+svi
+svibanj
+svibnja
+syeini
+syeinimáánu
+syys
+syysk
+syyskuu
+syyskuuta
+szept
+szeptember
+Sàt
+Sàttumbar
+sánzá ya libwa
+sánzá ya motóbá
+sánzá ya mwambe
+sánzá ya míbalé
+sánzá ya mínei
+sánzá ya mísáto
+sánzá ya mítáno
+sánzá ya nsambo
+sánzá ya yambo
+sánzá ya zómi
+sánzá ya zómi na míbalé
+sánzá ya zómi na mɔ̌kɔ́
+Sás
+Säp
+Sép
+Séptémber
+Sú
+Súuyee
+Sān
+Sānuali
+sɔŋ
+sɔŋɛ
+sɛt
+sɛtanburu
+Sẹp
+Sẹptẹ́mba
+T-arree
+taa
+Tach
+Tachwedd
+Tai
+tammi
+tammik
+tammikuu
+tammikuuta
+Taraǀkhuumûǁkhâb
+ted
+tedoxe
+Tem
+Temmuz
+tet
+tetor
+Tha
+Thg 1
+Thg 10
+Thg 11
+Thg 12
+Thg 2
+Thg 3
+Thg 4
+Thg 5
+Thg 6
+Thg 7
+Thg 8
+Thg 9
+Thiyóȟeyuŋka Wí
+Thoo
+Tho̱o̱r
+Tháng 1
+Tháng 10
+Tháng 11
+Tháng 12
+Tháng 2
+Tháng 3
+Tháng 4
+Tháng 5
+Tháng 6
+Tháng 7
+Tháng 8
+Tháng 9
+Tib
+Tid
+tin
+tiníní
+Tiop
+Tiop thar pɛt
+Tio̱p in di̱i̱t
+Tir
+Tis
+Tlh
+Tlhakole
+Tob
+Tom
+Toshiaght-arree
+touko
+toukok
+toukokuu
+toukokuuta
+Tow
+tra
+travanj
+travnja
+trì
+trìulas
+Tsh
+Tshitwe
+Tub
+Tuber
+Tubeṛ
+Tīhe
+Tīhema
+Tīs
+Tīsema
+Tɛɛ
+Tɛɛr
+tɨd
+Tȟahékapšuŋ Wí
+Ube
+Ugu
+Ugushyingo
+Uku
+Ukuboza
+Ukw
+Ukwakira
+Una
+Upu
+urr
+urria
+urt
+urtarrila
+Ut
+uti
+uzt
+uztaila
+uđiv
+uđđâivemáánu
+vas
+vasario
+vasaris
+veebr
+veebruar
+velj
+veljača
+veljače
+Vil
+vyesi
+vyesimáánu
+vɔɔ
+Vɨɨrɨ
+Waa
+wanja
+Waníyetu Wí
+Wasútȟuŋ Wí
+Wax
+Waxabajjii
+Wer
+Werurwe
+WGT
+WIK
+Win
+Wintermánet
+Wiótheȟika Wí
+WKD
+WKN
+WKR
+WMJ
+WMW
+WNN
+wrz
+wrzesień
+września
+WTD
+WTN
+Wun
+Wím
+Wímánet
+Wípazukȟa-wašté Wí
+Xan
+Xaneiro
+Xin
+xineru
+Xnt
+Xul
+Xullo
+Xun
+xunetu
+xunu
+Xuño
+yan
+yanvar
+yar
+yarkomaa
+ye
+Yeb
+Yebrayer
+Yebrir
+Yel
+Yen
+Yennayer
+yepé
+yepé-mukũi
+yepé-putimaã
+yepé-yepé
+ym
+yp
+Yul
+Yuli
+Yulyu
+yulyuz
+Yun
+Yuni
+Yunyu
+yy
+zan
+zanvie
+zanwuye
+Zen
+Zenâr
+zercl
+zercladur
+Zib
+Zibandlela
+zil
+zilye
+zin
+zul
+zuluye
+zuw
+zuwɛn
+Zvi
+Zvita
+zář
+září
+ágú
+ágúst
+ápr
+április
+Èr
+Èrèl
+Èrèlè
+Épr
+Éprel
+Ìg
+Ìgb
+Ìgbé
+Òg
+Ògmh
+Ògú
+Ògún
+Òk
+Òkú
+Òkúdu
+Öig
+Öigšte
+úno
+únor
+února
+Ýan
+Ýanwar
+Āku
+Ākuhata
+Āpe
+Āpereira
+čakč
+čakčamánnu
+červen
+července
+červenec
+června
+Čhaŋpȟásapa Wí
+Čhaŋwápe-kasná Wí
+Čhaŋwápetȟo Wí
+Čhaŋwápeǧi Wí
+čohčâ
+čohčâmáánu
+čvc
+čvn
+Ġun
+Ġunju
+Ĩkl
+Ĩkm
+Ĩku
+ĨPU
+Ĩpurũ
+ŋ1
+ŋ10
+ŋ11
+ŋ12
+ŋ2
+ŋ3
+ŋ4
+ŋ5
+ŋ6
+ŋ7
+ŋ8
+ŋ9
+ŋgɔn
+ŋgɔndɛ
+ŋwíí a ntɔ́ntɔ
+ŋwíí akǝ bɛ́ɛ
+ŋwíí akǝ nin
+ŋwíí akǝ ntɛk
+ŋwíí akǝ ntɛk di bɔ́k
+ŋwíí akǝ ntɛk di bɛ́ɛ
+ŋwíí akǝ ráá
+ŋwíí akǝ táabɛɛ
+ŋwíí akǝ táafɔk
+ŋwíí akǝ táan
+ŋwíí akǝ táanin
+ŋwíí akǝ táaraa
+říj
+říjen
+října
+Şub
+Şubat
+Žan
+Žanwiye
+Žuw
+Žuweŋ
+Žuy
+Žuyye
+ɓandaɓu
+ɓulɓusɛ
+Ɔ-A
+Ɔ-O
+Ɔberɛfɛw-Obubuo
+Ɔbɛsɛ-Ahinime
+ɔku
+ɔkutɔburu
+Ɔlɔ́ɨ́bɔ́rárɛ
+ɔnsúmbɔl, oóli ú kátátúɛ
+ɔsɔn
+ɔtb
+Ɔɛn
+Ɔɛnɨ́ɔɨŋɔk
+Ɔ̀p
+Ɔ̀pɛ
+Ɔ̀pɛ̀
+Ɔ̀w
+Ɔ̀wà
+Ɔ̀wàrà
+Ɛr
+Ɛrɛ̀n
+Ɛrɛ̀nà
+Ɛ̀b
+Ɛ̀bi
+Ɛ̀bibi
+Ɣuc
+Ɣuct
+ǀHooǂgaeb
+ǀKhuuǁkhâb
+ǂKhoesaob
+ǂNûǁnâiseb
+ǃHôaǂkhaib
+ǃKhaitsâb
+ǃKhanni
+ǃKhanǀgôab
+ʻAok
+ʻAokosi
+ʻAp
+ʻApelila
+ʻAu
+ʻAukake
+ʻEpe
+ʻEpeleli
+ʻOk
+ʻOka
+ʻOkakopa
+ʻOkatopa
+Αύγ
+Αύγουστος
+Απρ
+Απρίλιος
+Απριλίου
+Αυγ
+Αυγούστου
+Δεκ
+Δεκέμβριος
+Δεκεμβρίου
+Ιαν
+Ιανουάριος
+Ιανουαρίου
+Ιούλ
+Ιούλιος
+Ιούν
+Ιούνιος
+Ιουλ
+Ιουλίου
+Ιουν
+Ιουνίου
+Μάι
+Μάιος
+Μάρ
+Μάρτιος
+Μαΐ
+Μαΐου
+Μαρ
+Μαρτίου
+Νοέ
+Νοέμβριος
+Νοε
+Νοεμβρίου
+Οκτ
+Οκτώβριος
+Οκτωβρίου
+Σεπ
+Σεπτέμβριος
+Σεπτεμβρίου
+Φεβ
+Φεβρουάριος
+Φεβρουαρίου
+јан
+Јанвар
+јануар
+јануари
+јул
+јули
+јун
+јуни
+авг
+Август
+августа
+августы
+авӑн
+ака
+Алт
+алтынньы
+апр
+Апрел
+апрелы
+апрель
+апреля
+април
+Аравдугаар сар
+Арван нэгдүгээр сар
+Арван хоёрдугаар сар
+Атр
+атырдьых ыйа
+Атырдьых ыйын
+ауг
+аугуст
+Ахс
+ахсынньы
+ақп
+Ақпан
+балаҕан ыйа
+Балаҕан ыйын
+бер
+березень
+березня
+Блҕ
+Бэс
+бэс ыйа
+Бэс ыйын
+вер
+верасень
+верасня
+вересень
+вересня
+гру
+груд
+грудень
+грудня
+Гуравдугаар сар
+гыйн
+гыйнвар
+дек
+Декабр
+декабры
+декабрь
+декабря
+декември
+дец
+децембар
+Долоодугаар сар
+Дөрөвдүгээр сар
+Есдүгээр сар
+жел
+Желтоқсан
+жні
+жніўня
+жнівень
+жов
+жовт
+жовтень
+жовтня
+Зургаадугаар сар
+ијл
+ијн
+Ијул
+Ијун
+июл
+июлы
+июль
+июля
+июн
+июны
+июнь
+июня
+кас
+кастрычнік
+кастрычніка
+кві
+квіт
+квітень
+квітня
+Клн
+кра
+красавік
+красавіка
+кулун тутар
+кӑр
+кӑрлач
+ліп
+ліпень
+ліпеня
+ліс
+лістапад
+лістапада
+лип
+липень
+липня
+лис
+лист
+листопад
+листопада
+лют
+лютага
+лютий
+лютого
+люты
+мај
+Май
+майы
+мам
+Мамыр
+мар
+Март
+марта
+Мартъи
+мартъийы
+мау
+Маусым
+мая
+Мсу
+муус устар
+Наймдугаар сар
+нар
+нарӑс
+нау
+Наурыз
+ној
+Нојабр
+нов
+новембар
+ное
+ноем
+ноември
+ноя
+Нояб
+Ноябр
+ноябры
+ноябрь
+ноября
+Нэгдүгээр сар
+окт
+Октјабр
+октобар
+октомври
+Октябр
+октябры
+октябрь
+октября
+Олун
+олунньу
+от ыйа
+От ыйын
+Отй
+пуш
+раш
+раштав
+січ
+січень
+січня
+сак
+сакавік
+сакавіка
+сен
+Сент
+Сентјабр
+Сентябр
+сентябры
+сентябрь
+сентября
+сеп
+септ
+септембар
+септември
+сер
+серп
+серпень
+серпня
+сне
+снежань
+снежня
+сту
+студзень
+студзеня
+Сэт
+сэтинньи
+сәу
+Сәуір
+Тавдугаар сар
+там
+Тамыз
+Тохс
+тохсунньу
+тра
+трав
+травень
+травня
+утӑ
+феб
+фебруар
+фев
+Февр
+Феврал
+февралы
+февраль
+февраля
+февруари
+Хоёрдугаар сар
+чер
+черв
+червень
+червня
+чэр
+чэрвень
+чэрвеня
+чӳк
+шіл
+Шілде
+Ыам
+ыам ыйа
+Ыам ыйын
+юли
+юни
+юпа
+янв
+Январ
+январы
+январь
+января
+яну
+януари
+қаз
+Қазан
+қар
+Қараша
+қаң
+Қаңтар
+қыр
+Қыркүйек
+ҫу
+ҫур
+ҫурла
+ҫӗр
+ҫӗртме
+ապր
+ապրիլ
+ապրիլի
+դեկ
+դեկտեմբեր
+դեկտեմբերի
+հլս
+հնս
+հնվ
+հոկ
+հոկտեմբեր
+հոկտեմբերի
+հուլիս
+հուլիսի
+հունիս
+հունիսի
+հունվար
+հունվարի
+մայիս
+մայիսի
+մարտ
+մարտի
+մյս
+մրտ
+նոյ
+նոյեմբեր
+նոյեմբերի
+սեպ
+սեպտեմբեր
+սեպտեմբերի
+փետրվար
+փետրվարի
+փտվ
+օգոստոս
+օգոստոսի
+օգս
+אַפּר
+אַפּריל
+אוגוסט
+אוג׳
+אויג
+אויגוסט
+אוקטובר
+אוק׳
+אפריל
+אפר׳
+אקט
+אקטאבער
+דעצ
+דעצעמבער
+דצמבר
+דצמ׳
+יאַנ
+יאַנואַר
+יולי
+יוני
+ינואר
+ינו׳
+מאי
+מיי
+מערץ
+מרץ
+נאוו
+נאוועמבער
+נובמבר
+נוב׳
+סעפּ
+סעפּטעמבער
+ספטמבר
+ספט׳
+פֿעב
+פֿעברואַר
+פברואר
+פבר׳
+آب
+آبان
+آذار
+آذر
+آڤریل
+آڪٽوبر
+آگسٽ
+آگوست
+أبريل
+أغسطس
+أغشت
+أفريل
+أكتوبر
+أوت
+أيار
+أيلول
+إبريل
+ئاب
+ئازار
+ئاپرېل
+ئاۋغۇست
+ئایار
+ئوکتوڤر
+ئىيۇل
+ئىيۇن
+ئۆكتەبىر
+ئەیلوول
+اردیبهشت
+اسد
+اسفند
+اپريل
+اپریل
+اکتوبر
+اکتوٗبر
+اګست
+اگست
+بهمن
+بەفرانبار
+تشرين الأول
+تشرين الثاني
+تشرين الأول
+تشرینی دووەم
+تشرینی یەکەم
+تله
+تموز
+تیر
+تەمووز
+ثور
+جانفي
+جانڤیە
+جدی
+جمادى الآخرة
+جمادى الأولى
+جنؤری
+جنوري
+جنوری
+جوان
+جوزا
+جولاءِ
+جولائی
+جولای
+جون
+جويلية
+جوٗلایی
+جوٗن
+جوٙأن
+جوٙلا
+جۆزەردان
+حزيران
+حمل
+حوت
+حوزەیران
+خاکەلێوە
+خرداد
+خەرمانان
+دئسامر
+دجمبر
+دجنبر
+دسمبر
+دلو
+ديسمبر
+دی
+دېكابىر
+ذو الحجة
+ذو القعدة
+ربيع الآخر
+ربيع الأول
+رجب
+رمضان
+زمری
+سئپتامر
+سبتمبر
+ستمبر
+سرطان
+سلواغه
+سنبلهٔ
+سيپٽمبر
+سپتمبر
+سېنتەبىر
+سېپتمبر
+سەرماوەز
+شباط
+شتمبر
+شتنبر
+شعبان
+شهریور
+شوال
+شوبات
+صفر
+عقرب
+غبرگولی
+غشت
+غویی
+فئڤریە
+فبراير
+فبروري
+فرؤری
+فروردین
+فروری
+فيبروري
+فيفري
+فېبروري
+فېۋرال
+قوس
+كانون الأول
+كانون الثاني
+لړم
+لیندۍ
+مئ
+مئي
+مئی
+مارت
+مارس
+مارٕچ
+مارچ
+ماي
+مايو
+محرم
+مرداد
+مرغومی
+مهر
+میزان
+مۍ
+نوفمبر
+نومبر
+نونبر
+نويابىر
+نوڤامر
+نيسان
+نیسان
+وری
+وږی
+يانۋار
+يناير
+يوليو
+يوليوز
+يونيو
+پووشپەڕ
+چنگاښ
+ڊسمبر
+ڕێبەندان
+ڕەزبەر
+ڕەشەمە
+کانونی یەکەم
+کانوونی دووەم
+کب
+گوڵان
+گەلاوێژ
+گەڵاڕێزان
+ܐܒ
+ܐܕܪ
+ܐܝܠܘܠ
+ܐܝܪ
+ܚܙܝܪܢ
+ܟܢ܊ ܐ
+ܟܢ܊ ܒ
+ܟܢܘܢ ܐܚܪܝܐ
+ܟܢܘܢ ܩܕܡܝܐ
+ܢܝܣܢ
+ܫܒܛ
+ܬܡܘܙ
+ܬܫ܊ ܐ
+ܬܫ܊ ܒ
+ܬܫܪܝܢ ܐܚܪܝܐ
+ܬܫܪܝܢ ܩܕܡܝܐ
+ܬܫܪܝܼܢ ܐܚܪܝܐ
+ߓߌ߲ߠ
+ߓߌ߲ߠߊߥߎߟߋ߲
+ߕߎߟߊߝߌ߲
+ߕߙߊ
+ߕߙߊߓߊ
+ߘߓߊ߬ߓ
+ߘߓߊ߬ߓߌߟߊ
+ߘߓߊ߬ߕ
+ߘߓߊ߬ߕߊ
+ߞߊ߬ߙ
+ߞߊ߬ߙߌߝߐ߭
+ߞߏߟ
+ߞߏߟߌ߲ߞߏߟߌ߲
+ߞߏ߲ߓ
+ߞߏ߲ߓߌߕߌ߮
+ߞߏ߲ߘ
+ߞߏ߲ߞ
+ߞߏ߲ߞߏߘߌ߬ߓߌ
+ߞߏ߲ߞߏߜߍ
+ߣߍߣ
+ߣߍߣߍߓߊ
+ߥߊ߬ߛ
+ߥߊ߬ߛߌ߬ߥߙߊ
+अकतुम्बर
+अक्टूबर
+अक्टोबर
+अक्ट’
+अक्ट’बर
+अक्तू
+अक्तूबर
+अक्तूबर:
+अक्तूबरमासः
+अक्तू॰
+अग
+अगस्ट
+अगस्त
+अगस्त:
+अगस्तमासः
+अग॰
+अप्रिल
+अप्रै
+अप्रैल
+अप्रैल:
+अप्रैलमासः
+आग
+आगष्ट
+एप्रि
+एप्रिल
+एप्री
+एप्रील
+ऑक्टो
+ऑक्टोबर
+ऑग
+ऑगस्ट
+ओक्टोबर
+जन
+जनवरी
+जनवरी:
+जनवरीमासः
+जन॰
+जान
+जानुवारी
+जाने
+जानेवारी
+जु
+जुन
+जुल
+जुलय
+जुला
+जुलाई
+जुलाई:
+जुलाईमासः
+जुलै
+जुल॰
+जून
+जून:
+जूनमासः
+डिसं
+डिसंबर
+डिसे
+डिसें
+डिसेंबर
+डिसेम्बर
+दसूमबर
+दिस
+दिसंबर
+दिसंबर:
+दिसंबरमासः
+दिस॰
+नव
+नवं
+नवंबर
+नवंबर:
+नवंबरमासः
+नवम्बर
+नवूमबर
+नवे
+नवेम्बर
+नव॰
+नो
+नोभेम्बर
+नोव्हें
+नोव्हेंबर
+फर
+फरवरी
+फरवरी:
+फरवरीमासः
+फर॰
+फ़रवरी
+फ़र॰
+फेब
+फेब्रु
+फेब्रुअरी
+फेब्रुवारी
+फेब्रूवारी
+मई
+मईमासः
+मार्च
+मार्च:
+मार्चमासः
+मार्चु
+मे
+मेई
+सतुंबर
+सप्टे
+सप्टें
+सप्टेंबर
+सित
+सितंबर
+सितंबर:
+सितंबरमासः
+सितम्बर
+सित॰
+सेप
+सेप्टेम्बर
+सेप्थेम्बर
+অক্টো
+অক্টোঃ
+অক্টোবর
+অক্টোবৰ
+আগ
+আগষ্ট
+আগস্ট
+এপ্রি
+এপ্রিল
+এপ্ৰিল
+ওক্টো
+ওক্টোবর
+ওগষ্ট
+ছেপ্তে
+ছেপ্তেম্বৰ
+জানু
+জানুয়ারী
+জানুৱারি
+জানুৱাৰী
+জুন
+জুল
+জুলা
+জুলাই
+ডিচে
+ডিচেম্বৰ
+ডিসে
+ডিসেঃ
+ডিসেম্বর
+নবেম্বর
+নভে
+নভেঃ
+নভেম্বর
+নৱে
+নৱেম্বৰ
+ফেব
+ফেব্রু
+ফেব্রুয়ারী
+ফেব্রুৱারি
+ফেব্ৰু
+ফেব্ৰুৱাৰী
+মার
+মার্চ
+মাৰ্চ
+মে
+মে’
+সেপ
+সেপ্ট
+সেপ্টেঃ
+সেপ্টেম্বর
+ਅਕਤੂ
+ਅਕਤੂਬਰ
+ਅਗ
+ਅਗਸਤ
+ਅਪ੍ਰੈ
+ਅਪ੍ਰੈਲ
+ਜਨ
+ਜਨਵਰੀ
+ਜੁਲਾ
+ਜੁਲਾਈ
+ਜੂਨ
+ਦਸੰ
+ਦਸੰਬਰ
+ਨਵੰ
+ਨਵੰਬਰ
+ਫ਼ਰ
+ਫ਼ਰਵਰੀ
+ਮਈ
+ਮਾਰਚ
+ਸਤੰ
+ਸਤੰਬਰ
+એપ્રિલ
+ઑક્ટો
+ઑક્ટોબર
+ઑગસ્ટ
+જાન્યુ
+જાન્યુઆરી
+જુલાઈ
+જૂન
+ડિસે
+ડિસેમ્બર
+નવે
+નવેમ્બર
+ફેબ્રુ
+ફેબ્રુઆરી
+માર્ચ
+મે
+સપ્ટે
+સપ્ટેમ્બર
+ଅକ୍ଟୋବର
+ଅଗଷ୍ଟ
+ଅପ୍ରେଲ
+ଜାନୁଆରୀ
+ଜୁନ
+ଜୁଲାଇ
+ଡିସେମ୍ବର
+ନଭେମ୍ବର
+ଫେବୃଆରୀ
+ମଇ
+ମାର୍ଚ୍ଚ
+ସେପ୍ଟେମ୍ବର
+அக்
+அக்டோபர்
+ஆக
+ஆகஸ்ட்
+ஏப்
+ஏப்ரல்
+செப்
+செப்டம்பர்
+ஜன
+ஜனவரி
+ஜூன்
+ஜூலை
+டிச
+டிசம்பர்
+நவ
+நவம்பர்
+பிப்
+பிப்ரவரி
+மார்
+மார்ச்
+மே
+అక్టో
+అక్టోబర్
+ఆగ
+ఆగస్టు
+ఏప్రి
+ఏప్రిల్
+జన
+జనవరి
+జులై
+జూన్
+డిసెం
+డిసెంబర్
+నవం
+నవంబర్
+ఫిబ్ర
+ఫిబ్రవరి
+మార్చి
+మే
+సెప్టెం
+సెప్టెంబర్
+ಅಕ್ಟೋ
+ಅಕ್ಟೋಬರ್
+ಆಗ
+ಆಗಸ್ಟ್
+ಏಪ್ರಿ
+ಏಪ್ರಿಲ್
+ಜನ
+ಜನವರಿ
+ಜುಲೈ
+ಜೂನ್
+ಡಿಸೆಂ
+ಡಿಸೆಂಬರ್
+ನವೆಂ
+ನವೆಂಬರ್
+ಫೆಬ್ರ
+ಫೆಬ್ರವರಿ
+ಮಾರ್ಚ್
+ಮೇ
+ಸೆಪ್ಟೆಂ
+ಸೆಪ್ಟೆಂಬರ್
+ഏപ്രി
+ഏപ്രിൽ
+ഒക്ടോ
+ഒക്‌ടോബർ
+ഓഗ
+ഓഗസ്റ്റ്
+ജനു
+ജനുവരി
+ജൂലൈ
+ജൂൺ
+ഡിസം
+ഡിസംബർ
+നവം
+നവംബർ
+ഫെബ്രു
+ഫെബ്രുവരി
+മാർ
+മാർച്ച്
+മേയ്
+സെപ്റ്റം
+സെപ്റ്റംബർ
+අගෝ
+අගෝස්තු
+අප්‍රේල්
+ඔක්
+ඔක්තෝබර්
+ජන
+ජනවාරි
+ජූනි
+ජූලි
+දෙසැ
+දෙසැම්බර්
+නොවැ
+නොවැම්බර්
+පෙබ
+පෙබරවාරි
+මාර්
+මාර්තු
+මැයි
+සැප්
+සැප්තැම්බර්
+ก.ค
+ก.พ
+ก.ย
+กรกฎาคม
+กันยายน
+กุมภาพันธ์
+ต.ค
+ตุลาคม
+ธ.ค
+ธันวาคม
+พ.ค
+พ.ย
+พฤศจิกายน
+พฤษภาคม
+ม.ค
+มกราคม
+มิ.ย
+มิถุนายน
+มี.ค
+มีนาคม
+ส.ค
+สิงหาคม
+เม.ย
+เมษายน
+ກ.ຍ
+ກ.ພ
+ກ.ລ
+ກັນຍາ
+ກຸມພາ
+ກໍລະກົດ
+ຕ.ລ
+ຕຸລາ
+ທ.ວ
+ທັນວາ
+ພ.ຈ
+ພ.ພ
+ພະຈິກ
+ພຶດສະພາ
+ມ.ກ
+ມ.ນ
+ມ.ສ
+ມັງກອນ
+ມິ.ຖ
+ມິຖຸນາ
+ມີນາ
+ສ.ຫ
+ສິງຫາ
+ເມສາ
+༡
+༡༠
+༡༡
+༢
+༣
+༤
+༥
+༦
+༧
+༨
+༩
+ཟླ་༡
+ཟླ་༡༠
+ཟླ་༡༡
+ཟླ་༡༢
+ཟླ་༢
+ཟླ་༣
+ཟླ་༤
+ཟླ་༥
+ཟླ་༦
+ཟླ་༧
+ཟླ་༨
+ཟླ་༩
+ཟླ་གཉིས་པ་
+ཟླ་གསུམ་པ་
+ཟླ་དགུ་པ་
+ཟླ་དངཔ་
+ཟླ་དྲུག་པ
+ཟླ་བ་གཉིས་པ
+ཟླ་བ་གཉིས་པ་
+ཟླ་བ་གསུམ་པ
+ཟླ་བ་གསུམ་པ་
+ཟླ་བ་དགུ་པ
+ཟླ་བ་དགུ་པ་
+ཟླ་བ་དང་པོ
+ཟླ་བ་དང་པོ་
+ཟླ་བ་དྲུག་པ
+ཟླ་བ་དྲུག་པ་
+ཟླ་བ་བཅུ་གཅིག་པ
+ཟླ་བ་བཅུ་གཅིག་པ་
+ཟླ་བ་བཅུ་གཉིས་པ
+ཟླ་བ་བཅུ་གཉིས་པ་
+ཟླ་བ་བཅུ་པ
+ཟླ་བ་བཅུ་པ་
+ཟླ་བ་བདུན་པ
+ཟླ་བ་བདུན་པ་
+ཟླ་བ་བཞི་པ
+ཟླ་བ་བཞི་པ་
+ཟླ་བ་བརྒྱད་པ
+ཟླ་བ་བརྒྱད་པ་
+ཟླ་བ་ལྔ་པ
+ཟླ་བ་ལྔ་པ་
+ཟླ་བཅུ་གཅིག་པ་
+ཟླ་བཅུ་གཉིས་པ་
+ཟླ་བཅུ་པ་
+ཟླ་བདུན་པ་
+ཟླ་བཞི་པ་
+ཟླ་བརྒྱད་པ་
+ཟླ་ལྔ་པ་
+སྤྱི་ཟླ་གཉིས་པ་
+སྤྱི་ཟླ་གསུམ་པ་
+སྤྱི་ཟླ་དགུ་པ་
+སྤྱི་ཟླ་དངཔ་
+སྤྱི་ཟླ་དྲུག་པ
+སྤྱི་ཟླ་བཅུ་གཅིག་པ་
+སྤྱི་ཟླ་བཅུ་གཉིས་པ་
+སྤྱི་ཟླ་བཅུ་པ་
+སྤྱི་ཟླ་བདུན་པ་
+སྤྱི་ཟླ་བཞི་པ
+སྤྱི་ཟླ་བརྒྱད་པ་
+སྤྱི་ཟླ་ལྔ་པ་
+စက်
+စက်တင်ဘာ
+ဇန်
+ဇန်နဝါရီ
+ဇူ
+ဇူလိုင်
+ဇွန်
+ဒီ
+ဒီဇင်ဘာ
+နို
+နိုဝင်ဘာ
+ဖေ
+ဖေဖော်ဝါရီ
+မတ်
+မေ
+အောက်
+အောက်တိုဘာ
+ဧ
+ဧပြီ
+ဩ
+ဩဂုတ်
+ለካ
+ለካቲት
+ሓም
+ሓምለ
+ሕዳ
+ሕዳር
+መስ
+መስከረም
+መጋ
+መጋቢት
+ሚያ
+ሚያዝያ
+ማርች
+ሜይ
+ሰነ
+ሴፕቴ
+ሴፕቴምበር
+ታሕ
+ታሕሳስ
+ነሓ
+ነሓሰ
+ኖቬም
+ኖቬምበር
+ኤፕሪ
+ኤፕሪል
+ኦክቶ
+ኦክቶበር
+ኦገስ
+ኦገስት
+ዲሴም
+ዲሴምበር
+ጁላይ
+ጁን
+ጃንዩ
+ጃንዩወሪ
+ግን
+ግንቦት
+ጥሪ
+ጥቅ
+ጥቅምቲ
+ፌብሩ
+ፌብሩወሪ
+ᎠᏂ
+ᎠᏂᏍᎬᏘ
+ᎠᏅ
+ᎠᏅᏱ
+ᎤᏃ
+ᎤᏃᎸᏔᏅ
+ᎥᏍ
+ᎥᏍᎩᏱ
+ᎦᎶ
+ᎦᎶᏂ
+ᎧᎦ
+ᎧᎦᎵ
+ᎧᏬ
+ᎧᏬᏂ
+ᎫᏰ
+ᎫᏰᏉᏂ
+ᏅᏓ
+ᏅᏓᏕᏆ
+ᏕᎭ
+ᏕᎭᎷᏱ
+ᏚᎵ
+ᏚᎵᏍᏗ
+ᏚᏂ
+ᏚᏂᏅᏗ
+កក្កដា
+កញ្ញា
+កុម្ភៈ
+តុលា
+ធ្នូ
+មករា
+មិថុនា
+មីនា
+មេសា
+វិច្ឆិកា
+សីហា
+ឧសភា
+ᠠᠷᠪᠠᠨ ᠨᠢᠭᠡᠳᠥᠭᠡᠷ ᠰᠠᠷ᠎ᠠ
+ᠠᠷᠪᠠᠨ ᠬᠣᠶᠠᠳᠣᠭᠠᠷ ᠰᠠᠷ᠎ᠠ
+ᠠᠷᠪᠠᠳᠣᠭᠠᠷ ᠰᠠᠷ᠎ᠠ
+ᠨᠠᠢᠮᠠᠳᠥᠭᠠᠷ ᠰᠠᠷ᠎ᠠ
+ᠨᠢᠭᠡᠳᠥᠭᠡᠷ ᠰᠠᠷ᠎ᠠ
+ᠬᠣᠶᠠᠳᠣᠭᠠᠷ ᠰᠠᠷ ᠠ
+ᠭᠣᠷᠪᠡᠳᠣᠭᠠᠷ ᠰᠠᠷ ᠠ
+ᠲᠠᠪᠣᠳᠣᠭᠠᠷ ᠰᠠᠷ ᠠ
+ᠲᠣᠯᠣᠭᠠᠳᠣᠭᠠᠷ ᠰᠠᠷ᠎ᠠ
+ᠳᠥᠷᠪᠡᠳᠥᠭᠡᠷ ᠰᠠᠷ᠎ᠠ
+ᠵᠢᠷᠭᠣᠭᠠᠳᠣᠭᠠᠷ ᠰᠠᠷ᠎ᠠ
+ᠶᠢᠰᠥᠳᠥᠭᠡᠷ ᠰᠠᠷ᠎ᠠ
+ᱚᱠᱴ
+ᱚᱠᱴᱚᱵᱟᱨ
+ᱟᱜᱟ
+ᱟᱜᱟᱥᱛ
+ᱟᱯᱨ
+ᱟᱯᱨᱮᱞ
+ᱡᱟᱱ
+ᱡᱟᱱᱣᱟᱨᱤ
+ᱡᱩᱞ
+ᱡᱩᱞᱟᱭ
+ᱡᱩᱱ
+ᱢᱟᱨ
+ᱢᱟᱨᱪ
+ᱢᱮ
+ᱥᱮᱯ
+ᱥᱮᱯᱴᱮᱢᱵᱟᱨ
+ᱫᱤᱥ
+ᱫᱤᱥᱟᱢᱵᱟᱨ
+ᱯᱷᱟ
+ᱯᱷᱟᱨᱣᱟᱨᱤ
+ᱱᱟᱣ
+ᱱᱟᱣᱟᱢᱵᱟᱨ
+აგვ
+აგვისტო
+აპრ
+აპრილი
+დეკ
+დეკემბერი
+თებ
+თებერვალი
+იან
+იანვარი
+ივლ
+ივლისი
+ივნ
+ივნისი
+მაი
+მაისი
+მარ
+მარტი
+ნოე
+ნოემბერი
+ოქტ
+ოქტომბერი
+სექ
+სექტემბერი
+Ṣẹ́
+Ṣẹ́r
+Ṣẹ́rẹ́
+Ẹr
+Ẹrẹ̀n
+Ẹrẹ̀nà
+Ẹ̀b
+Ẹ̀bi
+Ẹ̀bibi
+Ọgọ
+Ọgọst
+Ọgọọst
+Ọkt
+Ọktoba
+Ọktóba
+Ọ̀p
+Ọ̀pẹ
+Ọ̀pẹ̀
+Ọ̀w
+Ọ̀wà
+Ọ̀wàrà
+Ọ́gọ
+ⴱⵔⵔ
+ⴱⵕⴰ
+ⴱⵕⴰⵢⵕ
+ⴱⵕⵢ
+ⴷⵊⵏ
+ⴷⵓⵊ
+ⴷⵓⵊⴰⵏⴱⵉⵔ
+ⴽⵜⴱ
+ⴽⵜⵓ
+ⴽⵜⵓⴱⵔ
+ⴽⵜⵓⴱⵕ
+ⵉⴱⵔ
+ⵉⴱⵔⵉⵔ
+ⵉⵏⵏ
+ⵉⵏⵏⴰⵢⵔ
+ⵎⴰⵕ
+ⵎⴰⵕⵚ
+ⵎⴰⵢ
+ⵎⴰⵢⵢⵓ
+ⵎⵕⵚ
+ⵎⵢⵢ
+ⵏⵓⵡ
+ⵏⵓⵡⴰⵏⴱⵉⵔ
+ⵏⵡⴱ
+ⵏⵢⵔ
+ⵖⵓⵛ
+ⵖⵓⵛⵜ
+ⵖⵛⵜ
+ⵛⵓⵜ
+ⵛⵓⵜⴰⵏⴱⵉⵔ
+ⵛⵜⵏ
+ⵢⵍⵢ
+ⵢⵏⵢ
+ⵢⵓⵍ
+ⵢⵓⵍⵢⵓⵣ
+ⵢⵓⵏ
+ⵢⵓⵏⵢⵓ
+一月
+七月
+三月
+九月
+二月
+五月
+八月
+六月
+十一月
+十二月
+十月
+四月
+ꃘꆪ
+ꇖꆪ
+ꈬꆪ
+ꉆꆪ
+ꉬꆪ
+ꊰꆪ
+ꊰꊪꆪ
+ꊰꑋꆪ
+ꋍꆪ
+ꌕꆪ
+ꏃꆪ
+ꑍꆪ
+ꔞꘋ
+ꔞꘋꕔꕿ ꕸꖃꗏ
+ꕒꕡ
+ꕒꕡꖝꖕ
+ꕢꕌ
+ꕭꖃ
+ꕾꖺ
+ꖑꕱ
+ꖢꖕ
+ꖨꖕ ꕪꕴ ꔞꔀꕮꕊ
+ꖨꖕ ꕪꕴ ꗏꖺꕮꕊ
+ꖨꖕꔞ
+ꖨꖕꗏ
+ꖱꕞ
+ꖱꕞꔤ
+ꖱꘋ
+ꗛꔕ
+𑄃𑄉𑄧𑄌𑄴𑄑𑄴
+𑄃𑄧𑄇𑄴𑄑𑄬𑄝𑄧𑄢𑄴
+𑄃𑄧𑄇𑄴𑄑𑄮𑄝𑄧𑄢𑄴
+𑄃𑄬𑄛𑄳𑄢𑄨𑄣𑄴
+𑄎𑄚𑄪
+𑄎𑄚𑄪𑄠𑄢𑄨
+𑄎𑄪𑄚𑄴
+𑄎𑄪𑄣𑄭
+𑄓𑄨𑄥𑄬𑄟𑄴𑄝𑄢𑄴
+𑄓𑄨𑄥𑄬𑄟𑄴𑄝𑄧𑄢𑄴
+𑄚𑄧𑄞𑄬𑄟𑄴𑄝𑄧𑄢𑄴
+𑄜𑄬𑄛𑄴
+𑄜𑄬𑄛𑄴𑄝𑄳𑄢𑄪𑄠𑄢𑄨
+𑄟𑄢𑄴𑄌𑄧
+𑄟𑄬
+𑄥𑄬𑄛𑄴𑄑𑄬𑄟𑄴𑄝𑄧𑄢𑄴
+𞤁𞤵𞥅𞤶
+𞤁𞤵𞥅𞤶𞤮
+𞤃𞤮𞤪
+𞤃𞤮𞤪𞤧𞤮
+𞤄𞤮𞤱
+𞤄𞤮𞤱𞤼𞤮
+𞤅𞤫𞥅𞤼
+𞤅𞤫𞥅𞤼𞤮
+𞤅𞤭𞤤
+𞤅𞤭𞤤𞤼𞤮
+𞤅𞤭𞥅𞤤
+𞤅𞤭𞥅𞤤𞤮
+𞤐𞤦𞤮𞥅𞤴
+𞤐𞤦𞤮𞥅𞤴𞤮
+𞤑𞤮𞤪
+𞤑𞤮𞤪𞤧𞤮
+𞤒𞤢𞤪
+𞤒𞤢𞤪𞤳𞤮
+𞤔𞤮𞤤
+𞤔𞤮𞤤𞤮
+𞤔𞤵𞤳
+𞤔𞤵𞤳𞤮
+𞤕𞤮𞤤
+𞤕𞤮𞤤𞤼𞤮

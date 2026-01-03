@@ -1,0 +1,73 @@
+services:
+  lucidrag:
+    build:
+      context: ..
+      dockerfile: LucidRAG/Dockerfile
+    image: mostlylucid/lucidrag:latest
+    restart: unless-stopped
+    ports:
+      - "5080:8080"
+    environment:
+      - ConnectionStrings__DefaultConnection=Host=postgres;Database=ragdocs;Username=raguser;Password=${POSTGRES_PASSWORD:-ragdocs123}
+      - lucidrag__UploadPath=/app/uploads
+      - DocSummarizer__BertRag__VectorStore=DuckDB
+      - DocSummarizer__BertRag__DuckDbPath=/app/data/vectors.duckdb
+      - DocSummarizer__Ollama__BaseUrl=http://ollama:11434
+    volumes:
+      - ragdocs-uploads:/app/uploads
+      - ragdocs-data:/app/data
+      - ragdocs-logs:/app/logs
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - ragdocs-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/healthz"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ragdocs
+      POSTGRES_USER: raguser
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-ragdocs123}
+    volumes:
+      - ragdocs-postgres:/var/lib/postgresql/data
+    networks:
+      - ragdocs-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U raguser -d ragdocs"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+#  ollama:
+#    image: ollama/ollama:latest
+#    restart: unless-stopped
+#    volumes:
+#      - ollama-models:/root/.ollama
+#    networks:
+#      - ragdocs-network
+    # Uncomment for GPU support:
+    # deploy:
+    #   resources:
+    #     reservations:
+    #       devices:
+    #         - driver: nvidia
+    #           count: 1
+    #           capabilities: [gpu]
+
+volumes:
+  ragdocs-uploads:
+  ragdocs-data:
+  ragdocs-logs:
+  ragdocs-postgres:
+  ollama-models:
+
+networks:
+  ragdocs-network:
+    driver: bridge

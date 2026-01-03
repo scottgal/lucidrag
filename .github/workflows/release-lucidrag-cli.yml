@@ -1,0 +1,165 @@
+name: Release LucidRAG CLI
+
+on:
+  push:
+    tags:
+      - 'lucidrag-cli-v*.*.*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version tag (e.g., 1.0.0)'
+        required: true
+        default: '1.0.0'
+
+jobs:
+  build:
+    strategy:
+      matrix:
+        include:
+          - os: windows-latest
+            rid: win-x64
+            artifact: lucidrag-win-x64.zip
+          - os: windows-latest
+            rid: win-arm64
+            artifact: lucidrag-win-arm64.zip
+          - os: ubuntu-latest
+            rid: linux-x64
+            artifact: lucidrag-linux-x64.tar.gz
+          - os: ubuntu-latest
+            rid: linux-arm64
+            artifact: lucidrag-linux-arm64.tar.gz
+          - os: macos-latest
+            rid: osx-x64
+            artifact: lucidrag-osx-x64.tar.gz
+          - os: macos-latest
+            rid: osx-arm64
+            artifact: lucidrag-osx-arm64.tar.gz
+
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Build Tailwind CSS
+        shell: bash
+        run: |
+          cd src/LucidRAG
+          npm ci
+          npm run build:css
+
+      - name: Restore dependencies
+        run: dotnet restore src/LucidRAG.Cli/LucidRAG.Cli.csproj
+
+      - name: Publish
+        shell: bash
+        run: |
+          dotnet publish src/LucidRAG.Cli/LucidRAG.Cli.csproj \
+            -c Release \
+            -r ${{ matrix.rid }} \
+            --self-contained true \
+            -p:PublishSingleFile=true \
+            -p:EnableCompressionInSingleFile=true \
+            -p:PublishReadyToRun=true \
+            -o ./publish/${{ matrix.rid }}
+
+      - name: Create archive (Windows)
+        if: runner.os == 'Windows'
+        run: |
+          Compress-Archive -Path ./publish/${{ matrix.rid }}/* -DestinationPath ./publish/${{ matrix.artifact }}
+        shell: pwsh
+
+      - name: Create archive (Linux/macOS)
+        if: runner.os != 'Windows'
+        run: |
+          cd ./publish/${{ matrix.rid }}
+          tar -czvf ../${{ matrix.artifact }} *
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.rid }}
+          path: ./publish/${{ matrix.artifact }}
+          retention-days: 5
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: ./artifacts
+
+      - name: Determine version
+        id: version
+        run: |
+          if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
+            echo "version=${{ github.event.inputs.version }}" >> $GITHUB_OUTPUT
+          else
+            echo "version=${GITHUB_REF#refs/tags/lucidrag-cli-v}" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: lucidrag-cli-v${{ steps.version.outputs.version }}
+          name: LucidRAG CLI v${{ steps.version.outputs.version }}
+          body: |
+            ## LucidRAG CLI v${{ steps.version.outputs.version }}
+
+            Multi-document RAG with GraphRAG entity extraction.
+            Zero-config: ONNX embeddings + DuckDB vectors + SQLite storage.
+
+            ### Installation
+
+            1. Download the appropriate archive for your platform
+            2. Extract to a directory in your PATH
+            3. Run `lucidrag check` to verify installation
+
+            ### Quick Start
+
+            ```bash
+            # Index a document
+            lucidrag index document.pdf
+
+            # Search
+            lucidrag search "your query"
+
+            # Interactive chat (requires Ollama)
+            lucidrag chat
+
+            # Start REST API server
+            lucidrag serve
+
+            # Start with interactive CLI
+            lucidrag serve --interactive
+            ```
+
+            ### Platforms
+            - Windows x64/ARM64
+            - Linux x64/ARM64
+            - macOS x64/ARM64 (Apple Silicon)
+          draft: false
+          prerelease: false
+          files: |
+            ./artifacts/win-x64/*.zip
+            ./artifacts/win-arm64/*.zip
+            ./artifacts/linux-x64/*.tar.gz
+            ./artifacts/linux-arm64/*.tar.gz
+            ./artifacts/osx-x64/*.tar.gz
+            ./artifacts/osx-arm64/*.tar.gz

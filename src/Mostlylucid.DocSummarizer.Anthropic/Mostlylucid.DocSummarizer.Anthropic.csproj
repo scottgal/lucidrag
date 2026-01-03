@@ -1,0 +1,27 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <LangVersion>latest</LangVersion>
+
+    <!-- Package metadata -->
+    <PackageId>Mostlylucid.DocSummarizer.Anthropic</PackageId>
+    <Description>Anthropic Claude backend provider for DocSummarizer</Description>
+    <Authors>Scott Galloway</Authors>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <PackageProjectUrl>https://github.com/scottgal/lucidrag</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/scottgal/lucidrag</RepositoryUrl>
+    <PackageTags>docsummarizer;anthropic;claude;llm</PackageTags>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.Http" Version="10.0.0-preview.1.25080.5" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Mostlylucid.DocSummarizer.Core\Mostlylucid.DocSummarizer.Core.csproj" />
+  </ItemGroup>
+
+</Project>

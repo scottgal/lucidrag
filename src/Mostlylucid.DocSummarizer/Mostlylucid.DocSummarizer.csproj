@@ -1,0 +1,61 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+    <PropertyGroup>
+        <OutputType>Exe</OutputType>
+        <TargetFrameworks>net8.0;net10.0</TargetFrameworks>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <Nullable>enable</Nullable>
+        <RootNamespace>Mostlylucid.DocSummarizer</RootNamespace>
+        <AssemblyName>docsummarizer</AssemblyName>
+        <Version>4.0.0</Version>
+        <Authors>Scott Galloway</Authors>
+        <Description>Local-first document summarization tool using LLMs, vector search, and document conversion</Description>
+        <RepositoryUrl>https://github.com/scottgal/mostlylucidweb</RepositoryUrl>
+        <GenerateDocumentationFile>true</GenerateDocumentationFile>
+        <NoWarn>$(NoWarn);1591</NoWarn>
+
+        <!-- Single-file deployment (no AOT - better compatibility) -->
+        <UseAppHost>true</UseAppHost>
+        <SelfContained>true</SelfContained>
+        <PublishSingleFile>true</PublishSingleFile>
+        <PublishReadyToRun>true</PublishReadyToRun>
+        <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
+        <EnableCompressionInSingleFile>true</EnableCompressionInSingleFile>
+        <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+        <UserSecretsId>ce754d3c-97a9-4114-a390-95182a36eed0</UserSecretsId>
+    </PropertyGroup>
+
+    <!-- Reference the Core library - all document processing logic lives there -->
+    <ItemGroup>
+        <ProjectReference Include="..\Mostlylucid.DocSummarizer.Core\Mostlylucid.DocSummarizer.Core.csproj" />
+    </ItemGroup>
+
+    <!-- CLI-specific dependencies only -->
+    <ItemGroup>
+        <PackageReference Include="System.CommandLine" Version="2.0.1" />
+        <PackageReference Include="Spectre.Console" Version="0.54.0" />
+        <PackageReference Include="Microsoft.Extensions.Hosting" Version="10.0.1" />
+        
+        <!-- OpenTelemetry exporters for observability -->
+        <PackageReference Include="OpenTelemetry" Version="1.12.0" />
+        <PackageReference Include="OpenTelemetry.Exporter.Console" Version="1.12.0" />
+        <PackageReference Include="OpenTelemetry.Exporter.OpenTelemetryProtocol" Version="1.12.0" />
+        <PackageReference Include="OpenTelemetry.Extensions.Hosting" Version="1.12.0" />
+    </ItemGroup>
+
+    <!-- Copy configuration and documentation to output (excluded from single-file bundle) -->
+    <ItemGroup>
+        <Content Include="appsettings.json">
+            <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+            <ExcludeFromSingleFile>true</ExcludeFromSingleFile>
+            <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+        </Content>
+        <Content Include="README.md">
+            <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+            <ExcludeFromSingleFile>true</ExcludeFromSingleFile>
+            <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+        </Content>
+    </ItemGroup>
+
+
+</Project>

@@ -1,0 +1,121 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+    <PropertyGroup>
+        <TargetFrameworks>net8.0;net9.0;net10.0</TargetFrameworks>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <Nullable>enable</Nullable>
+        <LangVersion>preview</LangVersion>
+        <RootNamespace>Mostlylucid.DocSummarizer</RootNamespace>
+        
+        <!-- NuGet Package Metadata -->
+        <IsPackable>true</IsPackable>
+        <PackageId>Mostlylucid.DocSummarizer</PackageId>
+        <Authors>Scott Galloway</Authors>
+        <Company>Mostlylucid</Company>
+        <Description>Local-first document summarization library using BERT embeddings, RAG, and optional LLM synthesis. Supports markdown, PDF, DOCX, and URLs. Every claim is grounded with citations. Runs entirely offline with ONNX models, or optionally uses Ollama/Docling for enhanced features.</Description>
+        <PackageTags>summarization;rag;bert;embeddings;llm;ollama;document-processing;markdown;pdf;onnx;local-first</PackageTags>
+        <RepositoryUrl>https://github.com/scottgal/mostlylucidweb/tree/main/Mostlylucid.DocSummarizer.Core</RepositoryUrl>
+        <PackageLicenseExpression>MIT</PackageLicenseExpression>
+        <PackageReadmeFile>README.md</PackageReadmeFile>
+        <PackageIcon>icon.png</PackageIcon>
+        <PackageReleaseNotes>$([System.IO.File]::ReadAllText("$(MSBuildProjectDirectory)/release-notes.txt"))</PackageReleaseNotes>
+        
+        <!-- Symbols -->
+        <IncludeSymbols>true</IncludeSymbols>
+        <SymbolPackageFormat>snupkg</SymbolPackageFormat>
+        
+        <!-- Documentation -->
+        <GenerateDocumentationFile>true</GenerateDocumentationFile>
+        <NoWarn>$(NoWarn);1591</NoWarn>
+        
+        <!-- Enable deterministic builds for NuGet -->
+        <Deterministic>true</Deterministic>
+        <ContinuousIntegrationBuild Condition="'$(CI)' == 'true'">true</ContinuousIntegrationBuild>
+        
+        <!-- Allow unsafe for ONNX interop -->
+        <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+        <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
+    </PropertyGroup>
+
+    <!-- MinVer for automatic versioning -->
+    <PropertyGroup>
+        <MinVerTagPrefix>docsumv</MinVerTagPrefix>
+    </PropertyGroup>
+    <PropertyGroup>
+        <MinVerSkip Condition="'$(Configuration)' == 'Debug'">true</MinVerSkip>
+    </PropertyGroup>
+
+    <!-- Package dependencies -->
+    <ItemGroup>
+        <!-- MinVer -->
+        <PackageReference Include="MinVer" Version="6.0.0">
+            <PrivateAssets>all</PrivateAssets>
+            <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+        </PackageReference>
+        
+        <!-- Core dependencies - .NET 10 -->
+        <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="10.0.1" />
+        <PackageReference Include="Microsoft.Extensions.Options" Version="10.0.1" />
+        <PackageReference Include="Microsoft.Extensions.Options.ConfigurationExtensions" Version="10.0.1" />
+        <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.1" />
+        <PackageReference Include="Microsoft.Extensions.Hosting.Abstractions" Version="10.0.1" />
+        <PackageReference Include="Microsoft.Extensions.Configuration.Abstractions" Version="10.0.1" />
+        <PackageReference Include="Polly.Core" Version="8.6.5" />
+        
+        <!-- OpenTelemetry for observability -->
+        <PackageReference Include="OpenTelemetry.Api" Version="1.12.0" />
+        <PackageReference Include="System.Diagnostics.DiagnosticSource" Version="10.0.1" />
+        
+        <!-- ML/Embeddings -->
+        <!-- Cross-platform ONNX runtime - CPU only, works on all platforms -->
+        <PackageReference Include="Microsoft.ML.OnnxRuntime" Version="1.23.0" />
+        <PackageReference Include="Markdig" Version="0.44.0" />
+        
+        <!-- Document Processing -->
+        <PackageReference Include="PdfPig" Version="0.1.13" />
+        <PackageReference Include="DocumentFormat.OpenXml" Version="3.3.0" />
+        <PackageReference Include="AngleSharp" Version="1.4.0" />
+        <PackageReference Include="SixLabors.ImageSharp" Version="3.1.12" />
+        
+        <!-- Web Fetching (for URL processing with JS-rendered pages) -->
+        <PackageReference Include="Microsoft.Playwright" Version="1.57.0" />
+        
+        <!-- Vector Storage (optional backends) -->
+        <PackageReference Include="Qdrant.Client" Version="1.16.1" />
+        <PackageReference Include="DuckDB.NET.Data.Full" Version="1.4.3" />
+        
+        <!-- Utilities -->
+        <PackageReference Include="System.IO.Hashing" Version="10.0.1" />
+        <PackageReference Include="dotnet-stop-words" Version="1.1.0" />
+        
+        <!-- Override vulnerable transitive dependency from Qdrant.Client -->
+        <PackageReference Include="Newtonsoft.Json" Version="13.0.4" />
+    </ItemGroup>
+    
+    <!-- Embed word list resources -->
+    <ItemGroup>
+        <EmbeddedResource Include="Resources\*.txt" />
+    </ItemGroup>
+    
+    <!-- Package files -->
+    <ItemGroup>
+        <None Include=".\icon.png" Pack="true" PackagePath="">
+            <Link>Properties\icon.png</Link>
+        </None>
+        <None Include=".\README.md" Pack="true" PackagePath="">
+            <Link>Properties\README.md</Link>
+        </None>
+        <None Include=".\release-notes.txt" Pack="true" PackagePath="">
+            <Link>Properties\release-notes.txt</Link>
+        </None>
+    </ItemGroup>
+    
+    <!-- Icon content -->
+    <ItemGroup>
+        <Content Update="icon.png">
+            <ExcludeFromSingleFile>true</ExcludeFromSingleFile>
+            <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+        </Content>
+    </ItemGroup>
+
+</Project>

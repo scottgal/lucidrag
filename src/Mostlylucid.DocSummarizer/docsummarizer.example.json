@@ -1,0 +1,182 @@
+{
+  // =============================================================================
+  // DocSummarizer Configuration
+  // =============================================================================
+  // Copy this to one of:
+  //   - ./docsummarizer.json (current directory)
+  //   - ~/.docsummarizer.json (user home)
+  //   - ~/.docsummarizer/config.json
+  // Or specify with: docsummarizer -c /path/to/config.json
+  // =============================================================================
+
+  // ---------------------------------------------------------------------------
+  // ONNX Embedding Configuration (zero-config, auto-downloads models)
+  // ---------------------------------------------------------------------------
+  "onnx": {
+    // Directory where ONNX models are downloaded and cached
+    // Default: ~/.docsummarizer/models
+    "modelDirectory": null,
+    
+    // Embedding model to use:
+    //   "AllMiniLmL6V2" - 384d, fast, general-purpose (default, ~23MB)
+    //   "BgeSmallEnV15" - 384d, best quality for size (~34MB)
+    //   "GteSmall" - 384d, good all-around (~34MB)
+    //   "MultiQaMiniLm" - 384d, QA-optimized (~23MB)
+    //   "ParaphraseMiniLmL3" - 384d, smallest/fastest (~17MB)
+    "embeddingModel": "AllMiniLmL6V2",
+    
+    // Use quantized models (smaller, faster, ~95% quality)
+    "useQuantized": true,
+    
+    // Maximum sequence length for embedding (256-512)
+    "maxEmbeddingSequenceLength": 256,
+    
+    // Number of threads for inference (0 = auto-detect)
+    "inferenceThreads": 0,
+    
+    // Execution provider: "Cpu", "Cuda", "DirectMl", "Auto"
+    // Cpu = always works (default)
+    // Cuda = NVIDIA GPU (requires CUDA runtime)
+    // DirectMl = Windows GPU (AMD/Intel/NVIDIA)
+    // Auto = try GPU, fall back to CPU
+    "executionProvider": "Cpu",
+    
+    // GPU device ID (0 = first GPU). Use 'nvidia-smi -L' to list.
+    "gpuDeviceId": 0
+  },
+
+  // ---------------------------------------------------------------------------
+  // Ollama LLM Configuration (for synthesis)
+  // ---------------------------------------------------------------------------
+  "ollama": {
+    "baseUrl": "http://localhost:11434",
+    "model": "llama3.2:3b",
+    // Alternative small models: "qwen2.5:3b", "ministral-3:3b", "phi3:mini"
+    "embedModel": "nomic-embed-text",
+    "temperature": 0.3,
+    "timeoutSeconds": 300,
+    // Classifier model for content type detection (optional, faster model)
+    "classifierModel": null
+  },
+  
+  // ---------------------------------------------------------------------------
+  // Extraction & Retrieval Configuration
+  // ---------------------------------------------------------------------------
+  "extraction": {
+    // Fraction of segments to keep in salience ranking (0.15 = top 15%)
+    "extractionRatio": 0.15,
+    
+    // Min/max segments to extract regardless of ratio
+    "minSegments": 10,
+    "maxSegments": 100,
+    
+    // Max segments to embed (pre-filter if more)
+    "maxSegmentsToEmbed": 200,
+    
+    // MMR lambda: 0=diversity, 1=relevance (0.7 = slight relevance bias)
+    "mmrLambda": 0.7
+  },
+  
+  "retrieval": {
+    // Number of segments to retrieve for synthesis
+    // For long documents, this scales automatically (see adaptiveRetrieval)
+    "topK": 25,
+    
+    // Always include top-N salient segments regardless of query match
+    "fallbackCount": 5,
+    
+    // Use RRF (Reciprocal Rank Fusion) - recommended
+    "useRRF": true,
+    
+    // Use hybrid search (BM25 + dense + salience) - recommended
+    "useHybridSearch": true
+  },
+  
+  // ---------------------------------------------------------------------------
+  // Adaptive Retrieval (scales retrieval based on document size/type)
+  // ---------------------------------------------------------------------------
+  "adaptiveRetrieval": {
+    // Enable adaptive scaling of TopK based on document characteristics
+    "enabled": true,
+    
+    // Minimum coverage percentage to aim for (5% = retrieve ~5% of segments)
+    // Higher = better summary quality but slower synthesis
+    "minCoveragePercent": 5.0,
+    
+    // Minimum TopK regardless of document size
+    "minTopK": 15,
+    
+    // Maximum TopK regardless of document size (LLM context limit)
+    // Set higher for better coverage on long documents
+    "maxTopK": 100,
+    
+    // Boost factor for narrative content (fiction needs more context)
+    // 1.5 = retrieve 50% more segments for fiction
+    "narrativeBoost": 1.5
+  },
+
+  // ---------------------------------------------------------------------------
+  // Docling PDF/DOCX Conversion
+  // ---------------------------------------------------------------------------
+  "docling": {
+    "baseUrl": "http://localhost:5001",
+    "timeoutSeconds": 300
+  },
+  
+  // ---------------------------------------------------------------------------
+  // Qdrant Vector Storage (optional, for persistent embeddings)
+  // ---------------------------------------------------------------------------
+  "qdrant": {
+    "host": "localhost",
+    "port": 6334,
+    "collectionName": "documents",
+    "vectorSize": 384
+  },
+  
+  // ---------------------------------------------------------------------------
+  // Processing Configuration
+  // ---------------------------------------------------------------------------
+  "processing": {
+    "maxHeadingLevel": 3,
+    "chunkCache": {
+      // Enable to persist Docling chunks (skip reconversion if unchanged)
+      "enableChunkCache": true,
+      // Directory for cached chunks (defaults to ~/.docsummarizer/chunks)
+      "cacheDirectory": null,
+      // Delete cached chunks older than N days (0 = keep forever)
+      "retentionDays": 14
+    }
+  },
+  
+  // ---------------------------------------------------------------------------
+  // Output Configuration
+  // ---------------------------------------------------------------------------
+  "output": {
+    // Format: "Console", "Text", "Markdown", "Json"
+    "format": "Console",
+    // Output directory (null = current directory)
+    "outputDirectory": null,
+    "includeTrace": true,
+    "includeTopics": true,
+    "verbose": false
+  },
+  
+  // ---------------------------------------------------------------------------
+  // Batch Processing
+  // ---------------------------------------------------------------------------
+  "batch": {
+    "fileExtensions": [".pdf", ".docx", ".md", ".txt"],
+    "recursive": false,
+    "continueOnError": true,
+    "createIndex": true
+  },
+  
+  // ---------------------------------------------------------------------------
+  // Benchmark Settings (for model comparison)
+  // ---------------------------------------------------------------------------
+  "benchmark": {
+    "referenceModel": null,
+    "maxModelSizeB": null,
+    "defaultModels": ["qwen2.5:1.5b", "qwen2.5:3b", "llama3.2:3b"]
+  }
+}

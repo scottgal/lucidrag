@@ -1,0 +1,25 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+    <PropertyGroup>
+        <TargetFramework>net10.0</TargetFramework>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <Nullable>enable</Nullable>
+        <LangVersion>preview</LangVersion>
+        <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <!-- Reference DocSummarizer.Core for BERT embeddings, BM25, tokenizer -->
+        <ProjectReference Include="..\Mostlylucid.DocSummarizer.Core\Mostlylucid.DocSummarizer.Core.csproj" />
+
+        <!-- DuckDB for compact vector + graph storage -->
+        <PackageReference Include="DuckDB.NET.Data.Full" Version="1.4.3" />
+
+        <!-- Markdown parsing -->
+        <PackageReference Include="Markdig" Version="0.44.0" />
+
+        <!-- JSON for LLM responses -->
+        <PackageReference Include="System.Text.Json" Version="10.0.1" />
+    </ItemGroup>
+
+</Project>

@@ -1,0 +1,31 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <LangVersion>latest</LangVersion>
+
+    <!-- Package metadata -->
+    <PackageId>Mostlylucid.DocSummarizer.Images</PackageId>
+    <Description>Image analysis extension for DocSummarizer with deterministic characterization and optional vision model captioning</Description>
+    <Authors>Scott Galloway</Authors>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <PackageProjectUrl>https://github.com/scottgal/lucidrag</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/scottgal/lucidrag</RepositoryUrl>
+    <PackageTags>docsummarizer;images;vision;imagesharp;clip;florence2;onnx</PackageTags>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- ONNX Runtime for Florence-2 and CLIP -->
+    <PackageReference Include="Microsoft.ML.OnnxRuntime" Version="1.23.0" />
+
+    <!-- Tesseract for OCR -->
+    <PackageReference Include="Tesseract" Version="5.2.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Mostlylucid.DocSummarizer.Core\Mostlylucid.DocSummarizer.Core.csproj" />
+  </ItemGroup>
+
+</Project>

@@ -1,0 +1,120 @@
+# LucidRAG Production Docker Compose
+# Full installation with all dependencies (except Ollama - install on host machine)
+#
+# Usage:
+#   1. Create a .env file with POSTGRES_PASSWORD=your-secure-password
+#   2. docker-compose -f docker-compose.production.yml up -d
+#
+# Then open: http://localhost:5080
+
+services:
+  # LucidRAG Web Application
+  lucidrag:
+    image: scottgal/lucidrag:latest
+    container_name: lucidrag
+    ports:
+      - "5080:8080"
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Production
+      - ConnectionStrings__DefaultConnection=Host=postgres;Database=ragdocs;Username=postgres;Password=${POSTGRES_PASSWORD:-changeme}
+      - RagDocuments__UploadPath=/app/uploads
+      # Demo mode: Set to true for public demos (blocks uploads/deletes, enforces topic relevance)
+      - RagDocuments__DemoMode__Enabled=false
+      - RagDocuments__DemoMode__MinRelevanceScore=0.3
+      - RagDocuments__DemoMode__OffTopicMessage=This demo answers questions about the indexed documents. Try asking about topics covered in the available content.
+      # Ollama runs on host machine
+      # IMPORTANT: Set OLLAMA_HOST=0.0.0.0 on host for Ollama to accept external connections
+      # Option 1: Use host.docker.internal (works on Docker Desktop, may need extra_hosts on Linux)
+      # Option 2: Use your machine's IP address directly (e.g., http://192.168.0.84:11434)
+      - DocSummarizer__Ollama__BaseUrl=http://192.168.0.84:11434
+      # Optional: Docling for PDF/DOCX conversion
+      - DocSummarizer__Docling__BaseUrl=http://docling:5001
+      # Optional: Qdrant for persistent vector storage (port 6334 = gRPC)
+      - DocSummarizer__Qdrant__Host=qdrant
+      - DocSummarizer__Qdrant__Port=6334
+      - DocSummarizer__BertRag__VectorStore=Qdrant
+    volumes:
+      - lucidrag_uploads:/app/uploads
+      - lucidrag_data:/app/data
+      - lucidrag_logs:/app/logs
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/healthz"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
+  # PostgreSQL Database (internal only - no external port exposure)
+  postgres:
+    image: postgres:16-alpine
+    container_name: lucidrag-postgres
+    environment:
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-changeme}
+      - POSTGRES_DB=ragdocs
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Qdrant Vector Database (optional but recommended for persistence)
+  qdrant:
+    image: qdrant/qdrant:latest
+    container_name: lucidrag-qdrant
+    volumes:
+      - qdrant_data:/qdrant/storage
+    ports:
+      - "6333:6333"
+      - "6334:6334"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:6333/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Docling PDF/Document Converter (optional)
+  docling:
+    image: quay.io/docling-project/docling-serve:latest
+    container_name: lucidrag-docling
+    ports:
+      - "5001:5001"
+    restart: unless-stopped
+    # GPU support (uncomment if you have NVIDIA GPU)
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+
+volumes:
+  postgres_data:
+    name: lucidrag_postgres
+  qdrant_data:
+    name: lucidrag_qdrant
+  lucidrag_uploads:
+    name: lucidrag_uploads
+  lucidrag_data:
+    name: lucidrag_data
+  lucidrag_logs:
+    name: lucidrag_logs
+
+# Note: Ollama is NOT included in this compose file.
+# Install Ollama on your host machine: https://ollama.ai
+# Then run: ollama pull llama3.2:3b && ollama serve
+#
+# LucidRAG will connect to Ollama at host.docker.internal:11434
+# For hybrid/LLM extraction modes, Ollama is required.
+# For heuristic-only mode, Ollama is optional.

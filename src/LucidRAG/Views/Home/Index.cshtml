@@ -1,0 +1,1229 @@
+@using LucidRAG.Entities
+@{
+    ViewBag.Title = "LucidRag";
+    var documents = ViewBag.Documents as List<DocumentEntity> ?? new List<DocumentEntity>();
+    var totalSegments = ViewBag.TotalSegments as int? ?? 0;
+}
+
+<div class="flex w-full h-full" x-data="ragApp()">
+    <!-- Left Sidebar: Documents -->
+    <aside class="w-80 bg-base-100 border-r border-base-300 flex flex-col">
+        <div class="p-4 border-b border-base-300">
+            <h2 class="font-semibold mb-3 flex items-center gap-2">
+                <span>📁</span> Add Content
+            </h2>
+
+            <!-- Demo Mode Banner -->
+            <template x-if="demoMode">
+                <div class="alert alert-info text-xs mb-3 py-2">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                    <span x-text="demoBannerMessage"></span>
+                </div>
+            </template>
+
+            <!-- Tabs for Upload / Crawl (hidden in demo mode) -->
+            <template x-if="!demoMode">
+                <div>
+                    <!-- Tab Buttons -->
+                    <div class="tabs tabs-boxed mb-3">
+                        <button class="tab tab-sm" :class="contentTab === 'upload' ? 'tab-active' : ''" @@click="contentTab = 'upload'">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+                            </svg>
+                            Upload
+                        </button>
+                        <button class="tab tab-sm" :class="contentTab === 'crawl' ? 'tab-active' : ''" @@click="contentTab = 'crawl'">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9m-9 9a9 9 0 019-9" />
+                            </svg>
+                            Crawl
+                        </button>
+                    </div>
+
+                    <!-- Upload Tab Content -->
+                    <template x-if="contentTab === 'upload'">
+                        <input type="file" id="filepond-input" name="files" multiple />
+                    </template>
+
+                    <!-- Crawl Tab Content -->
+                    <template x-if="contentTab === 'crawl'">
+                        <div class="space-y-3">
+                            <!-- URL Input -->
+                            <div class="form-control">
+                                <label class="label py-1">
+                                    <span class="label-text text-xs">Website URL</span>
+                                </label>
+                                <input type="url"
+                                       x-model="crawlUrl"
+                                       placeholder="https://example.com"
+                                       class="input input-sm input-bordered w-full" />
+                            </div>
+
+                            <!-- CSS Selector -->
+                            <div class="form-control">
+                                <label class="label py-1">
+                                    <span class="label-text text-xs">Content Selector</span>
+                                    <span class="label-text-alt text-xs opacity-60">optional</span>
+                                </label>
+                                <input type="text"
+                                       x-model="crawlSelector"
+                                       placeholder="article, .post-content, #main"
+                                       class="input input-sm input-bordered w-full" />
+                            </div>
+
+                            <!-- Advanced Options (collapsed) -->
+                            <div class="collapse collapse-arrow bg-base-200 rounded-lg">
+                                <input type="checkbox" class="min-h-0" />
+                                <div class="collapse-title text-xs font-medium min-h-0 py-2 px-3">
+                                    Advanced Options
+                                </div>
+                                <div class="collapse-content px-3 space-y-2">
+                                    <div class="form-control">
+                                        <label class="label py-1">
+                                            <span class="label-text text-xs">Max Pages</span>
+                                        </label>
+                                        <input type="number"
+                                               x-model.number="crawlMaxPages"
+                                               min="1" max="500"
+                                               class="input input-xs input-bordered w-full" />
+                                    </div>
+                                    <div class="form-control">
+                                        <label class="label py-1">
+                                            <span class="label-text text-xs">Max Depth</span>
+                                        </label>
+                                        <input type="number"
+                                               x-model.number="crawlMaxDepth"
+                                               min="1" max="10"
+                                               class="input input-xs input-bordered w-full" />
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Start Crawl Button -->
+                            <button class="btn btn-primary btn-sm w-full"
+                                    @@click="startCrawl()"
+                                    :disabled="!crawlUrl || crawlInProgress">
+                                <template x-if="!crawlInProgress">
+                                    <span class="flex items-center gap-2">
+                                        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9m-9 9a9 9 0 019-9" />
+                                        </svg>
+                                        Start Crawl
+                                    </span>
+                                </template>
+                                <template x-if="crawlInProgress">
+                                    <span class="flex items-center gap-2">
+                                        <span class="loading loading-spinner loading-xs"></span>
+                                        Crawling...
+                                    </span>
+                                </template>
+                            </button>
+
+                            <!-- Crawl Progress -->
+                            <template x-if="crawlInProgress || crawlProgress">
+                                <div class="bg-base-200 rounded-lg p-3 text-xs space-y-2">
+                                    <div class="flex justify-between">
+                                        <span class="opacity-60">Status:</span>
+                                        <span class="badge badge-xs"
+                                              :class="crawlProgress?.status === 'completed' ? 'badge-success' :
+                                                      crawlProgress?.status === 'failed' ? 'badge-error' : 'badge-info'"
+                                              x-text="crawlProgress?.status || 'starting'"></span>
+                                    </div>
+                                    <div class="flex justify-between">
+                                        <span class="opacity-60">Pages:</span>
+                                        <span x-text="(crawlProgress?.pagesProcessed || 0) + '/' + (crawlProgress?.pagesDiscovered || 0)"></span>
+                                    </div>
+                                    <template x-if="crawlProgress?.currentUrl">
+                                        <div class="truncate opacity-60" x-text="crawlProgress.currentUrl"></div>
+                                    </template>
+                                    <template x-if="crawlProgress?.status === 'completed'">
+                                        <div class="text-success">Crawl complete!</div>
+                                    </template>
+                                    <template x-if="crawlProgress?.errorMessage">
+                                        <div class="text-error" x-text="crawlProgress.errorMessage"></div>
+                                    </template>
+                                </div>
+                            </template>
+                        </div>
+                    </template>
+                </div>
+            </template>
+
+            <!-- Disabled message in demo mode -->
+            <template x-if="demoMode">
+                <div class="text-center py-3 px-4 bg-base-200 rounded-lg border border-dashed border-base-300 opacity-75">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 mx-auto mb-2 opacity-50" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                    </svg>
+                    <p class="text-xs opacity-60">Uploads disabled in demo</p>
+                </div>
+            </template>
+        </div>
+
+        <!-- Document List -->
+        <div id="document-list" class="flex-1 overflow-y-auto p-2 space-y-1"
+             hx-get="/documents" hx-trigger="documentUploaded from:body" hx-swap="innerHTML">
+            @await Html.PartialAsync("_DocumentList", documents)
+        </div>
+
+        <!-- Graph Health Widget -->
+        <div class="p-3 border-t border-base-300 bg-base-200/50">
+            <div class="text-xs font-semibold mb-2 flex items-center gap-1">
+                <span>🕸️</span> Graph Health
+            </div>
+            <div class="grid grid-cols-2 gap-2 text-xs">
+                <div class="stat-item">
+                    <span class="opacity-60">Nodes:</span>
+                    <span class="font-medium" x-text="graphStats.nodes">0</span>
+                </div>
+                <div class="stat-item">
+                    <span class="opacity-60">Edges:</span>
+                    <span class="font-medium" x-text="graphStats.edges">0</span>
+                </div>
+                <div class="stat-item">
+                    <span class="opacity-60">Entities:</span>
+                    <span class="font-medium" x-text="graphStats.entityCoverage">0%</span>
+                </div>
+                <div class="stat-item">
+                    <span class="opacity-60">Orphans:</span>
+                    <span class="font-medium" :class="graphStats.orphans > 0 ? 'text-warning' : ''" x-text="graphStats.orphans">0</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Stats Footer -->
+        <div class="p-3 border-t border-base-300 text-sm text-base-content/60">
+            <span>📊 <span x-text="documentCount">@documents.Count</span> documents</span>
+            <span class="mx-2">•</span>
+            <span>🔢 <span x-text="segmentCount">@totalSegments</span> segments</span>
+        </div>
+    </aside>
+
+    <!-- Main: Chat + Evidence Area -->
+    <main class="flex-1 flex flex-col bg-base-100 relative"
+          @@dragover.prevent="if (!demoMode) isDragging = true"
+          @@dragleave.prevent="isDragging = false"
+          @@drop.prevent="handleDrop($event)">
+        <!-- Drop Zone Overlay (not shown in demo mode) -->
+        <div x-show="isDragging && !demoMode" x-cloak
+             class="absolute inset-0 z-50 bg-primary/20 border-4 border-dashed border-primary rounded-lg flex items-center justify-center">
+            <div class="text-center">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-16 w-16 mx-auto text-primary mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+                </svg>
+                <p class="text-xl font-semibold text-primary">Drop files here to upload</p>
+                <p class="text-sm opacity-60 mt-2">PDF, DOCX, Markdown, TXT, HTML</p>
+            </div>
+        </div>
+        <!-- Header with Mode Toggle -->
+        <div class="p-4 border-b border-base-300 flex items-center justify-between">
+            <h2 class="font-semibold flex items-center gap-2">
+                <span>💬</span> Chat
+                <span class="text-xs opacity-60 ml-2">RAG answers. GraphRAG shows its working.</span>
+            </h2>
+
+            <!-- View Mode Toggle -->
+            <div class="flex items-center gap-4">
+                <!-- Extraction Mode Selector -->
+                <template x-if="extractionModes.length > 1 && !demoMode">
+                    <div class="form-control">
+                        <label class="label py-0">
+                            <span class="label-text text-xs opacity-60">Extraction:</span>
+                        </label>
+                        <select class="select select-xs select-bordered"
+                                x-model="currentExtractionMode"
+                                @@change="setExtractionMode($event.target.value)">
+                            <template x-for="mode in extractionModes" :key="mode.value">
+                                <option :value="mode.value"
+                                        :disabled="!mode.available"
+                                        x-text="mode.label + (mode.available ? '' : ' (unavailable)')">
+                                </option>
+                            </template>
+                        </select>
+                    </div>
+                </template>
+                <!-- Ollama status indicator (when not available) -->
+                <template x-if="!ollamaAvailable && !demoMode">
+                    <div class="tooltip tooltip-bottom" data-tip="LLM features require Ollama">
+                        <span class="badge badge-warning badge-xs gap-1">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                            </svg>
+                            No LLM
+                        </span>
+                    </div>
+                </template>
+                <div class="form-control">
+                    <label class="label cursor-pointer gap-2">
+                        <span class="label-text text-xs">GraphRAG</span>
+                        <input type="checkbox" class="toggle toggle-sm toggle-primary" x-model="graphRagEnabled" />
+                    </label>
+                </div>
+                <div class="btn-group">
+                    <button class="btn btn-sm" :class="viewMode === 'answer' ? 'btn-active' : ''" @@click="viewMode = 'answer'">
+                        Answer
+                    </button>
+                    <button class="btn btn-sm" :class="viewMode === 'evidence' ? 'btn-active' : ''" @@click="viewMode = 'evidence'">
+                        Evidence
+                    </button>
+                    <template x-if="graphRagEnabled">
+                        <button class="btn btn-sm" :class="viewMode === 'graph' ? 'btn-active' : ''" @@click="viewMode = 'graph'">
+                            Graph
+                        </button>
+                    </template>
+                </div>
+            </div>
+        </div>
+
+        <!-- Content Area -->
+        <div class="flex-1 flex overflow-hidden">
+            <!-- Answer View -->
+            <template x-if="viewMode === 'answer'">
+                <div class="flex-1 flex flex-col">
+                    <!-- Messages -->
+                    <div id="chat-messages" class="flex-1 overflow-y-auto p-4 space-y-4" x-ref="chatMessages">
+                        <template x-if="messages.length === 0">
+                            <div class="text-center text-base-content/50 mt-8">
+                                <p class="text-lg mb-2 font-brand">Welcome to <span class="text-gray-400">lucid</span><span class="font-bold text-base-content">RAG</span></p>
+                                <p class="text-sm">Upload documents and ask questions about them.</p>
+                            </div>
+                        </template>
+
+                        <template x-for="msg in messages" :key="msg.id">
+                            <div :class="msg.role === 'user' ? 'chat chat-end' : 'chat chat-start'">
+                                <div class="chat-bubble" :class="msg.role === 'user' ? 'chat-bubble-primary' : ''">
+                                    <p x-text="msg.content"></p>
+                                    <template x-if="msg.sources && msg.sources.length > 0">
+                                        <div class="text-xs mt-2 opacity-70 border-t border-base-content/20 pt-2">
+                                            <span class="font-semibold">Sources:</span>
+                                            <template x-for="source in msg.sources" :key="source.number">
+                                                <span class="inline-flex items-center gap-1 ml-2">
+                                                    <span class="cursor-pointer hover:underline"
+                                                          @@click="showEvidence(source)"
+                                                          title="Show in evidence view">
+                                                        [<span x-text="source.number"></span>] <span x-text="source.documentName"></span>
+                                                    </span>
+                                                    <button class="btn btn-ghost btn-xs px-1 opacity-60 hover:opacity-100"
+                                                            @@click.stop="showSegmentDetail(source)"
+                                                            title="View full segment">
+                                                        <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                                                        </svg>
+                                                    </button>
+                                                </span>
+                                            </template>
+                                        </div>
+                                    </template>
+                                </div>
+                            </div>
+                        </template>
+
+                        <!-- Typing indicator -->
+                        <template x-if="isTyping">
+                            <div class="chat chat-start">
+                                <div class="chat-bubble">
+                                    <span class="typing-indicator">Thinking</span>
+                                </div>
+                            </div>
+                        </template>
+                    </div>
+                </div>
+            </template>
+
+            <!-- Evidence View (Split Pane) -->
+            <template x-if="viewMode === 'evidence'">
+                <div class="flex-1 flex">
+                    <!-- Left: Answer with Sentence Grounding -->
+                    <div class="w-1/2 border-r border-base-300 overflow-y-auto p-4">
+                        <h3 class="font-semibold mb-3 flex items-center gap-2">
+                            <span>📝</span> Answer
+                            <span class="badge badge-sm badge-ghost">Click sentence to see evidence</span>
+                        </h3>
+                        <template x-if="lastAnswer">
+                            <div class="space-y-2">
+                                <template x-for="(sentence, idx) in lastAnswer.sentences" :key="idx">
+                                    <p class="p-2 rounded cursor-pointer transition-colors"
+                                       :class="selectedSentence === idx ? 'bg-primary/20 border-l-4 border-primary' : 'hover:bg-base-200'"
+                                       @@click="selectSentence(idx)">
+                                        <span x-text="sentence.text"></span>
+                                        <template x-if="sentence.isDirectQuote">
+                                            <span class="badge badge-xs badge-info ml-1">quote</span>
+                                        </template>
+                                        <template x-if="sentence.sourceRefs && sentence.sourceRefs.length > 0">
+                                            <span class="text-xs opacity-60 ml-1">
+                                                [<span x-text="sentence.sourceRefs.join(', ')"></span>]
+                                            </span>
+                                        </template>
+                                    </p>
+                                </template>
+                            </div>
+                        </template>
+                        <template x-if="!lastAnswer">
+                            <p class="text-base-content/50 text-center mt-8">Ask a question to see evidence</p>
+                        </template>
+                    </div>
+
+                    <!-- Right: Supporting Evidence -->
+                    <div class="w-1/2 overflow-y-auto p-4 bg-base-200/30">
+                        <h3 class="font-semibold mb-3 flex items-center gap-2">
+                            <span>🔍</span> Evidence
+                        </h3>
+                        <template x-if="selectedEvidence.length > 0">
+                            <div class="space-y-3">
+                                <template x-for="(evidence, idx) in selectedEvidence" :key="idx">
+                                    <div class="card bg-base-100 shadow-sm hover:shadow-md transition-shadow cursor-pointer"
+                                         @@click="showSegmentDetail(evidence)">
+                                        <div class="card-body p-3">
+                                            <div class="flex items-center justify-between mb-2">
+                                                <div class="flex items-center gap-2">
+                                                    <span class="badge badge-sm" x-text="'[' + evidence.number + ']'"></span>
+                                                    <span class="font-medium text-sm" x-text="evidence.documentName"></span>
+                                                    <template x-if="evidence.pageOrSection">
+                                                        <span class="text-xs opacity-60" x-text="evidence.pageOrSection"></span>
+                                                    </template>
+                                                </div>
+                                                <span class="text-xs text-primary opacity-60 hover:opacity-100 flex items-center gap-1">
+                                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                                                    </svg>
+                                                    View
+                                                </span>
+                                            </div>
+                                            <p class="text-sm leading-relaxed line-clamp-4" x-text="evidence.text"></p>
+                                            <template x-if="evidence.graphPath">
+                                                <div class="mt-2 pt-2 border-t border-base-300">
+                                                    <span class="text-xs font-semibold opacity-60">Path:</span>
+                                                    <div class="text-xs font-mono mt-1" x-text="evidence.graphPath"></div>
+                                                </div>
+                                            </template>
+                                        </div>
+                                    </div>
+                                </template>
+                            </div>
+                        </template>
+                        <template x-if="selectedEvidence.length === 0">
+                            <p class="text-base-content/50 text-center mt-8">Select a sentence to see supporting evidence</p>
+                        </template>
+                    </div>
+                </div>
+            </template>
+
+            <!-- Graph View -->
+            <template x-if="viewMode === 'graph'">
+                <div class="flex-1 flex">
+                    <!-- Graph Visualization -->
+                    <div class="w-2/3 border-r border-base-300 p-4">
+                        <h3 class="font-semibold mb-3 flex items-center gap-2">
+                            <span>🕸️</span> Knowledge Graph
+                            <span class="badge badge-sm badge-ghost">Click nodes to explore</span>
+                        </h3>
+                        <div class="bg-base-200 rounded-lg h-96 flex items-center justify-center relative" id="graph-container">
+                            <template x-if="!graphData">
+                                <p class="text-base-content/50">Ask a question to see the graph</p>
+                            </template>
+                            <template x-if="graphData">
+                                <div class="w-full h-full" x-ref="graphCanvas">
+                                    <!-- D3.js graph will be rendered here -->
+                                </div>
+                            </template>
+                        </div>
+
+                        <!-- Graph Controls -->
+                        <div class="mt-4 flex items-center gap-4 flex-wrap">
+                            <div class="form-control">
+                                <label class="label py-1">
+                                    <span class="label-text text-xs">Max Hops:</span>
+                                </label>
+                                <input type="range" min="1" max="5" class="range range-xs range-primary w-24"
+                                       x-model="graphSettings.maxHops" />
+                                <span class="text-xs" x-text="graphSettings.maxHops"></span>
+                            </div>
+                            <div class="form-control">
+                                <label class="label py-1">
+                                    <span class="label-text text-xs">Edge Types:</span>
+                                </label>
+                                <select class="select select-xs select-bordered" x-model="graphSettings.edgeFilter">
+                                    <option value="all">All</option>
+                                    <option value="calls">Calls</option>
+                                    <option value="uses">Uses</option>
+                                    <option value="extends">Extends</option>
+                                    <option value="related">Related</option>
+                                </select>
+                            </div>
+                            <label class="label cursor-pointer gap-2">
+                                <span class="label-text text-xs">Authoritative nodes</span>
+                                <input type="checkbox" class="checkbox checkbox-xs" x-model="graphSettings.preferAuthoritative" />
+                            </label>
+                        </div>
+                    </div>
+
+                    <!-- Graph Inspector -->
+                    <div class="w-1/3 overflow-y-auto p-4 bg-base-200/30">
+                        <h3 class="font-semibold mb-3 flex items-center gap-2">
+                            <span>📊</span> Inspector
+                        </h3>
+
+                        <!-- Entities Hit -->
+                        <div class="mb-4">
+                            <h4 class="text-sm font-semibold mb-2 opacity-70">Entities Hit</h4>
+                            <template x-if="graphData && graphData.entities && graphData.entities.length > 0">
+                                <div class="space-y-1">
+                                    <template x-for="entity in graphData.entities.slice(0, 10)" :key="entity.id">
+                                        <div class="flex items-center gap-2 p-2 rounded bg-base-100 cursor-pointer hover:bg-base-200"
+                                             @@click="selectEntity(entity)">
+                                            <span class="badge badge-xs" :class="getEntityBadgeClass(entity.type)" x-text="entity.type"></span>
+                                            <span class="text-sm truncate flex-1" x-text="entity.name"></span>
+                                            <span class="text-xs opacity-60" x-text="entity.score ? entity.score.toFixed(2) : ''"></span>
+                                        </div>
+                                    </template>
+                                </div>
+                            </template>
+                            <template x-if="!graphData || !graphData.entities || graphData.entities.length === 0">
+                                <p class="text-xs opacity-50">No entities found</p>
+                            </template>
+                        </div>
+
+                        <!-- Paths Used -->
+                        <div class="mb-4">
+                            <h4 class="text-sm font-semibold mb-2 opacity-70">Paths Used</h4>
+                            <template x-if="graphData && graphData.paths && graphData.paths.length > 0">
+                                <div class="space-y-2">
+                                    <template x-for="(path, idx) in graphData.paths" :key="idx">
+                                        <div class="p-2 rounded bg-base-100 text-xs font-mono overflow-x-auto">
+                                            <span x-text="path"></span>
+                                        </div>
+                                    </template>
+                                </div>
+                            </template>
+                            <template x-if="!graphData || !graphData.paths || graphData.paths.length === 0">
+                                <p class="text-xs opacity-50">No paths found</p>
+                            </template>
+                        </div>
+
+                        <!-- Selected Entity Details -->
+                        <template x-if="selectedEntity">
+                            <div class="mb-4">
+                                <h4 class="text-sm font-semibold mb-2 opacity-70">
+                                    <span x-text="selectedEntity.name"></span>
+                                </h4>
+                                <div class="p-3 rounded bg-base-100 text-sm space-y-2">
+                                    <p><span class="opacity-60">Type:</span> <span x-text="selectedEntity.type"></span></p>
+                                    <template x-if="selectedEntity.description">
+                                        <p><span class="opacity-60">Description:</span> <span x-text="selectedEntity.description"></span></p>
+                                    </template>
+                                    <template x-if="selectedEntity.aliases && selectedEntity.aliases.length > 0">
+                                        <p><span class="opacity-60">Aliases:</span> <span x-text="selectedEntity.aliases.join(', ')"></span></p>
+                                    </template>
+                                    <template x-if="selectedEntity.chunks && selectedEntity.chunks.length > 0">
+                                        <div>
+                                            <span class="opacity-60">Supporting chunks:</span>
+                                            <div class="mt-1 space-y-1">
+                                                <template x-for="chunk in selectedEntity.chunks" :key="chunk.id">
+                                                    <div class="p-2 bg-base-200 rounded text-xs" x-text="chunk.text"></div>
+                                                </template>
+                                            </div>
+                                        </div>
+                                    </template>
+                                </div>
+                            </div>
+                        </template>
+                    </div>
+                </div>
+            </template>
+        </div>
+
+        <!-- Debug Panel (collapsible) -->
+        <template x-if="showDebugPanel && debugInfo">
+            <div class="border-t border-base-300 bg-base-200/50 p-3 max-h-48 overflow-y-auto">
+                <div class="flex items-center justify-between mb-2">
+                    <h4 class="text-xs font-semibold flex items-center gap-1">
+                        <span>🔧</span> Debug: Why didn't it find X?
+                    </h4>
+                    <button class="btn btn-xs btn-ghost" @@click="showDebugPanel = false">×</button>
+                </div>
+                <div class="grid grid-cols-3 gap-4 text-xs">
+                    <div>
+                        <span class="opacity-60">Query entities detected:</span>
+                        <div class="font-mono mt-1" x-text="debugInfo.queryEntities.join(', ') || 'None'"></div>
+                    </div>
+                    <div>
+                        <span class="opacity-60">Missing from graph:</span>
+                        <div class="font-mono mt-1 text-warning" x-text="debugInfo.missingEntities.join(', ') || 'None'"></div>
+                    </div>
+                    <div>
+                        <span class="opacity-60">Suggestions:</span>
+                        <div class="mt-1" x-text="debugInfo.suggestion || 'No suggestions'"></div>
+                    </div>
+                </div>
+                <template x-if="debugInfo.latencyMs">
+                    <div class="mt-2 text-xs opacity-60">
+                        Latency: <span x-text="debugInfo.latencyMs + 'ms'"></span>
+                        | Retrieval hits: <span x-text="debugInfo.retrievalHits"></span>
+                        <template x-if="graphRagEnabled">
+                            | Graph expansions: <span x-text="debugInfo.graphExpansions"></span>
+                        </template>
+                    </div>
+                </template>
+            </div>
+        </template>
+
+        <!-- Input -->
+        <div class="p-6 border-t border-base-300 bg-base-200/30">
+            <form @@submit.prevent="sendMessage" class="max-w-4xl mx-auto">
+                <div class="flex gap-3 items-center">
+                    <button type="button" class="btn btn-ghost btn-circle btn-sm opacity-60 hover:opacity-100"
+                            @@click="showDebugPanel = !showDebugPanel"
+                            :class="showDebugPanel ? 'btn-active' : ''"
+                            title="Debug panel">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                        </svg>
+                    </button>
+                    <div class="flex-1 relative">
+                        <input type="text"
+                               x-model="currentMessage"
+                               placeholder="Ask about your documents..."
+                               class="input input-bordered input-lg w-full pr-14 text-lg shadow-sm focus:shadow-md transition-shadow"
+                               :disabled="isTyping" />
+                        <button type="submit"
+                                class="btn btn-primary btn-circle absolute right-2 top-1/2 -translate-y-1/2"
+                                :disabled="!currentMessage.trim() || isTyping">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
+                            </svg>
+                        </button>
+                    </div>
+                </div>
+            </form>
+        </div>
+    </main>
+</div>
+
+<!-- Upload Progress Modal -->
+<dialog id="upload-modal" class="modal" x-ref="uploadModal">
+    <div class="modal-box">
+        <h3 class="font-bold text-lg mb-4">Uploading Documents</h3>
+        <div class="space-y-3">
+            <template x-for="upload in uploads" :key="upload.filename">
+                <div class="flex items-center gap-3">
+                    <span class="truncate flex-1 text-sm" x-text="upload.filename"></span>
+                    <template x-if="upload.status === 'uploading'">
+                        <span class="loading loading-spinner loading-sm"></span>
+                    </template>
+                    <template x-if="upload.status === 'queued'">
+                        <span class="badge badge-success badge-sm">Queued</span>
+                    </template>
+                    <template x-if="upload.status === 'error'">
+                        <span class="badge badge-error badge-sm" :title="upload.error">Error</span>
+                    </template>
+                </div>
+            </template>
+        </div>
+        <div class="modal-action">
+            <button class="btn" @@click="closeUploadModal">Close</button>
+        </div>
+    </div>
+</dialog>
+
+<!-- Segment Detail Modal -->
+<dialog id="segment-modal" class="modal" x-ref="segmentModal">
+    <div class="modal-box max-w-3xl">
+        <template x-if="selectedSegment">
+            <div>
+                <!-- Header -->
+                <div class="flex items-start justify-between mb-4">
+                    <div>
+                        <h3 class="font-bold text-lg flex items-center gap-2">
+                            <span class="badge badge-primary" x-text="'[' + selectedSegment.number + ']'"></span>
+                            <span x-text="selectedSegment.documentName"></span>
+                        </h3>
+                        <template x-if="selectedSegment.pageOrSection">
+                            <p class="text-sm opacity-60 mt-1" x-text="selectedSegment.pageOrSection"></p>
+                        </template>
+                    </div>
+                    <button class="btn btn-sm btn-circle btn-ghost" @@click="closeSegmentModal">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                        </svg>
+                    </button>
+                </div>
+
+                <!-- Segment Content -->
+                <div class="bg-base-200 rounded-lg p-4 mb-4">
+                    <h4 class="text-xs font-semibold uppercase tracking-wide opacity-60 mb-2">Source Text</h4>
+                    <div class="prose prose-sm max-w-none" x-html="formatSegmentText(selectedSegment.text)"></div>
+                </div>
+
+                <!-- Metadata -->
+                <div class="grid grid-cols-2 gap-4 text-sm">
+                    <template x-if="selectedSegment.segmentId">
+                        <div>
+                            <span class="opacity-60">Segment ID:</span>
+                            <code class="ml-2 text-xs bg-base-200 px-2 py-1 rounded" x-text="selectedSegment.segmentId"></code>
+                        </div>
+                    </template>
+                    <template x-if="selectedSegment.score">
+                        <div>
+                            <span class="opacity-60">Relevance:</span>
+                            <span class="ml-2 font-medium" x-text="(selectedSegment.score * 100).toFixed(1) + '%'"></span>
+                        </div>
+                    </template>
+                    <template x-if="selectedSegment.salience">
+                        <div>
+                            <span class="opacity-60">Salience:</span>
+                            <span class="ml-2 font-medium" x-text="(selectedSegment.salience * 100).toFixed(1) + '%'"></span>
+                        </div>
+                    </template>
+                    <template x-if="selectedSegment.charRange">
+                        <div>
+                            <span class="opacity-60">Position:</span>
+                            <span class="ml-2 text-xs" x-text="selectedSegment.charRange"></span>
+                        </div>
+                    </template>
+                </div>
+
+                <!-- Related Entities (if available) -->
+                <template x-if="selectedSegment.entities && selectedSegment.entities.length > 0">
+                    <div class="mt-4 pt-4 border-t border-base-300">
+                        <h4 class="text-xs font-semibold uppercase tracking-wide opacity-60 mb-2">Entities in Segment</h4>
+                        <div class="flex flex-wrap gap-2">
+                            <template x-for="entity in selectedSegment.entities" :key="entity">
+                                <span class="badge badge-outline badge-sm" x-text="entity"></span>
+                            </template>
+                        </div>
+                    </div>
+                </template>
+            </div>
+        </template>
+        <template x-if="!selectedSegment">
+            <div class="text-center py-8 opacity-50">
+                <p>Loading segment...</p>
+            </div>
+        </template>
+        <div class="modal-action">
+            <button class="btn" @@click="closeSegmentModal">Close</button>
+        </div>
+    </div>
+    <form method="dialog" class="modal-backdrop">
+        <button>close</button>
+    </form>
+</dialog>
+
+@section Scripts {
+<script>
+// Initialize FilePond
+FilePond.registerPlugin(
+    FilePondPluginFileValidateType,
+    FilePondPluginFileValidateSize
+);
+
+// Global FilePond instance
+let pond = null;
+
+function ragApp() {
+    return {
+        // Core state
+        documents: [],
+        documentCount: @documents.Count,
+        segmentCount: @totalSegments,
+        messages: [],
+        currentMessage: '',
+        conversationId: null,
+        isTyping: false,
+        uploads: [],
+        selectedDocIds: new Set(),
+        isDragging: false,
+
+        // Demo mode state
+        demoMode: false,
+        demoBannerMessage: '',
+
+        // Content tab state (Upload / Crawl)
+        contentTab: 'upload',
+
+        // Crawl state
+        crawlUrl: '',
+        crawlSelector: '',
+        crawlMaxPages: 50,
+        crawlMaxDepth: 3,
+        crawlInProgress: false,
+        crawlProgress: null,
+        crawlEventSource: null,
+
+        // View state
+        viewMode: 'answer', // 'answer', 'evidence', 'graph'
+        graphRagEnabled: true,
+        showDebugPanel: false,
+
+        // Evidence view state
+        lastAnswer: null,
+        selectedSentence: null,
+        selectedEvidence: [],
+
+        // Segment detail modal state
+        selectedSegment: null,
+
+        // Graph view state
+        graphData: null,
+        selectedEntity: null,
+        graphSettings: {
+            maxHops: 2,
+            edgeFilter: 'all',
+            preferAuthoritative: false
+        },
+        graphStats: {
+            nodes: 0,
+            edges: 0,
+            entityCoverage: '0%',
+            orphans: 0
+        },
+
+        // Extraction mode state
+        extractionModes: [],
+        currentExtractionMode: 'heuristic',
+        ollamaAvailable: false,
+
+        // Debug state
+        debugInfo: null,
+
+        async init() {
+            await this.checkDemoMode();
+            await this.loadExtractionModes();
+            this.loadGraphStats();
+            if (!this.demoMode) {
+                // Wait for Alpine to render the input element after x-if evaluates
+                this.$nextTick(() => {
+                    this.initFilePond();
+                });
+            }
+        },
+
+        async loadExtractionModes() {
+            try {
+                const response = await fetch('/api/config/extraction-modes');
+                if (response.ok) {
+                    const data = await response.json();
+                    this.extractionModes = data.modes;
+                    this.ollamaAvailable = data.ollamaAvailable;
+                    // Set current mode from default
+                    const defaultMode = data.modes.find(m => m.isDefault);
+                    if (defaultMode) {
+                        this.currentExtractionMode = defaultMode.value;
+                    }
+                }
+            } catch (e) {
+                console.warn('Could not load extraction modes:', e);
+                // Fallback to heuristic only
+                this.extractionModes = [{ value: 'heuristic', label: 'Heuristic (Fast)', available: true, isDefault: true }];
+            }
+        },
+
+        async setExtractionMode(mode) {
+            if (this.demoMode) return;
+            try {
+                const response = await fetch('/api/config/extraction-mode', {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ mode })
+                });
+                if (response.ok) {
+                    this.currentExtractionMode = mode;
+                }
+            } catch (e) {
+                console.warn('Could not set extraction mode:', e);
+            }
+        },
+
+        async checkDemoMode() {
+            try {
+                const response = await fetch('/api/documents/demo-status');
+                if (response.ok) {
+                    const status = await response.json();
+                    this.demoMode = status.demoMode;
+                    this.demoBannerMessage = status.message || 'Demo mode active';
+                }
+            } catch (e) {
+                console.warn('Could not check demo status:', e);
+            }
+        },
+
+        initFilePond() {
+            const input = document.querySelector('#filepond-input');
+            if (!input) return;
+
+            pond = FilePond.create(input, {
+                allowMultiple: true,
+                maxFileSize: '100MB',
+                name: 'file', // Must match controller parameter name
+                acceptedFileTypes: [
+                    'application/pdf',
+                    'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+                    'text/markdown',
+                    'text/plain',
+                    'text/html'
+                ],
+                fileValidateTypeDetectType: (source, type) => {
+                    // Allow .md files
+                    if (source.name.endsWith('.md')) return Promise.resolve('text/markdown');
+                    return Promise.resolve(type);
+                },
+                labelIdle: 'Drag & Drop files or <span class="filepond--label-action">Browse</span>',
+                labelFileProcessing: 'Uploading...',
+                labelFileProcessingComplete: 'Upload complete',
+                labelTapToCancel: 'tap to cancel',
+                labelTapToRetry: 'tap to retry',
+                server: {
+                    process: {
+                        url: '/api/documents/upload',
+                        method: 'POST',
+                        withCredentials: false,
+                        onload: (response) => {
+                            const result = JSON.parse(response);
+                            htmx.trigger(document.body, 'documentUploaded');
+                            this.loadGraphStats();
+                            return result.documentId;
+                        },
+                        onerror: (response) => {
+                            const result = JSON.parse(response);
+                            return result.error || 'Upload failed';
+                        }
+                    },
+                    revert: null
+                },
+                credits: false
+            });
+        },
+
+        handleDrop(event) {
+            this.isDragging = false;
+            if (this.demoMode) return; // Uploads disabled in demo mode
+            const files = event.dataTransfer.files;
+            if (files.length > 0 && pond) {
+                pond.addFiles(files);
+            }
+        },
+
+        async loadGraphStats() {
+            try {
+                const response = await fetch('/api/graph/stats');
+                if (response.ok) {
+                    const stats = await response.json();
+                    this.graphStats = stats;
+                }
+            } catch (e) {
+                console.warn('Could not load graph stats:', e);
+            }
+        },
+
+        async uploadFiles(event) {
+            const files = event.target.files;
+            if (!files.length) return;
+
+            this.uploads = Array.from(files).map(f => ({
+                filename: f.name,
+                status: 'uploading'
+            }));
+
+            this.$refs.uploadModal.showModal();
+
+            for (let i = 0; i < files.length; i++) {
+                const file = files[i];
+                const formData = new FormData();
+                formData.append('file', file);
+
+                try {
+                    const response = await fetch('/api/documents/upload', {
+                        method: 'POST',
+                        body: formData
+                    });
+                    const result = await response.json();
+
+                    if (response.ok) {
+                        this.uploads[i].status = 'queued';
+                        this.uploads[i].documentId = result.documentId;
+                    } else {
+                        this.uploads[i].status = 'error';
+                        this.uploads[i].error = result.error;
+                    }
+                } catch (e) {
+                    this.uploads[i].status = 'error';
+                    this.uploads[i].error = e.message;
+                }
+            }
+
+            htmx.trigger(document.body, 'documentUploaded');
+            this.loadGraphStats();
+            event.target.value = '';
+        },
+
+        closeUploadModal() {
+            this.$refs.uploadModal.close();
+            this.uploads = [];
+        },
+
+        toggleDocument(docId, checked) {
+            if (checked) {
+                this.selectedDocIds.add(docId);
+            } else {
+                this.selectedDocIds.delete(docId);
+            }
+        },
+
+        async sendMessage() {
+            const query = this.currentMessage.trim();
+            if (!query) return;
+
+            const userMsg = {
+                id: Date.now(),
+                role: 'user',
+                content: query
+            };
+            this.messages.push(userMsg);
+            this.currentMessage = '';
+            this.isTyping = true;
+            this.lastAnswer = null;
+            this.selectedSentence = null;
+            this.selectedEvidence = [];
+            this.graphData = null;
+            this.debugInfo = null;
+
+            this.$nextTick(() => {
+                if (this.$refs.chatMessages) {
+                    this.$refs.chatMessages.scrollTop = this.$refs.chatMessages.scrollHeight;
+                }
+            });
+
+            const startTime = Date.now();
+
+            try {
+                const response = await fetch('/api/chat', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        query,
+                        conversationId: this.conversationId,
+                        documentIds: this.selectedDocIds.size > 0 ? Array.from(this.selectedDocIds) : null,
+                        includeGraphData: this.graphRagEnabled,
+                        includeDebugInfo: true
+                    })
+                });
+
+                const latencyMs = Date.now() - startTime;
+                const result = await response.json();
+
+                if (response.ok) {
+                    this.conversationId = result.conversationId;
+
+                    const assistantMsg = {
+                        id: Date.now() + 1,
+                        role: 'assistant',
+                        content: result.answer,
+                        sources: result.sources
+                    };
+                    this.messages.push(assistantMsg);
+
+                    // Parse answer into sentences for evidence view
+                    this.lastAnswer = this.parseAnswerForEvidence(result);
+
+                    // Store graph data if available
+                    if (result.graphData) {
+                        this.graphData = result.graphData;
+                    }
+
+                    // Store debug info
+                    this.debugInfo = {
+                        queryEntities: result.queryEntities || [],
+                        missingEntities: result.missingEntities || [],
+                        suggestion: result.suggestion || null,
+                        latencyMs: latencyMs,
+                        retrievalHits: result.sources ? result.sources.length : 0,
+                        graphExpansions: result.graphExpansions || 0
+                    };
+                } else {
+                    this.messages.push({
+                        id: Date.now() + 1,
+                        role: 'assistant',
+                        content: `Error: ${result.error || 'Something went wrong'}`
+                    });
+                }
+            } catch (e) {
+                this.messages.push({
+                    id: Date.now() + 1,
+                    role: 'assistant',
+                    content: `Error: ${e.message}`
+                });
+            } finally {
+                this.isTyping = false;
+                this.$nextTick(() => {
+                    if (this.$refs.chatMessages) {
+                        this.$refs.chatMessages.scrollTop = this.$refs.chatMessages.scrollHeight;
+                    }
+                });
+            }
+        },
+
+        parseAnswerForEvidence(result) {
+            const sentences = result.answer.split(/(?<=[.!?])\s+/).map((text, idx) => {
+                // Simple heuristic: check if sentence contains quoted text
+                const isDirectQuote = text.includes('"') || text.includes("'") || text.includes('`');
+
+                // Extract source references from brackets like [1], [2,3]
+                const sourceRefs = [];
+                const matches = text.matchAll(/\[(\d+(?:,\s*\d+)*)\]/g);
+                for (const match of matches) {
+                    sourceRefs.push(...match[1].split(',').map(s => s.trim()));
+                }
+
+                return {
+                    text: text.trim(),
+                    isDirectQuote,
+                    sourceRefs,
+                    evidenceIds: sourceRefs.map(n => parseInt(n)).filter(n => !isNaN(n))
+                };
+            }).filter(s => s.text.length > 0);
+
+            return {
+                fullText: result.answer,
+                sentences,
+                sources: result.sources || []
+            };
+        },
+
+        selectSentence(idx) {
+            this.selectedSentence = idx;
+            const sentence = this.lastAnswer.sentences[idx];
+
+            // Find matching evidence based on source references
+            if (sentence.evidenceIds.length > 0 && this.lastAnswer.sources) {
+                this.selectedEvidence = this.lastAnswer.sources.filter(
+                    s => sentence.evidenceIds.includes(s.number)
+                );
+            } else if (this.lastAnswer.sources && this.lastAnswer.sources.length > 0) {
+                // Show first source if no specific refs
+                this.selectedEvidence = [this.lastAnswer.sources[0]];
+            } else {
+                this.selectedEvidence = [];
+            }
+        },
+
+        showEvidence(source) {
+            this.viewMode = 'evidence';
+            this.selectedEvidence = [source];
+        },
+
+        showSegmentDetail(source) {
+            // Show the segment detail modal with source info
+            this.selectedSegment = source;
+            this.$refs.segmentModal.showModal();
+        },
+
+        closeSegmentModal() {
+            this.$refs.segmentModal.close();
+            this.selectedSegment = null;
+        },
+
+        formatSegmentText(text) {
+            if (!text) return '';
+            // Basic markdown-like formatting
+            return text
+                // Escape HTML
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                // Code blocks
+                .replace(/```(\w+)?\n([\s\S]*?)```/g, '<pre class="bg-base-300 p-2 rounded text-xs overflow-x-auto"><code>$2</code></pre>')
+                // Inline code
+                .replace(/`([^`]+)`/g, '<code class="bg-base-300 px-1 rounded text-sm">$1</code>')
+                // Bold
+                .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
+                // Italic
+                .replace(/\*([^*]+)\*/g, '<em>$1</em>')
+                // Line breaks
+                .replace(/\n/g, '<br>');
+        },
+
+        selectEntity(entity) {
+            this.selectedEntity = entity;
+            // TODO: fetch supporting chunks for this entity
+        },
+
+        getEntityBadgeClass(type) {
+            const classes = {
+                'class': 'badge-primary',
+                'function': 'badge-secondary',
+                'person': 'badge-accent',
+                'org': 'badge-info',
+                'concept': 'badge-warning',
+                'default': 'badge-ghost'
+            };
+            return classes[type?.toLowerCase()] || classes.default;
+        },
+
+        async startCrawl() {
+            if (!this.crawlUrl || this.crawlInProgress) return;
+
+            this.crawlInProgress = true;
+            this.crawlProgress = null;
+
+            try {
+                const response = await fetch('/api/crawl', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        seedUrls: [this.crawlUrl],
+                        contentSelector: this.crawlSelector || null,
+                        maxPages: this.crawlMaxPages,
+                        maxDepth: this.crawlMaxDepth
+                    })
+                });
+
+                if (!response.ok) {
+                    const error = await response.json();
+                    this.crawlProgress = { status: 'failed', errorMessage: error.error || 'Failed to start crawl' };
+                    this.crawlInProgress = false;
+                    return;
+                }
+
+                const result = await response.json();
+                const crawlId = result.crawlId;
+
+                // Connect to SSE for progress updates
+                this.crawlEventSource = new EventSource(`/api/crawl/${crawlId}/status`);
+
+                this.crawlEventSource.onmessage = (event) => {
+                    const progress = JSON.parse(event.data);
+                    this.crawlProgress = progress;
+
+                    if (progress.status === 'completed' || progress.status === 'failed') {
+                        this.crawlEventSource.close();
+                        this.crawlEventSource = null;
+                        this.crawlInProgress = false;
+
+                        // Refresh document list
+                        htmx.trigger(document.body, 'documentUploaded');
+                        this.loadGraphStats();
+                    }
+                };
+
+                this.crawlEventSource.onerror = () => {
+                    this.crawlEventSource.close();
+                    this.crawlEventSource = null;
+                    this.crawlInProgress = false;
+                    if (!this.crawlProgress || this.crawlProgress.status === 'crawling') {
+                        this.crawlProgress = { status: 'failed', errorMessage: 'Connection lost' };
+                    }
+                };
+            } catch (e) {
+                this.crawlProgress = { status: 'failed', errorMessage: e.message };
+                this.crawlInProgress = false;
+            }
+        }
+    };
+}
+</script>
+}

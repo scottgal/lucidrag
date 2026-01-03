@@ -1,0 +1,31 @@
+@model DocumentEntity
+
+@switch (Model.Status)
+{
+    case DocumentStatus.Completed:
+        <span class="badge badge-success badge-xs" title="@Model.SegmentCount segments">Ready</span>
+        break;
+
+    case DocumentStatus.Processing:
+        <span class="badge badge-warning badge-xs flex items-center gap-1"
+              hx-get="/documents/@Model.Id/status-badge"
+              hx-trigger="every 2s"
+              hx-swap="outerHTML">
+            <span class="loading loading-spinner loading-xs"></span>
+            @Model.ProcessingProgress.ToString("0")%
+        </span>
+        break;
+
+    case DocumentStatus.Pending:
+        <span class="badge badge-info badge-xs"
+              hx-get="/documents/@Model.Id/status-badge"
+              hx-trigger="every 2s"
+              hx-swap="outerHTML">
+            Pending
+        </span>
+        break;
+
+    case DocumentStatus.Failed:
+        <span class="badge badge-error badge-xs" title="@Model.StatusMessage">Failed</span>
+        break;
+}

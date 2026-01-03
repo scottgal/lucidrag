@@ -1,0 +1,86 @@
+## v4.0.0
+
+### New Features
+
+#### OpenTelemetry Instrumentation
+Full observability with distributed tracing and metrics for production monitoring.
+
+**Activity Sources (Tracing):**
+- `Mostlylucid.DocSummarizer` - SummarizeMarkdown, SummarizeFile, SummarizeUrl, Query
+- `Mostlylucid.DocSummarizer.Ollama` - OllamaGenerate, OllamaEmbed  
+- `Mostlylucid.DocSummarizer.WebFetcher` - WebFetch, FetchWithSecurity
+
+**Metrics:**
+- DocumentSummarizer: `docsummarizer.summarizations`, `docsummarizer.queries`, `docsummarizer.summarization.duration`, `docsummarizer.document.size`, `docsummarizer.errors`
+- OllamaService: `docsummarizer.ollama.generate.requests`, `docsummarizer.ollama.embed.requests`, `docsummarizer.ollama.generate.duration`, `docsummarizer.ollama.embed.duration`, `docsummarizer.ollama.prompt.tokens`, `docsummarizer.ollama.response.tokens`, `docsummarizer.ollama.errors`, `docsummarizer.ollama.circuit_breaker`
+- WebFetcher: `docsummarizer.webfetch.requests`, `docsummarizer.webfetch.duration`, `docsummarizer.webfetch.errors`, `docsummarizer.webfetch.retries`, `docsummarizer.webfetch.ratelimits`, `docsummarizer.webfetch.circuit_breaker`
+
+#### Enhanced HTTP Resilience
+Polly-based resilience for WebFetcher with production-grade fault tolerance.
+
+- **Circuit breaker**: Opens after 5 failures in 30s, stays open for 60s, half-open probe before recovery
+- **Retry**: Exponential backoff with decorrelated jitter (3 attempts max, 0.5s-30s delay range)
+- **Rate limiting**: Respects HTTP 429 Retry-After headers (both delta and date formats)
+- **Permanent failures**: 400, 401, 402, 403, 404, 405, 410 fail immediately with descriptive messages (no retry)
+
+#### New Exception Types
+- `WebFetchPermanentException` - For non-retryable HTTP errors with StatusCode property
+- `SecurityException` - For SSRF and security policy violations
+
+### Dependencies
+- Added `OpenTelemetry.Api` 1.12.0
+- Added `System.Diagnostics.DiagnosticSource` 10.0.1
+- Added `Polly.Core` 8.6.5 (for WebFetcher resilience)
+
+---
+
+## v3.0.0
+
+### Improvements
+- Added .NET 8 LTS support (now targets net8.0, net9.0, and net10.0)
+- Fixed DI registration - all services now properly registered
+- 101 unit tests covering OnnxConfig, OnnxModelRegistry, and VectorMath utilities
+
+---
+
+## v2.0.0
+
+### New Features
+- **.NET 10 Support** - Now targets net9.0 and net10.0 (dropped net8.0)
+- **Improved Salience Scoring** - Substantive content now ranks higher than short headings
+  - Length-based quality scoring: segments shorter than 80 characters are penalized proportionally
+  - Reduced heading boosts from 4.5x to ~2x for document titles
+  - Short headings no longer dominate top segments
+
+### Configuration Options
+New `ExtractionConfig` properties for fine-tuning salience:
+- `IdealMinLength` (default: 80) - Minimum length for full quality score
+- `IdealMaxLength` (default: 500) - Maximum length before diminishing returns
+- `MinLengthQualityScore` (default: 0.3) - Score floor for very short segments
+- `HeadingBoost` (default: 2.0) - Boost multiplier for headings
+- `DocumentTitleBoost` (default: 1.5) - Boost multiplier for document titles
+
+### Dependencies
+- Updated to latest Microsoft.Extensions.* packages (10.0.1)
+- Updated System.IO.Hashing to 10.0.1
+- Updated PdfPig to 0.1.13
+
+---
+
+## v1.0.0
+
+Initial release of Mostlylucid.DocSummarizer.Core - a local-first document summarization library.
+
+### Features
+- BERT-based extractive summarization using local ONNX models
+- RAG pipeline with semantic retrieval and LLM synthesis
+- Support for Markdown, PDF, DOCX, HTML, and URLs
+- Citation grounding - every claim traceable to source
+- Multiple vector store backends: DuckDB (default), Qdrant, In-Memory
+- Configurable summary templates and styles
+- Web fetching with Playwright support for JavaScript-rendered pages
+
+### Dependencies
+- Requires .NET 9.0 or .NET 10.0
+- Optional: Ollama for LLM synthesis
+- Optional: Docling for advanced PDF/DOCX conversion

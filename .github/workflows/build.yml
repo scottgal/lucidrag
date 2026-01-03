@@ -1,0 +1,50 @@
+name: Build and Test
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: ragdocs_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: '10.0.x'
+
+    - name: Restore dependencies
+      run: dotnet restore LucidRAG.sln
+
+    - name: Build
+      run: dotnet build LucidRAG.sln --configuration Release --no-restore
+
+    - name: Run tests
+      env:
+        ConnectionStrings__DefaultConnection: "Host=localhost;Database=ragdocs_test;Username=postgres;Password=postgres"
+      run: |
+        dotnet test src/LucidRAG.Tests/LucidRAG.Tests.csproj \
+          --configuration Release \
+          --no-build \
+          --filter "Category!=Browser" \
+          --logger "console;verbosity=normal"

@@ -1,0 +1,247 @@
+name: Release LucidRAG
+
+on:
+  push:
+    tags:
+      - 'lucidrag-v*.*.*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to release (e.g., 1.0.0)'
+        required: true
+        type: string
+
+permissions:
+  contents: write
+  packages: write
+
+env:
+  REGISTRY: docker.io
+  IMAGE_NAME: ${{ secrets.DOCKER_HUB_USER_NAME }}/lucidrag
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: ragdocs_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: '10.0.x'
+
+    - name: Restore dependencies
+      run: dotnet restore src/LucidRAG.Tests/LucidRAG.Tests.csproj
+
+    - name: Run tests
+      env:
+        ConnectionStrings__DefaultConnection: "Host=localhost;Database=ragdocs_test;Username=postgres;Password=postgres"
+      run: |
+        dotnet test src/LucidRAG.Tests/LucidRAG.Tests.csproj \
+          --configuration Release \
+          --filter "Category!=Browser" \
+          --logger "console;verbosity=normal" \
+          -- xunit.parallelizeAssembly=true xunit.parallelizeTestCollections=true
+
+  build-amd64:
+    needs: test
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.get_version.outputs.VERSION }}
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Extract version from tag
+      id: get_version
+      run: |
+        if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
+          VERSION="${{ github.event.inputs.version }}"
+        else
+          VERSION=${GITHUB_REF#refs/tags/lucidrag-v}
+        fi
+        VERSION=${VERSION#v}
+        echo "VERSION=$VERSION" >> $GITHUB_OUTPUT
+
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v3
+
+    - name: Log in to Docker Hub
+      uses: docker/login-action@v3
+      with:
+        username: ${{ secrets.DOCKER_HUB_USER_NAME }}
+        password: ${{ secrets.DOCKER_HUB_ACCESS_TOKEN }}
+
+    - name: Build and push amd64
+      uses: docker/build-push-action@v6
+      with:
+        context: .
+        file: src/LucidRAG/Dockerfile
+        push: true
+        tags: ${{ env.IMAGE_NAME }}:${{ steps.get_version.outputs.VERSION }}-amd64
+        platforms: linux/amd64
+        cache-from: type=gha,scope=amd64
+        cache-to: type=gha,mode=max,scope=amd64
+        provenance: false
+
+  build-arm64:
+    needs: test
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Extract version from tag
+      id: get_version
+      run: |
+        if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
+          VERSION="${{ github.event.inputs.version }}"
+        else
+          VERSION=${GITHUB_REF#refs/tags/lucidrag-v}
+        fi
+        VERSION=${VERSION#v}
+        echo "VERSION=$VERSION" >> $GITHUB_OUTPUT
+
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v3
+
+    - name: Set up QEMU
+      uses: docker/setup-qemu-action@v3
+
+    - name: Log in to Docker Hub
+      uses: docker/login-action@v3
+      with:
+        username: ${{ secrets.DOCKER_HUB_USER_NAME }}
+        password: ${{ secrets.DOCKER_HUB_ACCESS_TOKEN }}
+
+    - name: Build and push arm64
+      uses: docker/build-push-action@v6
+      with:
+        context: .
+        file: src/LucidRAG/Dockerfile
+        push: true
+        tags: ${{ env.IMAGE_NAME }}:${{ steps.get_version.outputs.VERSION }}-arm64
+        platforms: linux/arm64
+        cache-from: type=gha,scope=arm64
+        cache-to: type=gha,mode=max,scope=arm64
+        provenance: false
+
+  create-manifest:
+    needs: [build-amd64, build-arm64]
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Log in to Docker Hub
+      uses: docker/login-action@v3
+      with:
+        username: ${{ secrets.DOCKER_HUB_USER_NAME }}
+        password: ${{ secrets.DOCKER_HUB_ACCESS_TOKEN }}
+
+    - name: Create and push manifest
+      run: |
+        VERSION="${{ needs.build-amd64.outputs.version }}"
+
+        # Create versioned manifest
+        docker manifest create ${{ env.IMAGE_NAME }}:${VERSION} \
+          ${{ env.IMAGE_NAME }}:${VERSION}-amd64 \
+          ${{ env.IMAGE_NAME }}:${VERSION}-arm64
+        docker manifest push ${{ env.IMAGE_NAME }}:${VERSION}
+
+        # Create latest manifest
+        docker manifest create ${{ env.IMAGE_NAME }}:latest \
+          ${{ env.IMAGE_NAME }}:${VERSION}-amd64 \
+          ${{ env.IMAGE_NAME }}:${VERSION}-arm64
+        docker manifest push ${{ env.IMAGE_NAME }}:latest
+
+  release:
+    needs: test  # Run in parallel with build-and-push (both depend on test)
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Extract version from tag
+      id: get_version
+      run: |
+        if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
+          VERSION="${{ github.event.inputs.version }}"
+        else
+          VERSION=${GITHUB_REF#refs/tags/lucidrag-v}
+        fi
+        VERSION=${VERSION#v}
+        echo "VERSION=$VERSION" >> $GITHUB_OUTPUT
+
+    - name: Create Release
+      uses: softprops/action-gh-release@v2
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        name: LucidRAG v${{ steps.get_version.outputs.VERSION }}
+        tag_name: ${{ github.event_name == 'workflow_dispatch' && format('lucidrag-v{0}', github.event.inputs.version) || github.ref_name }}
+        draft: false
+        prerelease: false
+        generate_release_notes: true
+        body: |
+          ## LucidRAG v${{ steps.get_version.outputs.VERSION }}
+
+          > **Multi-document Agentic RAG with GraphRAG-style entity extraction**
+
+          **[Documentation](https://github.com/${{ github.repository }}/blob/main/src/LucidRAG/README.md)** | **[Demo](https://lucidrag.com)**
+
+          ### Docker Installation
+
+          ```bash
+          # Pull the image
+          docker pull ${{ env.IMAGE_NAME }}:${{ steps.get_version.outputs.VERSION }}
+
+          # Or use latest
+          docker pull ${{ env.IMAGE_NAME }}:latest
+          ```
+
+          ### Quick Start with Docker Compose
+
+          Download the [docker-compose.yml](https://github.com/${{ github.repository }}/blob/main/src/LucidRAG/docker-compose.production.yml) and run:
+
+          ```bash
+          docker-compose -f docker-compose.production.yml up -d
+          ```
+
+          Then open http://localhost:5080 in your browser.
+
+          ### Features
+
+          - 📄 **Multi-document RAG** - Upload PDFs, DOCX, Markdown, HTML, TXT
+          - 🔍 **Hybrid Search** - BM25 + BERT embeddings with RRF fusion
+          - 🕸️ **GraphRAG** - Entity extraction and knowledge graph visualization
+          - 💬 **Agentic Chat** - Conversation memory, query clarification, self-correction
+          - 🎯 **ONNX Embeddings** - Zero-config local embeddings (no API keys needed)
+          - 📊 **D3.js Visualization** - Interactive knowledge graph explorer
+
+          ### Requirements
+
+          - Docker & Docker Compose
+          - PostgreSQL 16+ (included in docker-compose)
+          - Optional: Ollama for LLM-enhanced modes
+          - Optional: Docling for PDF/DOCX conversion
+          - Optional: Qdrant for persistent vector storage

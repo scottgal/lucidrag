@@ -1,0 +1,99 @@
+name: Publish DocSummarizer NuGet Package
+
+on:
+  push:
+    tags:
+      - 'docsumv*.*.*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to publish (e.g., 1.0.0)'
+        required: true
+        type: string
+
+permissions:
+  id-token: write
+  contents: read
+
+env:
+  PROJECT_PATH: src/Mostlylucid.DocSummarizer.Core/Mostlylucid.DocSummarizer.Core.csproj
+  PROJECT_NAME: Mostlylucid.DocSummarizer
+
+jobs:
+  build-and-publish:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0  # Required for MinVer
+
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: '10.0.x'
+        dotnet-quality: 'preview'
+
+    - name: Extract version from tag
+      id: get_version
+      run: |
+        if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
+          VERSION="${{ github.event.inputs.version }}"
+        else
+          # Tag format: docsumv1.0.0 -> extract 1.0.0
+          TAG=${GITHUB_REF#refs/tags/docsumv}
+          VERSION=$TAG
+        fi
+        echo "VERSION=$VERSION" >> $GITHUB_OUTPUT
+        echo "Publishing version: $VERSION"
+
+    - name: Restore dependencies
+      run: dotnet restore ${{ env.PROJECT_PATH }}
+
+    - name: Build
+      run: |
+        dotnet build ${{ env.PROJECT_PATH }} \
+          --configuration Release \
+          --no-restore \
+          -p:MinVerVersionOverride=${{ steps.get_version.outputs.VERSION }}
+
+    - name: Pack
+      run: |
+        dotnet pack ${{ env.PROJECT_PATH }} \
+          --configuration Release \
+          --no-build \
+          --output ./artifacts \
+          -p:MinVerVersionOverride=${{ steps.get_version.outputs.VERSION }}
+
+    - name: List artifacts
+      run: ls -la ./artifacts/
+
+    - name: Login to NuGet (OIDC)
+      id: nuget_login
+      uses: NuGet/login@v1
+      with:
+        user: 'mostlylucid'
+
+    - name: Publish to NuGet (Trusted Publisher)
+      run: |
+        dotnet nuget push ./artifacts/*.nupkg \
+          --api-key ${{ steps.nuget_login.outputs.NUGET_API_KEY }} \
+          --source https://api.nuget.org/v3/index.json \
+          --skip-duplicate
+
+    - name: Publish symbols to NuGet
+      run: |
+        dotnet nuget push ./artifacts/*.snupkg \
+          --api-key ${{ steps.nuget_login.outputs.NUGET_API_KEY }} \
+          --source https://api.nuget.org/v3/index.json \
+          --skip-duplicate
+      continue-on-error: true  # Symbols are optional
+
+    - name: Upload artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: nuget-packages
+        path: |
+          ./artifacts/*.nupkg
+          ./artifacts/*.snupkg

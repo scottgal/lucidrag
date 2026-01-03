@@ -1,0 +1,14 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(ls -la \"E:\\\\source\\\\lucidrag\\\\src\\\\LucidRAG\"\" | grep -E \"^d)",
+      "Bash(.cs$)",
+      "Bash(.html$)",
+      "Bash(^-.*web)",
+      "Bash(\")",
+      "Bash(grep:*)",
+      "WebSearch",
+      "Bash(dotnet sln:*)"
+    ]
+  }
+}

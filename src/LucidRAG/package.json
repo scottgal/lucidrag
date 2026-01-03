@@ -1,0 +1,19 @@
+{
+  "name": "mostlylucid.ragdocuments",
+  "version": "1.0.0",
+  "description": "LucidRag - Multi-Document RAG",
+  "scripts": {
+    "build:css": "npx tailwindcss -i ./src/css/main.css -o ./wwwroot/css/dist/main.css --minify",
+    "watch:css": "npx tailwindcss -i ./src/css/main.css -o ./wwwroot/css/dist/main.css --watch",
+    "build": "npm run build:css"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "devDependencies": {
+    "daisyui": "^4.12.10",
+    "puppeteer": "^24.34.0",
+    "tailwindcss": "^3.4.1"
+  }
+}

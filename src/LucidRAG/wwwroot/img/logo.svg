@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="160" height="40" viewBox="0 0 160 40">
+  <!-- LucidRAG Logo - lucid in grey (#cccccc), RAG in white -->
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Raleway:wght@700&amp;display=swap');
+  </style>
+  <text x="2" y="30" font-family="Raleway, sans-serif" font-size="28" font-weight="700">
+    <tspan fill="#cccccc">lucid</tspan><tspan fill="#ffffff">RAG</tspan>
+  </text>
+</svg>
