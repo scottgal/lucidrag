@@ -1,0 +1,54 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <AssemblyName>lucidrag-image</AssemblyName>
+    <RootNamespace>LucidRAG.ImageCli</RootNamespace>
+
+    <!-- .NET Global Tool Configuration -->
+    <PackAsTool>true</PackAsTool>
+    <ToolCommandName>lucidrag-image</ToolCommandName>
+
+    <!-- NuGet Package Metadata -->
+    <PackageId>LucidRAG.ImageCli</PackageId>
+    <Version>1.0.0</Version>
+    <Authors>LucidRAG</Authors>
+    <Company>LucidRAG</Company>
+    <Description>CLI tool for intelligent image analysis with vision LLM integration, content-based caching, and signal-based storage. Supports batch processing, auto-escalation, and semantic JSON-LD export.</Description>
+    <PackageTags>image-analysis;computer-vision;cli;ollama;vision-llm;image-classification;batch-processing</PackageTags>
+    <PackageProjectUrl>https://github.com/scottgal/LucidRAG</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/scottgal/LucidRAG</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <PackageReleaseNotes>Initial release with deterministic image analysis, vision LLM integration, and signal-based storage.</PackageReleaseNotes>
+
+    <!-- Local testing -->
+    <PackageOutputPath>$(MSBuildThisFileDirectory)..\..\nupkg</PackageOutputPath>
+    <UserSecretsId>80a118e1-f649-4d05-b4ef-7d4b2dbadcbd</UserSecretsId>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Mostlylucid.DocSummarizer.Images\Mostlylucid.DocSummarizer.Images.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="System.CommandLine" Version="2.0.1" />
+    <PackageReference Include="Spectre.Console" Version="0.54.0" />
+    <PackageReference Include="Microsoft.Extensions.Hosting" Version="10.0.1" />
+    <PackageReference Include="Microsoft.Extensions.FileSystemGlobbing" Version="10.0.1" />
+    <PackageReference Include="Serilog.Extensions.Hosting" Version="9.0.0" />
+    <PackageReference Include="Serilog.Sinks.Console" Version="6.0.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Update="appsettings.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+    <None Include="README.md" Pack="true" PackagePath="/" />
+  </ItemGroup>
+
+</Project>

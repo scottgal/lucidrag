@@ -757,11 +757,10 @@ public class BertRagConfig
 {
     /// <summary>
     ///     Vector store backend for segment storage.
-    ///     DuckDB (default) = embedded persistent storage in a single file, no external services.
-    ///     InMemory = no external dependencies, vectors lost on exit.
-    ///     Qdrant = persistent storage, requires Qdrant server.
+    ///     InMemory (default) = no external dependencies, vectors lost on exit.
+    ///     Qdrant (recommended) = persistent storage, requires Qdrant server, supports multi-vector embeddings.
     /// </summary>
-    public VectorStoreBackend VectorStore { get; set; } = VectorStoreBackend.DuckDB;
+    public VectorStoreBackend VectorStore { get; set; } = VectorStoreBackend.InMemory;
 
     /// <summary>
     ///     Collection name for vector storage.

@@ -16,39 +16,113 @@ public class ColorAnalyzer
 {
     private readonly ColorGridConfig _config;
 
-    // Named colors for human-readable output
+    // Expanded named colors for better coverage of color space
+    // Includes saturated primaries, desaturated tones, and pastels
     private static readonly Dictionary<string, (int R, int G, int B)> NamedColors = new()
     {
+        // Grayscale
         ["Black"] = (0, 0, 0),
         ["White"] = (255, 255, 255),
-        ["Red"] = (255, 0, 0),
-        ["Green"] = (0, 128, 0),
-        ["Blue"] = (0, 0, 255),
-        ["Yellow"] = (255, 255, 0),
-        ["Cyan"] = (0, 255, 255),
-        ["Magenta"] = (255, 0, 255),
-        ["Orange"] = (255, 165, 0),
-        ["Purple"] = (128, 0, 128),
-        ["Pink"] = (255, 192, 203),
-        ["Brown"] = (139, 69, 19),
         ["Gray"] = (128, 128, 128),
         ["Light Gray"] = (192, 192, 192),
         ["Dark Gray"] = (64, 64, 64),
-        ["Navy"] = (0, 0, 128),
-        ["Teal"] = (0, 128, 128),
-        ["Olive"] = (128, 128, 0),
-        ["Maroon"] = (128, 0, 0),
-        ["Lime"] = (0, 255, 0),
-        ["Aqua"] = (0, 255, 255),
         ["Silver"] = (192, 192, 192),
+        ["Charcoal"] = (54, 69, 79),
+        ["Slate"] = (112, 128, 144),
+
+        // Reds (saturated)
+        ["Red"] = (255, 0, 0),
+        ["Crimson"] = (220, 20, 60),
+        ["Scarlet"] = (255, 36, 0),
+        ["Ruby"] = (224, 17, 95),
+        ["Maroon"] = (128, 0, 0),
+        ["Burgundy"] = (128, 0, 32),
+
+        // Reds (desaturated/pastel)
+        ["Pink"] = (255, 192, 203),
+        ["Hot Pink"] = (255, 105, 180),
+        ["Rose"] = (255, 0, 127),
+        ["Salmon"] = (250, 128, 114),
+        ["Coral"] = (255, 127, 80),
+        ["Peach"] = (255, 218, 185),
+
+        // Oranges
+        ["Orange"] = (255, 165, 0),
+        ["Dark Orange"] = (255, 140, 0),
+        ["Tangerine"] = (255, 127, 0),
+        ["Burnt Orange"] = (204, 85, 0),
+        ["Amber"] = (255, 191, 0),
+
+        // Yellows
+        ["Yellow"] = (255, 255, 0),
+        ["Gold"] = (255, 215, 0),
+        ["Lemon"] = (255, 247, 0),
+        ["Cream"] = (255, 253, 208),
+        ["Khaki"] = (240, 230, 140),
         ["Beige"] = (245, 245, 220),
         ["Ivory"] = (255, 255, 240),
-        ["Coral"] = (255, 127, 80),
-        ["Salmon"] = (250, 128, 114),
-        ["Khaki"] = (240, 230, 140),
-        ["Gold"] = (255, 215, 0),
         ["Tan"] = (210, 180, 140),
+
+        // Greens (saturated)
+        ["Green"] = (0, 128, 0),
+        ["Lime"] = (0, 255, 0),
+        ["Forest Green"] = (34, 139, 34),
+        ["Emerald"] = (0, 201, 87),
+        ["Jade"] = (0, 168, 107),
+        ["Olive"] = (128, 128, 0),
+        ["Dark Green"] = (0, 100, 0),
+
+        // Greens (desaturated/pastel)
+        ["Mint"] = (152, 255, 152),
+        ["Seafoam"] = (159, 226, 191),
+        ["Sage"] = (188, 184, 138),
+        ["Chartreuse"] = (127, 255, 0),
+
+        // Cyans/Teals
+        ["Cyan"] = (0, 255, 255),
+        ["Aqua"] = (0, 255, 255),
+        ["Teal"] = (0, 128, 128),
+        ["Turquoise"] = (64, 224, 208),
+        ["Aquamarine"] = (127, 255, 212),
+
+        // Blues (saturated)
+        ["Blue"] = (0, 0, 255),
+        ["Navy"] = (0, 0, 128),
+        ["Royal Blue"] = (65, 105, 225),
+        ["Cobalt"] = (0, 71, 171),
+        ["Sapphire"] = (15, 82, 186),
+        ["Indigo"] = (75, 0, 130),
+        ["Midnight Blue"] = (25, 25, 112),
+
+        // Blues (desaturated/pastel)
+        ["Sky Blue"] = (135, 206, 235),
+        ["Light Blue"] = (173, 216, 230),
+        ["Baby Blue"] = (137, 207, 240),
+        ["Powder Blue"] = (176, 224, 230),
+        ["Steel Blue"] = (70, 130, 180),
+        ["Periwinkle"] = (204, 204, 255),
+
+        // Purples/Violets (saturated)
+        ["Purple"] = (128, 0, 128),
+        ["Violet"] = (238, 130, 238),
+        ["Magenta"] = (255, 0, 255),
+        ["Fuchsia"] = (255, 0, 255),
+        ["Plum"] = (221, 160, 221),
+        ["Orchid"] = (218, 112, 214),
+        ["Amethyst"] = (153, 102, 204),
+
+        // Purples (desaturated/pastel)
+        ["Lavender"] = (230, 230, 250),
+        ["Lilac"] = (200, 162, 200),
+        ["Mauve"] = (224, 176, 255),
+
+        // Browns
+        ["Brown"] = (139, 69, 19),
         ["Chocolate"] = (210, 105, 30),
+        ["Sienna"] = (160, 82, 45),
+        ["Saddle Brown"] = (139, 69, 19),
+        ["Coffee"] = (111, 78, 55),
+        ["Mocha"] = (128, 71, 41),
     };
 
     public ColorAnalyzer(IOptions<ImageConfig> config)

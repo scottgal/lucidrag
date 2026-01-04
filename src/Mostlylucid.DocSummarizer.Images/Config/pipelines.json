@@ -1,0 +1,262 @@
+{
+  "schemaVersion": "1.0",
+  "defaultPipeline": "advancedocr",
+  "defaults": {
+    "maxTotalDurationMs": 60000,
+    "enableParallelization": true,
+    "maxParallelism": -1,
+    "emitPerformanceSignals": true,
+    "enableCaching": true
+  },
+  "pipelines": [
+    {
+      "name": "simpleocr",
+      "displayName": "Simple OCR",
+      "description": "Baseline Tesseract OCR - fastest, lower accuracy",
+      "category": "speed",
+      "estimatedDurationSeconds": 0.5,
+      "accuracyImprovement": 0,
+      "isDefault": false,
+      "tags": ["fast", "baseline"],
+      "globalSettings": {
+        "maxTotalDurationMs": 2000,
+        "enableParallelization": false
+      },
+      "phases": [
+        {
+          "id": "color-analysis",
+          "name": "Color Analysis",
+          "description": "Analyze color distribution and text likelihood",
+          "enabled": true,
+          "priority": 100,
+          "waveType": "ColorWave",
+          "tags": ["preprocessing"]
+        },
+        {
+          "id": "simple-ocr",
+          "name": "Simple OCR",
+          "description": "Basic Tesseract OCR without multi-frame processing",
+          "enabled": true,
+          "priority": 60,
+          "waveType": "OcrWave",
+          "earlyExitThreshold": 0.9,
+          "tags": ["ocr", "baseline"]
+        },
+        {
+          "id": "spell-check",
+          "name": "Spell Check Quality",
+          "description": "Assess OCR quality via spell checking",
+          "enabled": true,
+          "priority": 58,
+          "waveType": "OcrQualityWave",
+          "dependsOn": ["simple-ocr"],
+          "tags": ["quality", "spell-check"]
+        }
+      ]
+    },
+    {
+      "name": "advancedocr",
+      "displayName": "Advanced OCR (Default)",
+      "description": "Multi-frame temporal OCR with stabilization and voting - best balance of speed and accuracy",
+      "category": "balanced",
+      "estimatedDurationSeconds": 2.5,
+      "accuracyImprovement": 25,
+      "isDefault": true,
+      "tags": ["balanced", "recommended"],
+      "globalSettings": {
+        "maxTotalDurationMs": 5000,
+        "globalEarlyExitThreshold": 0.95
+      },
+      "phases": [
+        {
+          "id": "color-analysis",
+          "name": "Color Analysis",
+          "description": "Analyze color distribution and text likelihood",
+          "enabled": true,
+          "priority": 100,
+          "waveType": "ColorWave",
+          "tags": ["preprocessing"]
+        },
+        {
+          "id": "simple-ocr",
+          "name": "Simple OCR",
+          "description": "Quick baseline OCR attempt",
+          "enabled": true,
+          "priority": 60,
+          "waveType": "OcrWave",
+          "earlyExitThreshold": 0.95,
+          "maxDurationMs": 1000,
+          "tags": ["ocr", "baseline"]
+        },
+        {
+          "id": "advanced-ocr",
+          "name": "Advanced Multi-Frame OCR",
+          "description": "Temporal processing with frame stabilization, median filtering, and voting",
+          "enabled": true,
+          "priority": 59,
+          "waveType": "AdvancedOcrWave",
+          "dependsOn": ["simple-ocr"],
+          "parameters": {
+            "maxFrames": 30,
+            "ssimThreshold": 0.95,
+            "enableStabilization": true,
+            "enableTemporalMedian": true,
+            "enableVoting": true,
+            "votingConfidenceThreshold": 0.3
+          },
+          "tags": ["ocr", "temporal", "advanced"]
+        },
+        {
+          "id": "spell-check",
+          "name": "Spell Check Quality",
+          "description": "Assess OCR quality via spell checking",
+          "enabled": true,
+          "priority": 58,
+          "waveType": "OcrQualityWave",
+          "dependsOn": ["advanced-ocr"],
+          "parameters": {
+            "language": "en_US",
+            "garbledThreshold": 0.5
+          },
+          "tags": ["quality", "spell-check"]
+        }
+      ]
+    },
+    {
+      "name": "quality",
+      "displayName": "Quality OCR",
+      "description": "Maximum accuracy with all advanced techniques - slower but highest quality",
+      "category": "quality",
+      "estimatedDurationSeconds": 12,
+      "accuracyImprovement": 45,
+      "isDefault": false,
+      "tags": ["quality", "slow", "accurate"],
+      "globalSettings": {
+        "maxTotalDurationMs": 30000,
+        "globalEarlyExitThreshold": 0.98
+      },
+      "phases": [
+        {
+          "id": "color-analysis",
+          "name": "Color Analysis",
+          "description": "Analyze color distribution and text likelihood",
+          "enabled": true,
+          "priority": 100,
+          "waveType": "ColorWave",
+          "tags": ["preprocessing"]
+        },
+        {
+          "id": "simple-ocr",
+          "name": "Simple OCR",
+          "description": "Quick baseline OCR attempt",
+          "enabled": true,
+          "priority": 60,
+          "waveType": "OcrWave",
+          "earlyExitThreshold": 0.98,
+          "maxDurationMs": 1000,
+          "tags": ["ocr", "baseline"]
+        },
+        {
+          "id": "advanced-ocr",
+          "name": "Advanced Multi-Frame OCR",
+          "description": "Temporal processing with all enhancement techniques",
+          "enabled": true,
+          "priority": 59,
+          "waveType": "AdvancedOcrWave",
+          "dependsOn": ["simple-ocr"],
+          "parameters": {
+            "maxFrames": 100,
+            "ssimThreshold": 0.98,
+            "enableStabilization": true,
+            "enableTemporalMedian": true,
+            "enableVoting": true,
+            "votingConfidenceThreshold": 0.2,
+            "votingMinFrames": 5
+          },
+          "tags": ["ocr", "temporal", "advanced"]
+        },
+        {
+          "id": "spell-check",
+          "name": "Spell Check Quality",
+          "description": "Comprehensive spell checking and quality assessment",
+          "enabled": true,
+          "priority": 58,
+          "waveType": "OcrQualityWave",
+          "dependsOn": ["advanced-ocr"],
+          "parameters": {
+            "language": "en_US",
+            "garbledThreshold": 0.5,
+            "enableDetailedAnalysis": true
+          },
+          "tags": ["quality", "spell-check"]
+        }
+      ]
+    },
+    {
+      "name": "alttext",
+      "displayName": "Alt Text Generation",
+      "description": "Generate comprehensive alt text for images combining OCR, vision analysis, and image characterization",
+      "category": "accessibility",
+      "estimatedDurationSeconds": 3.5,
+      "isDefault": false,
+      "tags": ["accessibility", "alttext", "description"],
+      "globalSettings": {
+        "maxTotalDurationMs": 10000,
+        "enableParallelization": true
+      },
+      "phases": [
+        {
+          "id": "color-analysis",
+          "name": "Color Analysis",
+          "description": "Analyze color palette, dominant colors, and visual characteristics",
+          "enabled": true,
+          "priority": 100,
+          "waveType": "ColorWave",
+          "tags": ["vision", "color"]
+        },
+        {
+          "id": "simple-ocr",
+          "name": "Simple OCR",
+          "description": "Quick baseline OCR for text detection",
+          "enabled": true,
+          "priority": 60,
+          "waveType": "OcrWave",
+          "maxDurationMs": 1000,
+          "tags": ["ocr", "text"]
+        },
+        {
+          "id": "advanced-ocr",
+          "name": "Advanced OCR",
+          "description": "Multi-frame OCR for animated images with temporal voting",
+          "enabled": true,
+          "priority": 59,
+          "waveType": "AdvancedOcrWave",
+          "dependsOn": ["simple-ocr"],
+          "parameters": {
+            "maxFrames": 20,
+            "ssimThreshold": 0.95,
+            "enableStabilization": true,
+            "enableTemporalMedian": true,
+            "enableVoting": true,
+            "votingConfidenceThreshold": 0.4
+          },
+          "tags": ["ocr", "temporal"]
+        },
+        {
+          "id": "spell-check",
+          "name": "OCR Quality Assessment",
+          "description": "Validate OCR quality and detect garbled text",
+          "enabled": true,
+          "priority": 58,
+          "waveType": "OcrQualityWave",
+          "dependsOn": ["advanced-ocr"],
+          "parameters": {
+            "language": "en_US",
+            "garbledThreshold": 0.5
+          },
+          "tags": ["quality"]
+        }
+      ]
+    }
+  ]
+}

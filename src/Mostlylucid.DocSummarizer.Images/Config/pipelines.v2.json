@@ -1,0 +1,453 @@
+{
+  "schemaVersion": "2.0",
+  "defaultProfile": "balanced",
+  "defaults": {
+    "maxTotalDurationMs": 60000,
+    "enableParallelization": true,
+    "maxParallelism": -1,
+    "emitPerformanceSignals": true,
+    "enableCaching": true,
+    "cacheKeyStrategy": "sha256_image_pipeline_version",
+    "cacheTtlSeconds": 86400
+  },
+  "profiles": [
+    {
+      "name": "fast",
+      "displayName": "Fast OCR",
+      "description": "Baseline Tesseract OCR - fastest, lower accuracy",
+      "category": "speed",
+      "estimatedDurationSeconds": 0.5,
+      "accuracyImprovement": 0,
+      "isDefault": false,
+      "tags": ["fast", "baseline"],
+      "globalSettings": {
+        "maxTotalDurationMs": 2000,
+        "enableParallelization": false,
+        "globalEarlyExitPredicate": "ocr.quality.score >= 0.9 && ocr.text.length >= 3"
+      },
+      "phases": [
+        {
+          "id": "color-analysis",
+          "name": "Color Analysis",
+          "description": "Analyze color distribution and text likelihood",
+          "enabled": true,
+          "priority": 100,
+          "waveType": "ColorWave",
+          "inputs": [],
+          "outputs": ["color.dominant_colors", "color.palette", "content.text_likeliness"],
+          "artifacts": [],
+          "costWeight": 1,
+          "fallbackOnTimeout": "degrade",
+          "tags": ["preprocessing"]
+        },
+        {
+          "id": "simple-ocr",
+          "name": "Simple OCR",
+          "description": "Basic Tesseract OCR without multi-frame processing",
+          "enabled": true,
+          "priority": 60,
+          "waveType": "OcrWave",
+          "inputs": ["image"],
+          "outputs": ["ocr.text", "ocr.confidence", "ocr.regions"],
+          "artifacts": ["ocr.raw"],
+          "costWeight": 3,
+          "fallbackOnTimeout": "abort",
+          "maxDurationMs": 1000,
+          "tags": ["ocr", "baseline"]
+        },
+        {
+          "id": "spell-check",
+          "name": "Spell Check Quality",
+          "description": "Assess OCR quality via spell checking",
+          "enabled": true,
+          "priority": 58,
+          "waveType": "OcrQualityWave",
+          "dependsOn": ["simple-ocr"],
+          "inputs": ["ocr.text"],
+          "outputs": ["ocr.quality.score", "ocr.quality.spell_check_score", "ocr.quality.is_garbled"],
+          "artifacts": [],
+          "costWeight": 1,
+          "fallbackOnTimeout": "skip",
+          "tags": ["quality", "spell-check"]
+        }
+      ]
+    },
+    {
+      "name": "balanced",
+      "displayName": "Balanced OCR (Default)",
+      "description": "Multi-frame temporal OCR with stabilization and voting - best balance of speed and accuracy",
+      "category": "balanced",
+      "estimatedDurationSeconds": 2.5,
+      "accuracyImprovement": 25,
+      "isDefault": true,
+      "tags": ["balanced", "recommended"],
+      "globalSettings": {
+        "maxTotalDurationMs": 5000,
+        "globalEarlyExitPredicate": "ocr.quality.score >= 0.95 && ocr.text.length >= 5"
+      },
+      "phases": [
+        {
+          "id": "color-analysis",
+          "name": "Color Analysis",
+          "description": "Analyze color distribution and text likelihood",
+          "enabled": true,
+          "priority": 100,
+          "waveType": "ColorWave",
+          "inputs": [],
+          "outputs": ["color.dominant_colors", "color.palette", "content.text_likeliness"],
+          "artifacts": [],
+          "costWeight": 1,
+          "fallbackOnTimeout": "degrade",
+          "tags": ["preprocessing"]
+        },
+        {
+          "id": "simple-ocr",
+          "name": "Simple OCR",
+          "description": "Quick baseline OCR attempt",
+          "enabled": true,
+          "priority": 60,
+          "waveType": "OcrWave",
+          "inputs": ["image"],
+          "outputs": ["ocr.text", "ocr.confidence", "ocr.regions"],
+          "artifacts": ["ocr.raw"],
+          "costWeight": 3,
+          "fallbackOnTimeout": "abort",
+          "maxDurationMs": 1000,
+          "tags": ["ocr", "baseline"]
+        },
+        {
+          "id": "advanced-ocr",
+          "name": "Advanced Multi-Frame OCR",
+          "description": "Temporal processing with frame stabilization, median filtering, and voting",
+          "enabled": true,
+          "priority": 59,
+          "waveType": "AdvancedOcrWave",
+          "dependsOn": ["simple-ocr"],
+          "inputs": ["frames.extracted"],
+          "outputs": ["ocr.voting.consensus_text", "ocr.voting.confidence", "ocr.segments"],
+          "artifacts": ["frames.composited", "plate.median", "ocr.voted"],
+          "costWeight": 10,
+          "fallbackOnTimeout": "degrade",
+          "parameters": {
+            "maxFrames": 30,
+            "ssimThreshold": 0.95,
+            "frameSampling": "ssim-keyframes",
+            "stabilizationModel": "affine",
+            "plateMethod": "median",
+            "detector": "none",
+            "enableVoting": true,
+            "votingConfidenceThreshold": 0.3
+          },
+          "tags": ["ocr", "temporal", "advanced"]
+        },
+        {
+          "id": "spell-check",
+          "name": "Spell Check Quality",
+          "description": "Assess OCR quality via spell checking - drives early exit",
+          "enabled": true,
+          "priority": 58,
+          "waveType": "OcrQualityWave",
+          "dependsOn": ["advanced-ocr"],
+          "inputs": ["ocr.voting.consensus_text"],
+          "outputs": ["ocr.quality.score", "ocr.quality.spell_check_score", "ocr.quality.is_garbled", "pipeline.exit"],
+          "artifacts": [],
+          "costWeight": 1,
+          "fallbackOnTimeout": "skip",
+          "parameters": {
+            "language": "en_US",
+            "garbledThreshold": 0.5,
+            "setExitSignalOnQuality": true
+          },
+          "tags": ["quality", "spell-check"]
+        }
+      ]
+    },
+    {
+      "name": "quality",
+      "displayName": "Quality OCR",
+      "description": "Maximum accuracy with all advanced techniques - slower but highest quality",
+      "category": "quality",
+      "estimatedDurationSeconds": 12,
+      "accuracyImprovement": 45,
+      "isDefault": false,
+      "tags": ["quality", "slow", "accurate"],
+      "globalSettings": {
+        "maxTotalDurationMs": 30000,
+        "globalEarlyExitPredicate": "ocr.quality.score >= 0.98 && ocr.text.length >= 5"
+      },
+      "phases": [
+        {
+          "id": "color-analysis",
+          "name": "Color Analysis",
+          "description": "Analyze color distribution and text likelihood",
+          "enabled": true,
+          "priority": 100,
+          "waveType": "ColorWave",
+          "inputs": [],
+          "outputs": ["color.dominant_colors", "color.palette", "content.text_likeliness"],
+          "artifacts": [],
+          "costWeight": 1,
+          "fallbackOnTimeout": "degrade",
+          "tags": ["preprocessing"]
+        },
+        {
+          "id": "simple-ocr",
+          "name": "Simple OCR",
+          "description": "Quick baseline OCR attempt",
+          "enabled": true,
+          "priority": 60,
+          "waveType": "OcrWave",
+          "inputs": ["image"],
+          "outputs": ["ocr.text", "ocr.confidence", "ocr.regions"],
+          "artifacts": ["ocr.raw"],
+          "costWeight": 3,
+          "fallbackOnTimeout": "abort",
+          "maxDurationMs": 1000,
+          "tags": ["ocr", "baseline"]
+        },
+        {
+          "id": "advanced-ocr",
+          "name": "Advanced Multi-Frame OCR",
+          "description": "Temporal processing with all enhancement techniques",
+          "enabled": true,
+          "priority": 59,
+          "waveType": "AdvancedOcrWave",
+          "dependsOn": ["simple-ocr"],
+          "inputs": ["frames.extracted"],
+          "outputs": ["ocr.voting.consensus_text", "ocr.voting.confidence", "ocr.segments"],
+          "artifacts": ["frames.composited", "frames.stabilized", "plate.median", "plate.sr", "ocr.voted"],
+          "costWeight": 20,
+          "fallbackOnTimeout": "degrade",
+          "parameters": {
+            "maxFrames": 100,
+            "ssimThreshold": 0.98,
+            "frameSampling": "adaptive",
+            "stabilizationModel": "ecc",
+            "plateMethod": "sr-lite",
+            "detector": "east",
+            "enableVoting": true,
+            "votingConfidenceThreshold": 0.2,
+            "votingMinFrames": 5
+          },
+          "tags": ["ocr", "temporal", "advanced"]
+        },
+        {
+          "id": "spell-check",
+          "name": "Spell Check Quality",
+          "description": "Comprehensive spell checking and quality assessment",
+          "enabled": true,
+          "priority": 58,
+          "waveType": "OcrQualityWave",
+          "dependsOn": ["advanced-ocr"],
+          "inputs": ["ocr.voting.consensus_text"],
+          "outputs": ["ocr.quality.score", "ocr.quality.spell_check_score", "ocr.quality.is_garbled", "pipeline.exit"],
+          "artifacts": [],
+          "costWeight": 2,
+          "fallbackOnTimeout": "skip",
+          "parameters": {
+            "language": "en_US",
+            "garbledThreshold": 0.5,
+            "enableDetailedAnalysis": true,
+            "setExitSignalOnQuality": true
+          },
+          "tags": ["quality", "spell-check"]
+        }
+      ]
+    },
+    {
+      "name": "alttext",
+      "displayName": "Alt Text Generation",
+      "description": "Generate comprehensive alt text for images combining OCR, vision analysis, and image characterization",
+      "category": "accessibility",
+      "estimatedDurationSeconds": 3.5,
+      "isDefault": false,
+      "tags": ["accessibility", "alttext", "description"],
+      "globalSettings": {
+        "maxTotalDurationMs": 10000,
+        "enableParallelization": true
+      },
+      "phases": [
+        {
+          "id": "color-analysis",
+          "name": "Color Analysis",
+          "description": "Analyze color palette, dominant colors, and visual characteristics",
+          "enabled": true,
+          "priority": 100,
+          "waveType": "ColorWave",
+          "inputs": [],
+          "outputs": ["color.dominant_colors", "color.palette", "color.is_grayscale"],
+          "artifacts": [],
+          "costWeight": 1,
+          "fallbackOnTimeout": "degrade",
+          "tags": ["vision", "color"]
+        },
+        {
+          "id": "simple-ocr",
+          "name": "Simple OCR",
+          "description": "Quick baseline OCR for text detection",
+          "enabled": true,
+          "priority": 60,
+          "waveType": "OcrWave",
+          "inputs": ["image"],
+          "outputs": ["ocr.text", "ocr.confidence"],
+          "artifacts": ["ocr.raw"],
+          "costWeight": 3,
+          "fallbackOnTimeout": "skip",
+          "maxDurationMs": 1000,
+          "tags": ["ocr", "text"]
+        },
+        {
+          "id": "advanced-ocr",
+          "name": "Advanced OCR",
+          "description": "Multi-frame OCR for animated images with temporal voting",
+          "enabled": true,
+          "priority": 59,
+          "waveType": "AdvancedOcrWave",
+          "dependsOn": ["simple-ocr"],
+          "inputs": ["frames.extracted"],
+          "outputs": ["ocr.voting.consensus_text", "ocr.voting.confidence"],
+          "artifacts": ["plate.median", "ocr.voted"],
+          "costWeight": 8,
+          "fallbackOnTimeout": "skip",
+          "parameters": {
+            "maxFrames": 20,
+            "ssimThreshold": 0.95,
+            "frameSampling": "uniform",
+            "stabilizationModel": "translation",
+            "plateMethod": "median",
+            "detector": "none",
+            "enableVoting": true,
+            "votingConfidenceThreshold": 0.4
+          },
+          "tags": ["ocr", "temporal"]
+        },
+        {
+          "id": "spell-check",
+          "name": "OCR Quality Assessment",
+          "description": "Validate OCR quality and detect garbled text",
+          "enabled": true,
+          "priority": 58,
+          "waveType": "OcrQualityWave",
+          "dependsOn": ["advanced-ocr"],
+          "inputs": ["ocr.voting.consensus_text"],
+          "outputs": ["ocr.quality.score", "ocr.quality.is_garbled", "ocr.quality.llm_escalation_recommended"],
+          "artifacts": [],
+          "costWeight": 1,
+          "fallbackOnTimeout": "skip",
+          "parameters": {
+            "language": "en_US",
+            "garbledThreshold": 0.5
+          },
+          "tags": ["quality"]
+        },
+        {
+          "id": "vision-llm",
+          "name": "Vision LLM Analysis",
+          "description": "Generate captions and extract entities using vision-language model",
+          "enabled": false,
+          "priority": 50,
+          "waveType": "VisionLlmWave",
+          "inputs": ["image"],
+          "outputs": ["vision.llm.caption", "vision.llm.scene", "vision.llm.entities", "vision.llm.detailed_description"],
+          "artifacts": ["vision.llm.response"],
+          "costWeight": 8,
+          "fallbackOnTimeout": "skip",
+          "maxDurationMs": 30000,
+          "parameters": {
+            "model": "llava",
+            "generateDetailedDescription": false
+          },
+          "tags": ["vision", "llm", "ml"]
+        },
+        {
+          "id": "clip-embedding",
+          "name": "CLIP Embedding",
+          "description": "Generate semantic image embedding for similarity search",
+          "enabled": true,
+          "priority": 45,
+          "waveType": "ClipEmbeddingWave",
+          "inputs": ["image"],
+          "outputs": ["vision.clip.embedding", "vision.clip.embedding_hash"],
+          "artifacts": [],
+          "costWeight": 2,
+          "fallbackOnTimeout": "skip",
+          "tags": ["embedding", "clip", "ml"]
+        },
+        {
+          "id": "alttext-compose",
+          "name": "Alt Text Composition",
+          "description": "Synthesize alt text from all available signals (OCR, vision LLM, colors, entities)",
+          "enabled": true,
+          "priority": 55,
+          "waveType": "AltTextComposeWave",
+          "dependsOn": ["color-analysis", "spell-check", "vision-llm", "clip-embedding"],
+          "inputs": [
+            "color.dominant_colors",
+            "color.is_grayscale",
+            "ocr.voting.consensus_text",
+            "ocr.quality.is_garbled",
+            "ocr.quality.llm_escalation_recommended",
+            "identity.format",
+            "identity.width",
+            "identity.height",
+            "identity.is_animated",
+            "vision.llm.caption",
+            "vision.llm.scene",
+            "vision.llm.entities",
+            "faces.embeddings",
+            "faces.clusters"
+          ],
+          "outputs": ["alttext.primary", "alttext.verbatim_text", "alttext.warnings", "alttext.entity_summary"],
+          "artifacts": ["alttext.ledger"],
+          "costWeight": 1,
+          "fallbackOnTimeout": "degrade",
+          "parameters": {
+            "includeColorInfo": true,
+            "includeDimensions": false,
+            "maxTextLength": 200,
+            "warnOnGarbled": true,
+            "preferVisionLlmCaption": true,
+            "includeEntitySummary": true
+          },
+          "tags": ["alttext", "synthesis"]
+        },
+        {
+          "id": "alttext-llm",
+          "name": "LLM Alt Text Enhancement (Optional)",
+          "description": "Optional LLM phrasing improvement using constrained ledger input",
+          "enabled": false,
+          "priority": 54,
+          "waveType": "AltTextLlmWave",
+          "dependsOn": ["alttext-compose"],
+          "inputs": ["alttext.ledger"],
+          "outputs": ["alttext.llm_enhanced"],
+          "artifacts": [],
+          "costWeight": 5,
+          "fallbackOnTimeout": "skip",
+          "parameters": {
+            "maxTokens": 100,
+            "temperature": 0.3,
+            "constrainToLedger": true
+          },
+          "tags": ["alttext", "llm", "optional"]
+        }
+      ]
+    }
+  ],
+  "caching": {
+    "enabled": true,
+    "keyStrategy": "composite",
+    "components": [
+      "image.sha256",
+      "profile.name",
+      "schema.version"
+    ],
+    "invalidateOn": [
+      "ColorWave.version",
+      "OcrWave.version",
+      "AdvancedOcrWave.version",
+      "OcrQualityWave.version",
+      "AltTextComposeWave.version"
+    ]
+  }
+}

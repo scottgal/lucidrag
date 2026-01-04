@@ -310,3 +310,7 @@ vocab.txt
 /Mostlylucid/*.png
 /*.dump
 *.db
+
+# Local configuration files with API keys
+appsettings.local.json
+appsettings.*.local.json

@@ -80,9 +80,8 @@
         <!-- Web Fetching (for URL processing with JS-rendered pages) -->
         <PackageReference Include="Microsoft.Playwright" Version="1.57.0" />
         
-        <!-- Vector Storage (optional backends) -->
+        <!-- Vector Storage -->
         <PackageReference Include="Qdrant.Client" Version="1.16.1" />
-        <PackageReference Include="DuckDB.NET.Data.Full" Version="1.4.3" />
         
         <!-- Utilities -->
         <PackageReference Include="System.IO.Hashing" Version="10.0.1" />

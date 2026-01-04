@@ -1,0 +1,43 @@
+{
+  "mcpServers": {
+    "lucidrag-ocr": {
+      "command": "dotnet",
+      "args": [
+        "run",
+        "--project",
+        "E:/source/lucidrag/src/ImageCli/ImageCli.csproj",
+        "-c",
+        "Release",
+        "--",
+        "{image}",
+        "--output",
+        "json",
+        "--pipeline",
+        "{pipeline}"
+      ],
+      "description": "LucidRAG Image OCR and Analysis Tool",
+      "tools": [
+        {
+          "name": "extract_text_from_image",
+          "description": "Extract text from images (GIF, PNG, JPG, WebP) using advanced multi-frame OCR with temporal processing and spell-checking",
+          "parameters": {
+            "type": "object",
+            "properties": {
+              "image": {
+                "type": "string",
+                "description": "Path to the image file"
+              },
+              "pipeline": {
+                "type": "string",
+                "enum": ["advancedocr", "quality", "simpleocr"],
+                "default": "advancedocr",
+                "description": "OCR pipeline: advancedocr (fast, 2s), quality (best accuracy, 10s), simpleocr (basic)"
+              }
+            },
+            "required": ["image"]
+          }
+        }
+      ]
+    }
+  }
+}

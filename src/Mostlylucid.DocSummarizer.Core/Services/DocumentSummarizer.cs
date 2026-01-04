@@ -136,26 +136,6 @@ public class DocumentSummarizer
     {
         switch (bertRagConfig.VectorStore)
         {
-            case VectorStoreBackend.DuckDB:
-                try
-                {
-                    return new DuckDbVectorStore(
-                        GetDuckDbPath(),
-                        vectorDimension: 384,
-                        verbose: verbose);
-                }
-                catch (Exception ex)
-                {
-                    // DuckDB native library may fail to load on some systems
-                    // Fall back to in-memory store
-                    if (verbose)
-                    {
-                        Console.WriteLine($"[VectorStore] DuckDB initialization failed: {ex.Message}");
-                        Console.WriteLine("[VectorStore] Falling back to in-memory vector store");
-                    }
-                    return bertRagConfig.PersistVectors ? new InMemoryVectorStore(verbose) : null;
-                }
-                
             case VectorStoreBackend.Qdrant:
                 return new QdrantVectorStore(
                     qdrantConfig ?? new QdrantConfig { Host = qdrantHost },
@@ -168,18 +148,6 @@ public class DocumentSummarizer
             default:
                 return null;
         }
-    }
-
-    /// <summary>
-    ///     Get the path for the DuckDB database file
-    /// </summary>
-    private static string GetDuckDbPath()
-    {
-        var docsummarizerDir = Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), 
-            ".docsummarizer");
-        Directory.CreateDirectory(docsummarizerDir);
-        return Path.Combine(docsummarizerDir, "vectors.duckdb");
     }
 
     /// <summary>

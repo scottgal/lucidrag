@@ -135,19 +135,15 @@ public interface IVectorStore : IAsyncDisposable, IDisposable
 public enum VectorStoreBackend
 {
     /// <summary>
-    /// In-memory storage (default) - no external dependencies, vectors lost on exit
+    /// In-memory storage - no external dependencies, vectors lost on exit.
+    /// Best for: Testing, prototyping, ephemeral workloads.
     /// </summary>
     InMemory,
-    
+
     /// <summary>
-    /// Qdrant vector database - persistent storage, requires Qdrant server.
-    /// Best for: Enterprise deployments, distributed systems, multi-node setups.
+    /// Qdrant vector database (recommended) - persistent storage, requires Qdrant server.
+    /// Best for: Production deployments, distributed systems, multi-node setups, persistent storage.
+    /// Supports advanced features: multi-vector embeddings, hybrid search, filtering.
     /// </summary>
-    Qdrant,
-    
-    /// <summary>
-    /// DuckDB embedded database - persistent storage in a single file, no external services.
-    /// Best for: Local development, CLI tools, single-machine deployments, offline use.
-    /// </summary>
-    DuckDB
+    Qdrant
 }

@@ -1,0 +1,81 @@
+{
+  "context": {
+    "schema": "https://schema.org/",
+    "lucidrag": "https://lucidrag.dev/schema/",
+    "ImageFingerprint": "lucidrag:ImageFingerprint",
+    "sha256": "lucidrag:sha256Hash",
+    "format": "schema:encodingFormat",
+    "width": "schema:width",
+    "height": "schema:height",
+    "contentUrl": "schema:contentUrl",
+    "dateAnalyzed": "schema:dateCreated",
+    "detectedType": "lucidrag:detectedType",
+    "typeConfidence": "lucidrag:typeConfidence",
+    "sharpness": "lucidrag:laplacianVariance",
+    "edgeDensity": "lucidrag:edgeDensity",
+    "textLikeliness": "lucidrag:textLikeliness",
+    "meanLuminance": "lucidrag:meanLuminance",
+    "meanSaturation": "lucidrag:meanSaturation",
+    "dominantColors": "lucidrag:dominantColors",
+    "llmCaption": "schema:caption",
+    "extractedText": "schema:text"
+  },
+  "type": "lucidrag:ImageFingerprintCollection",
+  "dateGenerated": "2026-01-04T06:37:42.8790666Z",
+  "directory": "E:\\source\\lucidrag\\src\\Mostlylucid.DocSummarizer.Images.Tests\\TestImages",
+  "pattern": "**/icon.png",
+  "totalImages": 1,
+  "fingerprints": [
+    {
+      "type": "ImageFingerprint",
+      "contentUrl": "icon.png",
+      "sha256": "5233004d415fd9363aa0694461acb87de79bd4fd1e70ea19e0df3156f43a4264",
+      "format": "PNG",
+      "width": 100,
+      "height": 80,
+      "dateAnalyzed": "2026-01-04T06:37:42.8799470Z",
+      "detectedType": "Diagram",
+      "typeConfidence": 0.42038508215593934,
+      "sharpness": 2855.965093577025,
+      "edgeDensity": 0.25904626062817604,
+      "textLikeliness": 0.45922983568812137,
+      "meanLuminance": 109.05597579425114,
+      "meanSaturation": 0,
+      "isMostlyGrayscale": true,
+      "dominantColors": [
+        {
+          "type": "lucidrag:DominantColor",
+          "hex": "#333333",
+          "percentage": 69.1376701966717,
+          "name": "Dark Gray"
+        },
+        {
+          "type": "lucidrag:DominantColor",
+          "hex": "#FEFEFE",
+          "percentage": 25.315179021684315,
+          "name": "White"
+        },
+        {
+          "type": "lucidrag:DominantColor",
+          "hex": "#999999",
+          "percentage": 1.7650025214321734,
+          "name": "Gray"
+        },
+        {
+          "type": "lucidrag:DominantColor",
+          "hex": "#E8E8E8",
+          "percentage": 0.7564296520423601,
+          "name": "Beige"
+        },
+        {
+          "type": "lucidrag:DominantColor",
+          "hex": "#D8D8D8",
+          "percentage": 0.6555723651033787,
+          "name": "Light Gray"
+        }
+      ],
+      "llmCaption": "The image features a logo consisting of the letters \u0022m\u0022 and \u0022l\u0022. The letter \u0027m\u0027 is larger than \u0027l\u0027, with both set against a dark background. The font used for these characters appears modern and sleek, suggesting it could be associated with technology or contemporary services.\n\nGiven that logos often represent brands or companies, this image likely represents a brand identity. Without additional context such as the company\u0027s name alongside the logo, I\u0027m unable to provide specifics on what \u0027m\u0027 and \u0027l\u0027 might stand for. However, based on common practices in branding, it could be part of a larger word not visible here.\n\nIf you have more information or if there are any particular aspects you\u0027d like further clarification on regarding this image, feel free to ask!",
+      "wasEscalated": true
+    }
+  ]
+}

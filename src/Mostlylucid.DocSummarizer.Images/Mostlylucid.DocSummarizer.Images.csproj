@@ -22,10 +22,24 @@
 
     <!-- Tesseract for OCR -->
     <PackageReference Include="Tesseract" Version="5.2.0" />
+
+    <!-- Spell checking for OCR quality detection -->
+    <PackageReference Include="WeCantSpell.Hunspell" Version="5.0.0" />
+
+    <!-- SQLite for signal storage -->
+    <PackageReference Include="Microsoft.Data.Sqlite" Version="10.0.1" />
+
+    <!-- OpenCV for motion analysis -->
+    <PackageReference Include="OpenCvSharp4" Version="4.11.0.20250506" />
+    <PackageReference Include="OpenCvSharp4.runtime.win" Version="4.11.0.20250506" />
   </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\Mostlylucid.DocSummarizer.Core\Mostlylucid.DocSummarizer.Core.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <EmbeddedResource Include="Config\pipelines.json" />
   </ItemGroup>
 
 </Project>

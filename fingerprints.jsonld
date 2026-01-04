@@ -1,0 +1,49 @@
+{
+  "context": {
+    "schema": "https://schema.org/",
+    "lucidrag": "https://lucidrag.dev/schema/",
+    "ImageFingerprint": "lucidrag:ImageFingerprint",
+    "sha256": "lucidrag:sha256Hash",
+    "format": "schema:encodingFormat",
+    "width": "schema:width",
+    "height": "schema:height",
+    "contentUrl": "schema:contentUrl",
+    "dateAnalyzed": "schema:dateCreated",
+    "detectedType": "lucidrag:detectedType",
+    "typeConfidence": "lucidrag:typeConfidence",
+    "sharpness": "lucidrag:laplacianVariance",
+    "edgeDensity": "lucidrag:edgeDensity",
+    "textLikeliness": "lucidrag:textLikeliness",
+    "meanLuminance": "lucidrag:meanLuminance",
+    "meanSaturation": "lucidrag:meanSaturation",
+    "dominantColors": "lucidrag:dominantColors",
+    "llmCaption": "schema:caption",
+    "extractedText": "schema:text"
+  },
+  "type": "lucidrag:ImageFingerprintCollection",
+  "dateGenerated": "2026-01-04T06:37:19.4656197Z",
+  "directory": "E:\\source\\lucidrag\\src\\Mostlylucid.DocSummarizer.Images.Tests\\TestImages",
+  "pattern": "**/icon.png",
+  "totalImages": 1,
+  "fingerprints": [
+    {
+      "type": "ImageFingerprint",
+      "contentUrl": "icon.png",
+      "sha256": "",
+      "format": "Unknown",
+      "width": 0,
+      "height": 0,
+      "dateAnalyzed": "2026-01-04T06:37:19.4664253Z",
+      "detectedType": "Unknown",
+      "typeConfidence": 0,
+      "sharpness": 0,
+      "edgeDensity": 0,
+      "textLikeliness": 0,
+      "meanLuminance": 0,
+      "meanSaturation": 0,
+      "isMostlyGrayscale": false,
+      "dominantColors": [],
+      "wasEscalated": false
+    }
+  ]
+}

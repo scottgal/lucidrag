@@ -82,12 +82,12 @@ public static class ServeCommand
             builder.Services.AddDbContext<RagDocumentsDbContext>(options =>
                 options.UseSqlite($"Data Source={dbPath}"));
 
-            // DocSummarizer.Core with DuckDB
+            // DocSummarizer.Core with in-memory vectors
             builder.Services.AddDocSummarizer(opt =>
             {
                 opt.EmbeddingBackend = EmbeddingBackend.Onnx;
                 opt.Onnx.EmbeddingModel = OnnxEmbeddingModel.AllMiniLmL6V2;
-                opt.BertRag.VectorStore = VectorStoreBackend.DuckDB;
+                opt.BertRag.VectorStore = VectorStoreBackend.InMemory;
                 opt.BertRag.CollectionName = "ragdocuments";
                 opt.BertRag.ReindexOnStartup = false;
                 opt.Output.Verbose = verbose;

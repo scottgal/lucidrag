@@ -1,0 +1,147 @@
+Analyzing [38;5;14mBackOfTheNet.gif[0m...
+[19:47:10 INF] GIF motion analysis: static (5.25 px/frame, 44 % confidence)
+[19:47:10 WRN] Vision LLM failed for F:\Gifs\BackOfTheNet.gif: Anthropic API key not configured
+{
+  "filePath": "F:\\Gifs\\BackOfTheNet.gif",
+  "analysis": {
+    "sha256": "065260e0430092c299920aee3133fe4239a513b567de45546c864347fe032d70",
+    "format": "GIF",
+    "dimensions": {
+      "width": 320,
+      "height": 180,
+      "aspectRatio": 1.7777777777777777
+    },
+    "hasExif": false,
+    "detectedType": {
+      "type": "Photo",
+      "confidence": 0.39999999999999986
+    },
+    "visual": {
+      "edgeDensity": 0.21738574608755268,
+      "luminanceEntropy": 6.244773633842129,
+      "meanLuminance": 76.53217340278913,
+      "luminanceStdDev": 72.37379962196584,
+      "clippedBlacksPercent": 27.395833333333332,
+      "clippedWhitesPercent": 0
+    },
+    "sharpness": {
+      "laplacianVariance": 1591.5390127840512,
+      "category": "Very Sharp"
+    },
+    "textLikeliness": 0.2678570222417797,
+    "colors": {
+      "dominant": [
+        {
+          "hex": "#030201",
+          "name": "Black",
+          "percentage": 31.645833333333336
+        },
+        {
+          "hex": "#F5DAB6",
+          "name": "Peach",
+          "percentage": 2.3680555555555554
+        },
+        {
+          "hex": "#574628",
+          "name": "Coffee",
+          "percentage": 2.138888888888889
+        },
+        {
+          "hex": "#140A06",
+          "name": "Black",
+          "percentage": 2.111111111111111
+        },
+        {
+          "hex": "#887B66",
+          "name": "Gray",
+          "percentage": 2.048611111111111
+        }
+      ],
+      "colorGrid": {
+        "rows": 3,
+        "cols": 3,
+        "cells": [
+          {
+            "row": 0,
+            "col": 0,
+            "hex": "#E8C8A8",
+            "coverage": 0.10062893081761007
+          },
+          {
+            "row": 0,
+            "col": 1,
+            "hex": "#887868",
+            "coverage": 0.13584905660377358
+          },
+          {
+            "row": 0,
+            "col": 2,
+            "hex": "#080808",
+            "coverage": 0.18703703703703703
+          },
+          {
+            "row": 1,
+            "col": 0,
+            "hex": "#080808",
+            "coverage": 0.18867924528301888
+          },
+          {
+            "row": 1,
+            "col": 1,
+            "hex": "#080808",
+            "coverage": 0.22830188679245284
+          },
+          {
+            "row": 1,
+            "col": 2,
+            "hex": "#080808",
+            "coverage": 0.3271604938271605
+          },
+          {
+            "row": 2,
+            "col": 0,
+            "hex": "#080808",
+            "coverage": 0.4238993710691824
+          },
+          {
+            "row": 2,
+            "col": 1,
+            "hex": "#080808",
+            "coverage": 0.5452830188679245
+          },
+          {
+            "row": 2,
+            "col": 2,
+            "hex": "#080808",
+            "coverage": 0.8401234567901235
+          }
+        ]
+      },
+      "meanSaturation": 0.4926139444303775,
+      "isGrayscale": false
+    },
+    "perceptualHash": "8E6C2525118D8989"
+  },
+  "gifMotion": {
+    "frameCount": 20,
+    "frameDelayMs": 100,
+    "fps": 10,
+    "totalDurationMs": 2000,
+    "loops": true,
+    "motionDirection": "static",
+    "motionMagnitude": 5.24500716447964,
+    "maxMotionMagnitude": 10.612425945553767,
+    "motionPercentage": 94.73684210526315,
+    "confidence": 0.4444444444444444,
+    "complexity": {
+      "animationType": "smooth-animation",
+      "overallComplexity": 0.11345089193262015,
+      "visualStability": 0.7689241103848947,
+      "colorVariation": 0.012133672401661202,
+      "entropyVariation": 0.0369021718303983,
+      "sceneChangeCount": 2,
+      "averageFrameDifference": 0.0693227668845316,
+      "maxFrameDifference": 0.360183369644154
+    }
+  }
+}

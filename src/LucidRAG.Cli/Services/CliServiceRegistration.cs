@@ -4,6 +4,8 @@ using Microsoft.Extensions.Logging;
 using Mostlylucid.DocSummarizer.Config;
 using Mostlylucid.DocSummarizer.Extensions;
 using Mostlylucid.DocSummarizer.Services;
+using Mostlylucid.DocSummarizer.Images.Extensions;
+using Mostlylucid.DocSummarizer.Images.Config;
 using LucidRAG.Data;
 using Serilog;
 
@@ -11,7 +13,7 @@ namespace LucidRAG.Cli.Services;
 
 /// <summary>
 /// Service registration for CLI-specific DI container
-/// Uses SQLite + DuckDB for zero-dependency local storage
+/// Uses SQLite + in-memory vectors for zero-dependency local storage
 /// </summary>
 public static class CliServiceRegistration
 {
@@ -42,16 +44,15 @@ public static class CliServiceRegistration
         services.AddDbContext<RagDocumentsDbContext>(options =>
             options.UseSqlite($"Data Source={dbPath}"));
 
-        // DocSummarizer.Core with DuckDB vector store
-        var vectorDbPath = Path.Combine(config.DataDirectory, "vectors.duckdb");
+        // DocSummarizer.Core with in-memory vector store
         services.AddDocSummarizer(opt =>
         {
             // Use ONNX for embeddings (no external service required)
             opt.EmbeddingBackend = EmbeddingBackend.Onnx;
             opt.Onnx.EmbeddingModel = OnnxEmbeddingModel.AllMiniLmL6V2;
 
-            // Use DuckDB for vector storage
-            opt.BertRag.VectorStore = VectorStoreBackend.DuckDB;
+            // Use in-memory for vector storage (CLI mode)
+            opt.BertRag.VectorStore = VectorStoreBackend.InMemory;
             opt.BertRag.CollectionName = "ragdocuments";
             opt.BertRag.ReindexOnStartup = false;
 
@@ -64,6 +65,26 @@ public static class CliServiceRegistration
                 opt.Ollama.BaseUrl = config.OllamaUrl;
                 opt.Ollama.Model = config.OllamaModel;
             }
+        });
+
+        // DocSummarizer.Images with advanced OCR pipeline
+        services.AddDocSummarizerImages(opt =>
+        {
+            opt.ModelsDirectory = Path.Combine(config.DataDirectory, "models");
+            opt.EnableOcr = true;
+            opt.Ocr.UseAdvancedPipeline = true;
+            opt.Ocr.QualityMode = OcrQualityMode.Fast;
+            opt.Ocr.TextDetectionConfidenceThreshold = 0; // Always run OCR, don't skip based on text-likeliness
+            opt.Ocr.ConfidenceThresholdForEarlyExit = 0.95;
+            opt.Ocr.EnableStabilization = true;
+            opt.Ocr.EnableTemporalMedian = true;
+            opt.Ocr.EnableTemporalVoting = true;
+            opt.Ocr.EnablePostCorrection = false;
+            opt.Ocr.EnableSpellChecking = true;
+            opt.Ocr.SpellCheckQualityThreshold = 0.5;
+            opt.Ocr.SpellCheckLanguage = "en_US";
+            opt.Ocr.MaxFramesForVoting = 5;
+            opt.Ocr.EmitPerformanceMetrics = verbose;
         });
 
         // CLI-specific services

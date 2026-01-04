@@ -54,8 +54,8 @@ public static class ServiceCollectionExtensions
     ///     options.Ollama.BaseUrl = "http://localhost:11434";
     ///     options.Ollama.Model = "llama3.2:3b";
     ///
-    ///     // Configure vector storage
-    ///     options.BertRag.VectorStore = VectorStoreBackend.DuckDB;
+    ///     // Configure vector storage (Qdrant recommended for production)
+    ///     options.BertRag.VectorStore = VectorStoreBackend.Qdrant;
     ///     options.BertRag.ReindexOnStartup = false; // Production setting
     ///
     ///     // Verbose logging during development
@@ -186,25 +186,9 @@ public static class ServiceCollectionExtensions
         return config.BertRag.VectorStore switch
         {
             VectorStoreBackend.InMemory => new InMemoryVectorStore(),
-            VectorStoreBackend.DuckDB => CreateDuckDbStore(config),
             VectorStoreBackend.Qdrant => CreateQdrantStore(config),
             _ => new InMemoryVectorStore()
         };
-    }
-
-    private static IVectorStore CreateDuckDbStore(DocSummarizerConfig config)
-    {
-        // Get db path from BertRag config or default to app directory
-        var dbPath = Path.Combine(AppContext.BaseDirectory, $"{config.BertRag.CollectionName}.duckdb");
-        return new DuckDbVectorStore(dbPath, config.Onnx.EmbeddingModel switch
-        {
-            OnnxEmbeddingModel.AllMiniLmL6V2 => 384,
-            OnnxEmbeddingModel.BgeSmallEnV15 => 384,
-            OnnxEmbeddingModel.GteSmall => 384,
-            OnnxEmbeddingModel.MultiQaMiniLm => 384,
-            OnnxEmbeddingModel.ParaphraseMiniLmL3 => 384,
-            _ => 384
-        }, config.Output.Verbose);
     }
 
     private static IVectorStore CreateQdrantStore(DocSummarizerConfig config)
