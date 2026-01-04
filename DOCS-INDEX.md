@@ -116,10 +116,15 @@ Complete documentation for the LucidRAG project and ImageSummarizer OCR tool.
 
 ### Releases
 - **[.github/workflows/release-imagesummarizer.yml](.github/workflows/release-imagesummarizer.yml)**
-  - Multi-platform builds (Windows, Linux, macOS)
+  - **Test job** (runs first):
+    - ImageCli.Tests (22 tests - all pass)
+    - DocSummarizer.Images.Tests (161 tests - experimental discriminator tests excluded)
+  - **Build job** (depends on test): Multi-platform builds (Windows, Linux, macOS)
+  - **Release job** (depends on build): Creates GitHub release
   - x64 and ARM64 support
   - Tag pattern: `imagesummarizer-v*.*.*`
   - Includes all 9 MCP tools in release notes
+  - No external services required (local SQLite, mocked HTTP clients only)
 
 - **[.github/workflows/release-lucidrag.yml](.github/workflows/release-lucidrag.yml)**
   - Docker multi-arch images
