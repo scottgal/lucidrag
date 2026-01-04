@@ -17,7 +17,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\LucidRAG.ImageCli\LucidRAG.ImageCli.csproj" />
+    <ProjectReference Include="..\Mostlylucid.ImageSummarizer.Cli\Mostlylucid.ImageSummarizer.Cli.csproj" />
     <ProjectReference Include="..\Mostlylucid.DocSummarizer.Images\Mostlylucid.DocSummarizer.Images.csproj" />
   </ItemGroup>
 

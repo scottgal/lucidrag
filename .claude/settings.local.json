@@ -62,7 +62,11 @@
       "Bash(powershell -ExecutionPolicy Bypass -File test-discriminator-learning.ps1)",
       "Bash(powershell:*)",
       "Bash(Select-String -Pattern \"error|succeeded|failed\")",
-      "Bash(Select-Object -Last 5)"
+      "Bash(Select-Object -Last 5)",
+      "Bash(dotnet nuget search:*)",
+      "Bash(timeout 3 dotnet run:*)",
+      "Bash(git mv:*)",
+      "Bash(timeout 2 dotnet run:*)"
     ]
   }
 }

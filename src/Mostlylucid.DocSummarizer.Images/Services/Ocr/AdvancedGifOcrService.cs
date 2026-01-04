@@ -32,6 +32,18 @@ public class AdvancedGifOcrService
     private readonly ILogger<AdvancedGifOcrService>? _logger;
     private readonly OcrConfig _config;
 
+    // Text quality and deduplication constants
+    private const double TextQualityImprovementThreshold = 0.2;  // 20% improvement threshold
+    private const double TextLikelinessWeight = 0.7;             // 70% weight for text presence
+    private const double SharpnessWeight = 0.3;                  // 30% weight for sharpness
+    private const int FastAnalysisDownsampleWidth = 256;         // Downsample width for fast metrics
+    private const double MaxRgbDifference = 765.0;               // Max RGB difference (255 * 3)
+
+    // Luma coefficients (ITU-R BT.601)
+    private const double LumaRedCoefficient = 0.299;
+    private const double LumaGreenCoefficient = 0.587;
+    private const double LumaBlueCoefficient = 0.114;
+
     public AdvancedGifOcrService(
         IOcrEngine ocrEngine,
         OcrConfig config,
@@ -367,14 +379,18 @@ public class AdvancedGifOcrService
                     var textQualityImprovement = textQuality - previousTextQuality;
 
                     // Threshold: 20% improvement in text quality overrides visual similarity
-                    if (textQualityImprovement > 0.2)
+                    if (textQualityImprovement > TextQualityImprovementThreshold)
                     {
                         // Replace previous frame with this better one
                         _logger?.LogDebug(
                             "Frame {Index}: Replacing similar frame due to better text quality ({Old:F3} -> {New:F3})",
                             i, previousTextQuality, textQuality);
 
+                        // Dispose the old frame before replacing it
+                        var oldFrame = frames[frames.Count - 1];
                         frames[frames.Count - 1] = frame;
+                        oldFrame.Dispose();
+
                         previousFrame.Dispose();
                         previousFrame = frame.Clone();
                         previousTextQuality = textQuality;
@@ -437,7 +453,7 @@ public class AdvancedGifOcrService
         if (totalPixels == 0) return 1.0;
 
         var avgDifference = totalDifference / (double)totalPixels;
-        var normalizedDifference = avgDifference / 765.0;
+        var normalizedDifference = avgDifference / MaxRgbDifference;
 
         return 1.0 - normalizedDifference;
     }
@@ -454,7 +470,7 @@ public class AdvancedGifOcrService
         var sharpness = ComputeFastSharpness(frame);
 
         // Weighted combination: text presence is more important than sharpness
-        return 0.7 * textLikeliness + 0.3 * sharpness;
+        return TextLikelinessWeight * textLikeliness + SharpnessWeight * sharpness;
     }
 
     /// <summary>
@@ -463,9 +479,9 @@ public class AdvancedGifOcrService
     private double ComputeFastTextLikeliness(Image<Rgba32> frame)
     {
         using var workImage = frame.Clone();
-        if (workImage.Width > 256)
+        if (workImage.Width > FastAnalysisDownsampleWidth)
         {
-            workImage.Mutate(x => x.Resize(256, 0));
+            workImage.Mutate(x => x.Resize(FastAnalysisDownsampleWidth, 0));
         }
 
         var edgeDensity = 0.0;
@@ -502,9 +518,9 @@ public class AdvancedGifOcrService
     private double ComputeFastSharpness(Image<Rgba32> frame)
     {
         using var workImage = frame.Clone();
-        if (workImage.Width > 256)
+        if (workImage.Width > FastAnalysisDownsampleWidth)
         {
-            workImage.Mutate(x => x.Resize(256, 0));
+            workImage.Mutate(x => x.Resize(FastAnalysisDownsampleWidth, 0));
         }
 
         var variances = new List<double>();
@@ -541,7 +557,7 @@ public class AdvancedGifOcrService
     /// </summary>
     private double Luma(Rgba32 pixel)
     {
-        return 0.299 * pixel.R + 0.587 * pixel.G + 0.114 * pixel.B;
+        return LumaRedCoefficient * pixel.R + LumaGreenCoefficient * pixel.G + LumaBlueCoefficient * pixel.B;
     }
 
     /// <summary>

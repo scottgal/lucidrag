@@ -1,0 +1,150 @@
+{
+  "templates": [
+    {
+      "name": "social_media",
+      "description": "Optimized for social media posts (Twitter, Facebook, LinkedIn)",
+      "format": "{caption}\n\n{hashtags}",
+      "variables": {
+        "caption": "{text.extracted_text|alt_text_context}",
+        "hashtags": "#image {colors.dominant[0].name|#color} {identity.format|#format}"
+      },
+      "max_length": 280
+    },
+    {
+      "name": "accessibility",
+      "description": "WCAG-compliant alt text for screen readers",
+      "format": "{description}",
+      "variables": {
+        "description": "{alt_text_context}"
+      },
+      "max_length": 125
+    },
+    {
+      "name": "seo",
+      "description": "SEO-optimized image description with keywords",
+      "format": "{description} | {technical}",
+        "variables": {
+        "description": "{llm_summary}",
+        "technical": "{identity.format} image, {identity.dimensions}, {colors.dominant[0].name}"
+      }
+    },
+    {
+      "name": "technical_report",
+      "description": "Detailed technical analysis report",
+      "format": "## Image Analysis Report\n\n**File**: {file}\n**Format**: {identity.format}\n**Dimensions**: {identity.dimensions}\n**Size**: {identity.file_size_kb} KB\n\n### Visual Analysis\n- **Colors**: {colors.summary}\n- **Quality**: {quality.summary}\n- **Complexity**: {composition.complexity}\n\n### Content\n{content.summary}\n\n### Motion Analysis\n{motion.summary}",
+      "variables": {
+        "file": "{file}",
+        "identity.format": "{identity.format}",
+        "identity.dimensions": "{identity.width}×{identity.height}",
+        "identity.file_size_kb": "{identity.file_size} / 1024",
+        "colors.summary": "{colors.dominant[0].name}, {colors.dominant[1].name}, {colors.dominant[2].name}",
+        "quality.summary": "Sharpness: {quality.sharpness}, Overall: {quality.overall}",
+        "composition.complexity": "{composition.complexity}",
+        "content.summary": "{text.extracted_text|No text detected}",
+        "motion.summary": "{motion.frame_count} frames, {motion.duration}s duration|Static image"
+      }
+    },
+    {
+      "name": "json_structured",
+      "description": "Clean JSON output with custom field selection",
+      "format": "{\n  \"summary\": \"{summary}\",\n  \"text\": \"{text}\",\n  \"colors\": {colors_json},\n  \"motion\": {motion_json}\n}",
+      "variables": {
+        "summary": "{llm_summary}",
+        "text": "{text.extracted_text}",
+        "colors_json": "{colors.dominant}",
+        "motion_json": "{motion}"
+      },
+      "output_format": "json"
+    },
+    {
+      "name": "markdown_blog",
+      "description": "Markdown format for blog posts and documentation",
+      "format": "![{caption}]({file})\n\n*{description}*\n\n**Technical Details:**\n- Format: {identity.format}\n- Dimensions: {identity.width}×{identity.height}\n- Colors: {colors.list}",
+      "variables": {
+        "caption": "{alt_text_context}",
+        "file": "{file}",
+        "description": "{llm_summary}",
+        "identity.format": "{identity.format}",
+        "identity.width": "{identity.width}",
+        "identity.height": "{identity.height}",
+        "colors.list": "{colors.dominant[0].name}, {colors.dominant[1].name}, {colors.dominant[2].name}"
+      }
+    },
+    {
+      "name": "content_moderation",
+      "description": "Quick summary for content moderation workflows",
+      "format": "Type: {type} | Text: {text} | Quality: {quality} | Flags: {flags}",
+      "variables": {
+        "type": "{identity.is_animated?Animated GIF:Static Image}",
+        "text": "{text.extracted_text|None}",
+        "quality": "{quality.overall|sharpness:{quality.sharpness}}",
+        "flags": "{text.is_garbled?LOW_OCR_QUALITY:OK}"
+      }
+    },
+    {
+      "name": "animated_gif_summary",
+      "description": "Specialized summary for animated GIFs with motion details",
+      "format": "**{file}**\n\nAnimation: {motion.frames} frames @ {motion.fps} fps ({motion.duration}s)\nMotion: {motion.intensity_description}\nColors: {colors.theme}\n\nText: \"{text}\"\n\nQuality: {quality.assessment}",
+      "variables": {
+        "file": "{file}",
+        "motion.frames": "{motion.frame_count}",
+        "motion.fps": "{motion.frame_rate}",
+        "motion.duration": "{motion.duration}",
+        "motion.intensity_description": "{motion.motion_intensity>0.7?High motion:{motion.motion_intensity>0.4?Moderate:Subtle}}",
+        "colors.theme": "{colors.is_grayscale?Grayscale:{colors.dominant[0].name} theme}",
+        "text": "{text.extracted_text|No text}",
+        "quality.assessment": "{quality.sharpness>1000?Very sharp:{quality.sharpness>500?Sharp:Soft}}"
+      }
+    },
+    {
+      "name": "custom",
+      "description": "Custom template - user-defined format string",
+      "format": "{user_format}",
+      "variables": {},
+      "allow_custom_format": true
+    }
+  ],
+  "variable_reference": {
+    "file": "Filename without path",
+    "identity.format": "Image format (PNG, GIF, JPEG, etc.)",
+    "identity.width": "Image width in pixels",
+    "identity.height": "Image height in pixels",
+    "identity.dimensions": "Formatted dimensions string",
+    "identity.aspect_ratio": "Aspect ratio (decimal)",
+    "identity.is_animated": "Boolean - is this an animated image",
+    "identity.file_size": "File size in bytes",
+    "identity.file_size_kb": "File size in kilobytes",
+    "colors.dominant": "Array of dominant colors",
+    "colors.dominant[n].name": "Color name (nth dominant color)",
+    "colors.dominant[n].hex": "Color hex code",
+    "colors.dominant[n].percentage": "Color percentage",
+    "colors.is_grayscale": "Boolean - is image grayscale",
+    "colors.mean_saturation": "Average color saturation",
+    "text.extracted_text": "OCR-extracted text",
+    "text.confidence": "OCR confidence score (0-1)",
+    "text.word_count": "Number of words extracted",
+    "text.spell_check_score": "Spell-check quality score",
+    "text.is_garbled": "Boolean - is OCR text garbled",
+    "motion.frame_count": "Number of frames (animated images)",
+    "motion.duration": "Duration in seconds",
+    "motion.frame_rate": "Frames per second",
+    "motion.motion_intensity": "Motion intensity (0-1)",
+    "motion.optical_flow_magnitude": "Optical flow magnitude",
+    "quality.sharpness": "Sharpness metric",
+    "quality.overall": "Overall quality score",
+    "quality.exposure": "Exposure quality enum",
+    "composition.complexity": "Visual complexity (0-1)",
+    "composition.edge_density": "Edge density metric",
+    "composition.brightness": "Overall brightness",
+    "composition.contrast": "Overall contrast",
+    "llm_summary": "LLM-generated comprehensive summary",
+    "alt_text_context": "Accessibility-friendly alt text"
+  },
+  "operators": {
+    "|": "Fallback operator - use second value if first is empty/null",
+    "?": "Ternary operator - condition?true_value:false_value",
+    ">": "Greater than comparison",
+    "<": "Less than comparison",
+    "==": "Equality comparison"
+  }
+}

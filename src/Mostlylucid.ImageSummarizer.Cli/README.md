@@ -1,4 +1,4 @@
-# ImageCli - Standalone Image OCR and Analysis Tool
+# ImageSummarizer - Standalone Image Analysis and OCR Tool
 
 Zero-friction image OCR with auto-downloading dictionaries and models.
 
@@ -15,13 +15,13 @@ Zero-friction image OCR with auto-downloading dictionaries and models.
 
 ### As Global Tool
 ```bash
-dotnet pack src/ImageCli/ImageCli.csproj
-dotnet tool install --global --add-source ./nupkg LucidRAG.ImageCli
+dotnet pack src/Mostlylucid.ImageSummarizer.Cli/Mostlylucid.ImageSummarizer.Cli.csproj
+dotnet tool install --global --add-source ./nupkg Mostlylucid.ImageSummarizer.Cli
 ```
 
 ### Standalone Build
 ```bash
-dotnet build src/ImageCli/ImageCli.csproj -c Release
+dotnet build src/Mostlylucid.ImageSummarizer.Cli/Mostlylucid.ImageSummarizer.Cli.csproj -c Release
 ```
 
 ## Usage
@@ -29,15 +29,15 @@ dotnet build src/ImageCli/ImageCli.csproj -c Release
 ### Basic Text Extraction
 ```bash
 # Extract text only
-imagecli image.gif
+imagesummarizer image.gif
 
 # Or with dotnet run
-dotnet run --project src/ImageCli/ImageCli.csproj -- image.gif
+dotnet run --project src/Mostlylucid.ImageSummarizer.Cli/Mostlylucid.ImageSummarizer.Cli.csproj -- image.gif
 ```
 
 ### JSON Output (for scripts/tools)
 ```bash
-imagecli image.gif --output json
+imagesummarizer image.gif --output json
 ```
 
 Output:
@@ -63,12 +63,12 @@ Output:
 
 ### Quality Metrics Only
 ```bash
-imagecli image.gif --output metrics
+imagesummarizer image.gif --output metrics
 ```
 
 ### All Signals (detailed diagnostics)
 ```bash
-imagecli image.gif --output signals
+imagesummarizer image.gif --output signals
 ```
 
 ## Pipelines
@@ -78,7 +78,7 @@ Pipelines are now fully configurable via JSON! See [PIPELINES.md](../Mostlylucid
 ### List Available Pipelines
 
 ```bash
-imagecli list-pipelines
+imagesummarizer list-pipelines
 ```
 
 ### Advanced OCR (Default)
@@ -87,7 +87,7 @@ imagecli list-pipelines
 - **Features**: Stabilization, temporal median, voting, spell-check
 
 ```bash
-imagecli image.gif --pipeline advancedocr
+imagesummarizer image.gif --pipeline advancedocr
 ```
 
 ### Quality Pipeline
@@ -96,7 +96,7 @@ imagecli image.gif --pipeline advancedocr
 - **Features**: All advanced features + higher frame counts + stricter thresholds
 
 ```bash
-imagecli image.gif --pipeline quality
+imagesummarizer image.gif --pipeline quality
 ```
 
 ### Simple OCR
@@ -105,7 +105,7 @@ imagecli image.gif --pipeline quality
 - **Features**: Basic OCR only
 
 ```bash
-imagecli image.gif --pipeline simpleocr
+imagesummarizer image.gif --pipeline simpleocr
 ```
 
 ### Alt Text Generation
@@ -114,7 +114,7 @@ imagecli image.gif --pipeline simpleocr
 - **Use Case**: Generating descriptive alt text for images
 
 ```bash
-imagecli image.gif --pipeline alttext
+imagesummarizer image.gif --pipeline alttext
 ```
 
 ### Custom Pipelines
@@ -140,6 +140,13 @@ See [PIPELINES.md](../Mostlylucid.DocSummarizer.Images/PIPELINES.md) for full co
 
 ## MCP Server Integration
 
+### Running MCP Server Mode
+
+```bash
+# Start MCP server (listens on stdio for MCP protocol)
+imagesummarizer --mcp
+```
+
 ### Claude Desktop Setup
 
 Add to `claude_desktop_config.json`:
@@ -147,41 +154,107 @@ Add to `claude_desktop_config.json`:
 ```json
 {
   "mcpServers": {
-    "lucidrag-ocr": {
+    "image-ocr": {
+      "command": "imagesummarizer",
+      "args": ["--mcp"],
+      "env": {
+        "OCR_PIPELINE": "advancedocr",
+        "OCR_LANGUAGE": "en_US"
+      }
+    }
+  }
+}
+```
+
+Or use with dotnet run for development:
+
+```json
+{
+  "mcpServers": {
+    "image-ocr-dev": {
       "command": "dotnet",
       "args": [
         "run",
         "--project",
-        "E:/source/lucidrag/src/ImageCli/ImageCli.csproj",
+        "E:/source/lucidrag/src/Mostlylucid.ImageSummarizer.Cli/Mostlylucid.ImageSummarizer.Cli.csproj",
         "-c",
         "Release",
         "--",
-        "{image}",
-        "--output",
-        "json",
-        "--pipeline",
-        "advancedocr"
+        "--mcp"
       ]
     }
   }
 }
 ```
 
+### Available MCP Tools
+
+#### Core OCR Tools
+- **`extract_text_from_image`**: Extract text with configurable pipeline (simple/advanced/quality)
+- **`analyze_image_quality`**: Fast quality metrics without full OCR (sharpness, colors, motion)
+- **`list_ocr_pipelines`**: List all available pipelines with performance details
+- **`batch_extract_text`**: Process multiple images in a directory with aggregated results
+
+#### Content Generation Tools (NEW)
+- **`summarize_animated_gif`**: Generate motion-aware summaries of GIFs (frame count, duration, motion intensity, text extraction)
+- **`generate_caption`**: Create concise, accessibility-optimized captions (WCAG-compliant, max 150 chars)
+- **`generate_detailed_description`**: Comprehensive image analysis (technical details, visual analysis, content, motion, quality)
+
+#### Template System Tools (NEW)
+- **`analyze_with_template`**: Format image analysis using predefined templates (9 templates: social_media, accessibility, seo, technical_report, etc.)
+- **`list_output_templates`**: List all available output templates with descriptions
+
+See [MCP-ENHANCEMENTS-SUMMARY.md](../../MCP-ENHANCEMENTS-SUMMARY.md) for complete documentation of new tools and template system.
+
 ### Using in Claude Desktop
 
+**Basic Text Extraction**:
 ```
 User: Extract text from F:/Gifs/meme.gif
 Claude: [Calls extract_text_from_image tool]
 
         The image says: "I'm not even mad. That's amazing."
-        (OCR confidence: 0.82, spell-check quality: 82% correct)
+        (OCR confidence: 92%, spell-check quality: 100% correct)
+```
+
+**Summarize Animated GIF** (NEW):
+```
+User: Summarize this GIF with motion details: F:/Gifs/animation.gif
+Claude: [Calls summarize_animated_gif tool]
+
+        Animation: 93 frames @ 30 fps (3.1s)
+        Motion: High intensity (0.85)
+        Colors: Blue theme with vibrant saturation
+        Text: "Loading..." (confidence: 0.92)
+        Quality: Very sharp (sharpness: 1524)
+```
+
+**Generate Caption** (NEW):
+```
+User: Generate an accessible caption for this image
+Claude: [Calls generate_caption tool]
+
+        "Animated GIF showing a loading spinner with text 'Loading...'
+        on a blue background"
+        (Components: text, colors, motion)
+```
+
+**Format for Social Media** (NEW):
+```
+User: Format this image analysis for social media
+Claude: [Calls analyze_with_template with templateName="social_media"]
+
+        Loading...
+
+        #image #blue #gif
+        (280 character limit enforced)
 ```
 
 ## Output Formats
 
 | Format | Use Case | Example |
 |--------|----------|---------|
-| `text` | Simple scripts, piping | `imagecli image.gif \| grep "error"` |
+| `text` | Simple scripts, piping | `imagesummarizer image.gif \| grep "error"` |
 | `json` | MCP servers, APIs | Parse with `jq '.text'` |
 | `metrics` | Monitoring, quality checks | Track OCR accuracy over time |
 | `signals` | Debugging, diagnostics | See all wave emissions |
@@ -217,7 +290,7 @@ Supported languages: en_US, en_GB, es_ES, fr_FR, de_DE, it_IT, pt_BR, ru_RU, zh_
 
 Change language:
 ```bash
-imagecli image.gif --language es_ES
+imagesummarizer image.gif --language es_ES
 ```
 
 ## Performance
@@ -232,14 +305,14 @@ imagecli image.gif --language es_ES
 
 ### Extract text from GIF meme
 ```bash
-$ imagecli meme.gif
+$ imagesummarizer meme.gif
 I'm not even mad. That's amazing.
 ```
 
 ### Get quality metrics for batch processing
 ```bash
 $ for f in *.gif; do
-    imagecli "$f" --output metrics >> metrics.jsonl
+    imagesummarizer "$f" --output metrics >> metrics.jsonl
   done
 ```
 
@@ -249,7 +322,7 @@ import subprocess
 import json
 
 result = subprocess.run([
-    "imagecli", "image.gif", "--output", "json"
+    "imagesummarizer", "image.gif", "--output", "json"
 ], capture_output=True, text=True)
 
 data = json.loads(result.stdout)
@@ -260,11 +333,11 @@ print(f"Quality: {data['quality']['spell_check_score']}")
 ### Pipeline selection based on quality
 ```bash
 # Try fast pipeline first
-QUALITY=$(imagecli image.gif --output metrics | jq '.spell_check_score')
+QUALITY=$(imagesummarizer image.gif --output metrics | jq '.spell_check_score')
 
 # If quality < 0.5 (garbled), retry with quality pipeline
 if (( $(echo "$QUALITY < 0.5" | bc -l) )); then
-    imagecli image.gif --pipeline quality
+    imagesummarizer image.gif --pipeline quality
 fi
 ```
 
@@ -280,7 +353,7 @@ Ensure tessdata is in project root or `./tessdata/`
 ### Low OCR quality (< 50% spell check)
 Try higher quality pipeline:
 ```bash
-imagecli image.gif --pipeline quality
+imagesummarizer image.gif --pipeline quality
 ```
 
 ## Architecture

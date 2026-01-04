@@ -41,16 +41,43 @@ dotnet publish src/LucidRAG.Cli/LucidRAG.Cli.csproj -c Release -o ./publish
 ./publish/lucidrag-cli serve
 ```
 
+### ImageSummarizer (Standalone OCR Tool)
+
+Standalone image analysis and OCR tool with MCP server support:
+
+```bash
+# Install as global tool
+dotnet pack src/Mostlylucid.ImageSummarizer.Cli/Mostlylucid.ImageSummarizer.Cli.csproj
+dotnet tool install --global --add-source ./nupkg Mostlylucid.ImageSummarizer.Cli
+
+# Extract text from images/GIFs
+imagesummarizer screenshot.png
+imagesummarizer animation.gif --pipeline advancedocr
+
+# MCP server mode for Claude Desktop
+imagesummarizer --mcp
+```
+
+**Features:**
+- **9 MCP Tools**: OCR, quality analysis, GIF summarization, captions, templates
+- **Advanced GIF OCR**: Temporal processing, frame stabilization, multi-frame voting
+- **Template System**: 9 predefined output templates (social media, accessibility, SEO, etc.)
+- **Zero Dependencies**: Runs entirely offline with ONNX models
+
+See [ImageSummarizer README](src/Mostlylucid.ImageSummarizer.Cli/README.md) and [MCP Enhancements Summary](MCP-ENHANCEMENTS-SUMMARY.md) for details.
+
 ## Project Structure
 
 ```
 src/
-  LucidRAG/                      # Main web application
-  LucidRAG.Cli/                  # CLI tool
-  LucidRAG.Tests/                # Integration tests
-  Mostlylucid.DocSummarizer.Core # Document processing & embeddings
-  Mostlylucid.GraphRag/          # Entity extraction & graph
-  Mostlylucid.RAG/               # Vector store services
+  LucidRAG/                            # Main web application
+  LucidRAG.Cli/                        # CLI tool
+  LucidRAG.Tests/                      # Integration tests
+  Mostlylucid.DocSummarizer.Core/      # Document processing & embeddings
+  Mostlylucid.DocSummarizer.Images/    # Image analysis & OCR engine
+  Mostlylucid.ImageSummarizer.Cli/     # Standalone OCR tool with MCP support
+  Mostlylucid.GraphRag/                # Entity extraction & graph
+  Mostlylucid.RAG/                     # Vector store services
 ```
 
 ## Building from Source

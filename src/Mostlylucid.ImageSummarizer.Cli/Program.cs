@@ -2,7 +2,9 @@ using System.CommandLine;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
+using ModelContextProtocol.Server;
 using Mostlylucid.DocSummarizer.Images.Config;
 using Mostlylucid.DocSummarizer.Images.Extensions;
 using Mostlylucid.DocSummarizer.Images.Services.Analysis;
@@ -10,16 +12,24 @@ using Mostlylucid.DocSummarizer.Images.Models.Dynamic;
 using Mostlylucid.DocSummarizer.Images.Services.Pipelines;
 using SixLabors.ImageSharp.Processing;
 
-namespace ImageCli;
+namespace Mostlylucid.ImageSummarizer.Cli;
 
 /// <summary>
-/// Standalone image OCR and analysis CLI tool
+/// Standalone image analysis and OCR CLI tool
 /// Supports multiple output formats for easy tool integration (MCP, scripts, etc.)
+/// Part of the LucidRAG Summarizer family.
 /// </summary>
 class Program
 {
     static async Task<int> Main(string[] args)
     {
+        // Check for MCP mode first (doesn't require image path)
+        if (args.Contains("--mcp"))
+        {
+            await RunMcpServer();
+            return 0;
+        }
+
         // Interactive mode when no arguments provided
         if (args.Length == 0)
         {
@@ -29,7 +39,7 @@ class Program
         var rootCommand = new RootCommand("Image OCR and Analysis CLI - Extract text and analyze images");
 
         // Arguments
-        var imageArg = new Argument<string>("image", "Path to image file (GIF, PNG, JPG, WebP)");
+        var imageArg = new Argument<string>("image", "Path to image file (all ImageSharp formats: JPEG, PNG, GIF, BMP, TIFF, TGA, WebP, PBM)");
 
         // Options
         var pipelineOpt = new Option<string>(
@@ -607,5 +617,26 @@ class Program
             Console.ResetColor();
             Environment.Exit(1);
         }
+    }
+
+    static async Task RunMcpServer()
+    {
+        var builder = Host.CreateApplicationBuilder();
+
+        // Log to stderr to avoid interfering with stdio MCP protocol
+        builder.Logging.ClearProviders();
+        builder.Logging.AddConsole(options =>
+        {
+            options.LogToStandardErrorThreshold = LogLevel.Trace;
+        });
+
+        // Register MCP server with auto-discovery
+        builder.Services
+            .AddMcpServer()
+            .WithStdioServerTransport()
+            .WithToolsFromAssembly();
+
+        var app = builder.Build();
+        await app.RunAsync();
     }
 }
