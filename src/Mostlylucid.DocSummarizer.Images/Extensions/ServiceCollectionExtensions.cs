@@ -1,4 +1,5 @@
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Configuration.Memory;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Options;
@@ -9,6 +10,7 @@ using Mostlylucid.DocSummarizer.Images.Services.Analysis.Waves;
 using Mostlylucid.DocSummarizer.Images.Services.Ocr;
 using Mostlylucid.DocSummarizer.Images.Services.Ocr.Models;
 using Mostlylucid.DocSummarizer.Images.Services.Ocr.PostProcessing;
+using Mostlylucid.DocSummarizer.Images.Services.Vision;
 using Mostlylucid.DocSummarizer.Services;
 
 namespace Mostlylucid.DocSummarizer.Images.Extensions;
@@ -188,6 +190,38 @@ public static class ServiceCollectionExtensions
 
         // Image stream processor for memory-efficient large image handling
         services.TryAddSingleton<ImageStreamProcessor>();
+
+        // Vision LLM services for caption/description generation
+        services.TryAddSingleton<VisionLlmService>(sp =>
+        {
+            // VisionLlmService expects IConfiguration, so get it if available or use default config
+            var config = sp.GetService<IConfiguration>();
+            var imageConfig = sp.GetRequiredService<IOptions<ImageConfig>>().Value;
+            var logger = sp.GetService<Microsoft.Extensions.Logging.ILogger<VisionLlmService>>();
+
+            // If IConfiguration is available, use it; otherwise create an in-memory config
+            if (config == null)
+            {
+                var configData = new Dictionary<string, string?>
+                {
+                    ["Ollama:BaseUrl"] = imageConfig.OllamaBaseUrl ?? "http://localhost:11434",
+                    ["Ollama:VisionModel"] = imageConfig.VisionLlmModel ?? "minicpm-v:8b"
+                };
+                config = new ConfigurationBuilder()
+                    .AddInMemoryCollection(configData)
+                    .Build();
+            }
+            return new VisionLlmService(config, logger!);
+        });
+
+        // Escalation service for hybrid heuristic + LLM analysis
+        services.TryAddSingleton<EscalationService>(sp =>
+        {
+            var imageAnalyzer = sp.GetRequiredService<IImageAnalyzer>();
+            var visionLlmService = sp.GetRequiredService<VisionLlmService>();
+            var logger = sp.GetRequiredService<Microsoft.Extensions.Logging.ILogger<EscalationService>>();
+            return new EscalationService(imageAnalyzer, visionLlmService, logger);
+        });
 
         // Register image document handler with the handler registry
         services.AddSingleton<IDocumentHandler, ImageDocumentHandler>();

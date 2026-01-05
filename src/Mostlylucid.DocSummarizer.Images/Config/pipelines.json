@@ -238,6 +238,25 @@
           "priority": 100,
           "waveType": "ColorWave",
           "tags": ["preprocessing"]
+        },
+        {
+          "id": "simple-ocr",
+          "name": "Quick OCR",
+          "description": "Fast OCR for text-heavy images",
+          "enabled": true,
+          "priority": 60,
+          "waveType": "OcrWave",
+          "maxDurationMs": 1000,
+          "tags": ["ocr", "text"]
+        },
+        {
+          "id": "vision-llm",
+          "name": "Vision LLM",
+          "description": "Generate caption and read text with vision model",
+          "enabled": true,
+          "priority": 50,
+          "waveType": "VisionLlmWave",
+          "tags": ["llm", "caption", "text"]
         }
       ]
     },

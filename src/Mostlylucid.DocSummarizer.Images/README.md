@@ -1,25 +1,38 @@
 # Mostlylucid.DocSummarizer.Images
 
-**Intelligent image analysis library combining fast heuristic analysis with optional vision LLM integration**
+**Deterministic image profiling with optional vision-LLM escalation (Ollama) when confidence is low.**
 
-This library provides a hybrid approach to image understanding: fast heuristic-based analysis for basic characterization, with automatic escalation to vision LLMs (via Ollama) for semantic understanding when needed. It extracts visual metrics, detects image types, analyzes colors, generates perceptual hashes, and can describe image content in natural language.
+Core profiling is deterministic and offline; LLM/OCR/CLIP are optional stages controlled by thresholds and configuration.
+
+## Mental Model
+
+- Deterministic analyzers emit signals (quality/color/type/text-likeliness)
+- Escalation rules decide if OCR or Vision LLM is needed
+- Results are stored as confidence-scored signals in SQLite
+- Subsequent runs reuse cached signals by content hash
 
 ## Features
 
 ### Core Analysis Pipeline
 
-- **Heuristic-Based Analysis** - Fast, reproducible visual metrics without ML models
+- **Deterministic profiling (fast path)** - no ML required
   - Color analysis (dominant colors, grids, saturation)
   - Edge detection (complexity, straight edges, entropy)
   - Blur/sharpness measurement (Laplacian variance)
   - Text-likeliness scoring (heuristic, no OCR)
   - Image type classification (Photo, Screenshot, Diagram, Chart, Icon, Artwork, Meme, Scanned Document)
+  - `TypeConfidence` is a heuristic confidence score derived from rule agreement (not a calibrated probability)
 
-- **Auto-Escalation to Vision LLM** - Intelligent escalation for low-confidence cases
-  - Integrates with Ollama for local vision model inference (minicpm-v, llava, etc.)
-  - Escalates blurry images, diagrams, charts, and uncertain classifications
-  - Generates natural language captions and descriptions
-  - Stores results in signal-based database for caching
+- **Escalation to vision LLM (slow path)** - only when low-confidence
+  - Rule-based escalation: deterministic and auditable (confidence thresholds + type triggers)
+  - Integrates with Ollama for local vision model inference
+  - Escalates low-confidence or low-quality cases, diagrams, charts
+  - Vision model captions stored as confidence-scored signals
+
+- **Signal storage + caching**
+  - Results persisted as confidence-scored signals
+  - Cache hit: ~2–10ms (SQLite, local disk)
+  - Cache miss: heuristics ~10–50ms + optional LLM time
 
 - **Advanced Features**
   - Perceptual hashing (dHash) for duplicate detection
@@ -28,7 +41,7 @@ This library provides a hybrid approach to image understanding: fast heuristic-b
   - OCR integration (Tesseract) triggered by text-likeliness
   - CLIP embeddings for similarity search
   - GIF frame extraction and per-frame analysis
-  - Motion detection (OpenCV optical flow) for animated content
+  - Motion detection (OpenCV optical flow) **(optional, planned)**
 
 ### Supported Formats
 
@@ -140,18 +153,19 @@ The system decides whether to escalate to vision LLM based on:
 Images meeting escalation criteria are sent to Ollama:
 
 1. **Cache Check**: Look up SHA256 hash in SignalDatabase
-2. **If Cached**: Return stored caption (3.2ms, 231x faster)
+2. **If Cached**: Return stored caption (~2-10ms)
 3. **If Not Cached**:
    - Send image to Ollama vision model (minicpm-v:8b default)
-   - Generate natural language caption (~4.2s per image)
-   - Store caption as signal with confidence 0.85
+   - Generate natural language caption (typically 2-5s per image)
+   - Store caption as signal with confidence score
    - Cache for future requests
 
-**Models supported**:
-- `minicpm-v:8b` (recommended): 4.5GB, good balance
-- `llava:7b`: 3.8GB, faster but less accurate
-- `llava:13b`: 7.3GB, higher quality, slower
-- `bakllava:7b`: 4.1GB, optimized for speed
+**Example Ollama models:**
+- `minicpm-v:8b` (recommended)
+- `llava:7b` / `llava:13b`
+- `bakllava:7b`
+
+Any Ollama vision model can be configured.
 
 ### Stage 4: OCR & Text Extraction (Optional)
 
@@ -681,33 +695,30 @@ await signalDatabase.StoreFeedbackAsync(
 
 ## Command Line Tool
 
-For interactive use and batch processing, see the companion CLI tool:
+For interactive use, batch processing, and MCP server integration, see:
+
+**[ImageSummarizer CLI](../Mostlylucid.ImageSummarizer.Cli/README.md)** - Full-featured CLI with Vision LLM integration
 
 ```bash
-# Install LucidRAG Image CLI
-dotnet tool install -g lucidrag-image
+# Download from releases
+# https://github.com/scottgal/lucidrag/releases
 
 # Analyze single image
-lucidrag-image analyze photo.jpg --format table
+imagesummarizer photo.jpg --pipeline caption --output json
 
 # Batch process directory
-lucidrag-image batch ./photos --pattern "**/*.jpg" --max-parallel 8
-
-# Find duplicates
-lucidrag-image dedupe ./downloads --threshold 5 --action report
+imagesummarizer ./photos --output json
 ```
-
-See [LucidRAG.ImageCli README](../LucidRAG.ImageCli/README.md) for full CLI documentation.
 
 ## Dependencies
 
 - **SixLabors.ImageSharp** - Core image processing
-- **Microsoft.ML.OnnxRuntime** (optional) - For Florence-2 and CLIP models
+- **Microsoft.ML.OnnxRuntime** (optional) - For CLIP models
 - **Tesseract** (optional) - For OCR capabilities
 
 ## License
 
-MIT License - See LICENSE file for details
+Unlicense - See LICENSE file for details
 
 ## Contributing
 

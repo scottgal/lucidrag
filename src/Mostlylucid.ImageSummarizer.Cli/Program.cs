@@ -45,7 +45,7 @@ class Program
         var outputOpt = new Option<string>(
             "--output",
             getDefaultValue: () => "auto",
-            description: "Output: auto (pipeline default), text, json, signals, metrics, caption, alttext, markdown");
+            description: "Output: auto, text, json, signals, metrics, caption, alttext, markdown, visual");
 
         var languageOpt = new Option<string>(
             "--language",
@@ -73,6 +73,11 @@ class Program
             getDefaultValue: () => null,
             description: "Ollama base URL (default: http://localhost:11434, or $OLLAMA_BASE_URL)");
 
+        var saveDebugOpt = new Option<string?>(
+            "--save-debug",
+            getDefaultValue: () => null,
+            description: "Save debug images (temporal median, frames) to specified directory");
+
         // Add list-pipelines command
         var listCmd = new Command("list-pipelines", "List all available OCR pipelines");
         listCmd.SetHandler(async () =>
@@ -90,16 +95,21 @@ class Program
         rootCommand.AddOption(ollamaOpt);
         rootCommand.AddCommand(listCmd);
 
-        rootCommand.SetHandler(async (string? imagePath, string pipeline, string output, string language, bool verbose, bool? llm, string? model, string? ollama) =>
+        rootCommand.SetHandler(async (string? inputPath, string pipeline, string output, string language, bool verbose, bool? llm, string? model, string? ollama) =>
         {
-            // If no image provided, enter interactive mode with the configured options
-            if (string.IsNullOrWhiteSpace(imagePath))
+            // If no path provided, enter interactive mode with the configured options
+            if (string.IsNullOrWhiteSpace(inputPath))
             {
                 await InteractiveMode(pipeline, output, language, verbose, llm, model, ollama);
             }
+            else if (Directory.Exists(inputPath))
+            {
+                // Process all images in directory
+                await ProcessDirectory(inputPath, pipeline, output, language, verbose, llm, model, ollama);
+            }
             else
             {
-                await ProcessImage(imagePath, pipeline, output, language, verbose, llm, model, ollama);
+                await ProcessImage(inputPath, pipeline, output, language, verbose, llm, model, ollama);
             }
         }, imageArg, pipelineOpt, outputOpt, languageOpt, verboseOpt, llmOpt, modelOpt, ollamaOpt);
 
@@ -188,16 +198,16 @@ class Program
                         if (arg == null)
                         {
                             Spectre.Console.AnsiConsole.MarkupLine($"[dim]Current output:[/] [cyan]{output}[/]");
-                            Spectre.Console.AnsiConsole.MarkupLine("[dim]Available: auto, text, json, signals, metrics, caption, alttext, markdown[/]");
+                            Spectre.Console.AnsiConsole.MarkupLine("[dim]Available: auto, text, json, signals, metrics, caption, alttext, markdown, visual[/]");
                         }
-                        else if (arg is "auto" or "text" or "json" or "signals" or "metrics" or "caption" or "alttext" or "markdown")
+                        else if (arg is "auto" or "text" or "json" or "signals" or "metrics" or "caption" or "alttext" or "markdown" or "visual")
                         {
                             output = arg;
                             Spectre.Console.AnsiConsole.MarkupLine($"[green]✓[/] Output set to [cyan]{output}[/]");
                         }
                         else
                         {
-                            Spectre.Console.AnsiConsole.MarkupLine($"[red]✗[/] Unknown output format: {arg}. Use: auto, text, json, signals, metrics, caption, alttext, markdown");
+                            Spectre.Console.AnsiConsole.MarkupLine($"[red]✗[/] Unknown output format: {arg}. Use: auto, text, json, signals, metrics, caption, alttext, markdown, visual");
                         }
                         continue;
 
@@ -272,17 +282,25 @@ class Program
                 }
             }
 
-            // Treat as image path
-            var imagePath = input.Trim('"');
+            // Treat as image path or directory
+            var inputPath = input.Trim('"');
 
-            if (!File.Exists(imagePath))
+            if (Directory.Exists(inputPath))
             {
-                Spectre.Console.AnsiConsole.MarkupLine($"[red]✗[/] File not found: {Spectre.Console.Markup.Escape(imagePath)}");
+                // Process all images in directory
+                await ProcessDirectory(inputPath, pipeline, output, language, verbose, enableLlm, visionModel, ollamaUrl);
+                Spectre.Console.AnsiConsole.WriteLine();
+                continue;
+            }
+
+            if (!File.Exists(inputPath))
+            {
+                Spectre.Console.AnsiConsole.MarkupLine($"[red]✗[/] File or directory not found: {Spectre.Console.Markup.Escape(inputPath)}");
                 continue;
             }
 
             // Process the image
-            await ProcessImage(imagePath, pipeline, output, language, verbose, enableLlm, visionModel, ollamaUrl);
+            await ProcessImage(inputPath, pipeline, output, language, verbose, enableLlm, visionModel, ollamaUrl);
             Spectre.Console.AnsiConsole.WriteLine();
         }
     }
@@ -306,9 +324,13 @@ class Program
         Spectre.Console.AnsiConsole.MarkupLine("  [cyan]/pipeline[/] [dim]<name>[/]    Set pipeline:");
         Spectre.Console.AnsiConsole.MarkupLine("                         advancedocr, simpleocr, quality, stats, caption, alttext");
         Spectre.Console.AnsiConsole.MarkupLine("  [cyan]/output[/] [dim]<format>[/]    Set output format:");
-        Spectre.Console.AnsiConsole.MarkupLine("                         auto, text, json, signals, metrics, caption, alttext, markdown");
+        Spectre.Console.AnsiConsole.MarkupLine("                         auto, text, json, signals, metrics, caption, alttext, markdown, visual");
         Spectre.Console.AnsiConsole.MarkupLine("  [cyan]/language[/] [dim]<code>[/]    Set spell-check language (e.g., en_US)");
-        Spectre.Console.AnsiConsole.MarkupLine("  [cyan]/verbose[/] [dim][on|off][/]   Toggle verbose logging");
+        Spectre.Console.AnsiConsole.MarkupLine("  [cyan]/verbose[/] [dim]<on/off>[/]   Toggle verbose logging");
+        Spectre.Console.AnsiConsole.MarkupLine("  [cyan]/llm[/] [dim]<on/off>[/]       Toggle Vision LLM for captions");
+        Spectre.Console.AnsiConsole.MarkupLine("  [cyan]/model[/] [dim]<name>[/]       Set Vision LLM model (e.g., minicpm-v:8b, llava)");
+        Spectre.Console.AnsiConsole.MarkupLine("  [cyan]/ollama[/] [dim]<url>[/]       Set Ollama base URL");
+        Spectre.Console.AnsiConsole.MarkupLine("  [cyan]/models[/]              List available Ollama vision models");
         Spectre.Console.AnsiConsole.MarkupLine("  [cyan]/settings[/]            Show current settings");
         Spectre.Console.AnsiConsole.MarkupLine("  [cyan]/quit[/]                Exit");
         Spectre.Console.AnsiConsole.WriteLine();
@@ -493,7 +515,15 @@ class Program
         Console.ResetColor();
     }
 
-    static async Task ProcessImage(string imagePath, string pipeline, string outputFormat, string language, bool verbose)
+    static async Task ProcessImage(
+        string imagePath,
+        string pipeline,
+        string outputFormat,
+        string language,
+        bool verbose,
+        bool? llmParam = null,
+        string? modelParam = null,
+        string? ollamaParam = null)
     {
         if (!File.Exists(imagePath))
         {
@@ -509,22 +539,20 @@ class Program
         // Setup DI
         var services = new ServiceCollection();
 
-        // Logging
-        if (verbose)
+        // Logging - always register but configure level based on verbose flag
+        services.AddLogging(builder =>
         {
-            services.AddLogging(builder =>
-            {
-                builder.AddConsole();
-                builder.SetMinimumLevel(LogLevel.Debug);
-            });
-        }
+            builder.AddConsole();
+            builder.SetMinimumLevel(verbose ? LogLevel.Debug : LogLevel.Warning);
+        });
 
-        // All features enabled by default - detect what's available
-        var ollamaUrl = Environment.GetEnvironmentVariable("OLLAMA_BASE_URL") ?? "http://localhost:11434";
-        var visionModel = Environment.GetEnvironmentVariable("VISION_MODEL") ?? "minicpm-v:8b";
+        // Resolve LLM settings: CLI args > env vars > defaults
+        var ollamaUrl = ollamaParam ?? Environment.GetEnvironmentVariable("OLLAMA_BASE_URL") ?? "http://localhost:11434";
+        var visionModel = modelParam ?? Environment.GetEnvironmentVariable("VISION_MODEL") ?? "minicpm-v:8b";
 
         // For stats pipeline, keep it fast (no LLM); for others enable all features
-        var enableLlm = pipeline != "stats";
+        // CLI arg takes precedence
+        var enableLlm = llmParam ?? (pipeline != "stats");
 
         // Configure image analysis based on pipeline
         services.AddDocSummarizerImages(opt =>
@@ -595,6 +623,10 @@ class Program
                     OutputMarkdown(profile, llmCaption);
                     break;
 
+                case "visual":
+                    OutputVisual(profile, llmCaption);
+                    break;
+
                 case "text":
                 default:
                     OutputText(profile);
@@ -619,6 +651,58 @@ class Program
             "alttext" => "alttext",
             _ => "text"
         };
+    }
+
+    static readonly string[] SupportedExtensions = { ".jpg", ".jpeg", ".png", ".gif", ".webp", ".bmp", ".tiff", ".tif", ".tga", ".pbm" };
+
+    static async Task ProcessDirectory(
+        string directoryPath,
+        string pipeline,
+        string outputFormat,
+        string language,
+        bool verbose,
+        bool? llmParam = null,
+        string? modelParam = null,
+        string? ollamaParam = null)
+    {
+        // Find all image files in directory
+        var imageFiles = Directory.GetFiles(directoryPath, "*.*", SearchOption.TopDirectoryOnly)
+            .Where(f => SupportedExtensions.Contains(Path.GetExtension(f).ToLowerInvariant()))
+            .OrderBy(f => f)
+            .ToList();
+
+        if (imageFiles.Count == 0)
+        {
+            Spectre.Console.AnsiConsole.MarkupLine($"[yellow]No image files found in:[/] {Spectre.Console.Markup.Escape(directoryPath)}");
+            return;
+        }
+
+        Spectre.Console.AnsiConsole.MarkupLine($"[cyan]Processing {imageFiles.Count} images in:[/] {Spectre.Console.Markup.Escape(directoryPath)}");
+        Spectre.Console.AnsiConsole.WriteLine();
+
+        var processed = 0;
+        var failed = 0;
+
+        foreach (var imagePath in imageFiles)
+        {
+            try
+            {
+                var fileName = Path.GetFileName(imagePath);
+                Spectre.Console.AnsiConsole.MarkupLine($"[dim][[{processed + 1}/{imageFiles.Count}]][/] {Spectre.Console.Markup.Escape(fileName)}");
+
+                await ProcessImage(imagePath, pipeline, outputFormat, language, verbose, llmParam, modelParam, ollamaParam);
+                processed++;
+                Spectre.Console.AnsiConsole.WriteLine();
+            }
+            catch (Exception ex)
+            {
+                failed++;
+                Spectre.Console.AnsiConsole.MarkupLine($"[red]✗[/] {Spectre.Console.Markup.Escape(Path.GetFileName(imagePath))}: {ex.Message}");
+            }
+        }
+
+        Spectre.Console.AnsiConsole.WriteLine();
+        Spectre.Console.AnsiConsole.MarkupLine($"[green]✓ Processed:[/] {processed}  [red]✗ Failed:[/] {failed}");
     }
 
     static void OutputText(DynamicImageProfile profile)
@@ -680,6 +764,22 @@ class Program
     {
         if (!string.IsNullOrWhiteSpace(llmCaption))
         {
+            // Try to parse as JSON and extract caption field
+            try
+            {
+                var doc = JsonDocument.Parse(llmCaption);
+                if (doc.RootElement.TryGetProperty("caption", out var captionProp))
+                {
+                    Console.WriteLine(captionProp.GetString());
+                    return;
+                }
+            }
+            catch (JsonException)
+            {
+                // Not JSON, use as-is
+            }
+
+            // Use as-is if not JSON or no caption field
             Console.WriteLine(llmCaption);
         }
         else
@@ -701,8 +801,20 @@ class Program
         // Start with LLM caption if available, or ledger summary
         if (!string.IsNullOrWhiteSpace(llmCaption))
         {
+            // Try to parse JSON caption
+            string captionText = llmCaption;
+            try
+            {
+                var doc = JsonDocument.Parse(llmCaption);
+                if (doc.RootElement.TryGetProperty("caption", out var captionProp))
+                {
+                    captionText = captionProp.GetString() ?? llmCaption;
+                }
+            }
+            catch (JsonException) { }
+
             // Extract first sentence for concise alt text
-            var firstSentence = llmCaption.Split(new[] { '.', '!', '?' }, 2)[0].Trim();
+            var firstSentence = captionText.Split(new[] { '.', '!', '?' }, 2)[0].Trim();
             parts.Add(firstSentence);
         }
         else
@@ -792,6 +904,126 @@ class Program
                 Console.WriteLine($"- **Motion Intensity:** {ledger.Motion.MotionIntensity:F2}");
             }
             Console.WriteLine();
+        }
+    }
+
+    static void OutputVisual(DynamicImageProfile profile, string? llmCaption)
+    {
+        var ledger = profile.GetLedger();
+        var text = GetExtractedText(profile);
+
+        // Header with image info
+        Spectre.Console.AnsiConsole.Write(new Spectre.Console.Rule($"[cyan]{Spectre.Console.Markup.Escape(Path.GetFileName(profile.ImagePath) ?? "Image")}[/]"));
+        Spectre.Console.AnsiConsole.WriteLine();
+
+        // Identity panel
+        var identityTable = new Spectre.Console.Table().Border(Spectre.Console.TableBorder.Rounded);
+        identityTable.AddColumn("[dim]Property[/]");
+        identityTable.AddColumn("[cyan]Value[/]");
+        identityTable.AddRow("Format", ledger.Identity.Format ?? "Unknown");
+        identityTable.AddRow("Dimensions", $"{ledger.Identity.Width}×{ledger.Identity.Height}");
+        identityTable.AddRow("Aspect Ratio", $"{ledger.Identity.AspectRatio:F2}");
+        if (ledger.Identity.IsAnimated)
+        {
+            identityTable.AddRow("Frames", ledger.Motion?.FrameCount.ToString() ?? "Multiple");
+            identityTable.AddRow("[green]Animated[/]", "Yes");
+        }
+        identityTable.AddRow("Analysis Time", $"{profile.AnalysisDurationMs}ms");
+
+        Spectre.Console.AnsiConsole.MarkupLine("[yellow]Identity[/]");
+        Spectre.Console.AnsiConsole.Write(identityTable);
+        Spectre.Console.AnsiConsole.WriteLine();
+
+        // Color palette with actual colors
+        if (ledger.Colors.DominantColors?.Any() == true)
+        {
+            Spectre.Console.AnsiConsole.MarkupLine("[yellow]Color Palette[/]");
+
+            foreach (var color in ledger.Colors.DominantColors.Take(6))
+            {
+                // Parse hex color to RGB
+                var hex = color.Hex?.TrimStart('#') ?? "000000";
+                if (hex.Length == 6 &&
+                    byte.TryParse(hex.Substring(0, 2), System.Globalization.NumberStyles.HexNumber, null, out var r) &&
+                    byte.TryParse(hex.Substring(2, 2), System.Globalization.NumberStyles.HexNumber, null, out var g) &&
+                    byte.TryParse(hex.Substring(4, 2), System.Globalization.NumberStyles.HexNumber, null, out var b))
+                {
+                    var spectreColor = new Spectre.Console.Color(r, g, b);
+
+                    // Create a colored block using markup
+                    var colorSwatch = new Spectre.Console.Text("████", new Spectre.Console.Style(spectreColor));
+                    var colorInfo = $" {color.Hex} {color.Name} ({color.Percentage:F1}%)";
+
+                    Spectre.Console.AnsiConsole.Write(colorSwatch);
+                    Spectre.Console.AnsiConsole.MarkupLine($"[dim]{Spectre.Console.Markup.Escape(colorInfo)}[/]");
+                }
+                else
+                {
+                    Spectre.Console.AnsiConsole.MarkupLine($"[dim]  {color.Hex} {color.Name} ({color.Percentage:F1}%)[/]");
+                }
+            }
+            Spectre.Console.AnsiConsole.WriteLine();
+        }
+
+        // Caption (LLM or fallback)
+        string? captionText = llmCaption;
+        if (!string.IsNullOrWhiteSpace(llmCaption))
+        {
+            try
+            {
+                var doc = JsonDocument.Parse(llmCaption);
+                if (doc.RootElement.TryGetProperty("caption", out var captionProp))
+                {
+                    captionText = captionProp.GetString();
+                }
+            }
+            catch (JsonException) { }
+        }
+
+        if (!string.IsNullOrWhiteSpace(captionText))
+        {
+            Spectre.Console.AnsiConsole.MarkupLine("[yellow]Caption[/]");
+            Spectre.Console.AnsiConsole.Write(new Spectre.Console.Panel(Spectre.Console.Markup.Escape(captionText))
+                .Border(Spectre.Console.BoxBorder.Rounded)
+                .BorderColor(Spectre.Console.Color.Cyan1));
+            Spectre.Console.AnsiConsole.WriteLine();
+        }
+        else
+        {
+            Spectre.Console.AnsiConsole.MarkupLine("[yellow]Summary[/]");
+            Spectre.Console.AnsiConsole.MarkupLine($"[dim]{Spectre.Console.Markup.Escape(ledger.ToLlmSummary())}[/]");
+            Spectre.Console.AnsiConsole.WriteLine();
+        }
+
+        // OCR text
+        if (!string.IsNullOrWhiteSpace(text))
+        {
+            Spectre.Console.AnsiConsole.MarkupLine("[yellow]Extracted Text[/]");
+            var textPanel = new Spectre.Console.Panel(Spectre.Console.Markup.Escape(text.Trim()))
+                .Border(Spectre.Console.BoxBorder.Rounded)
+                .Header("[green]OCR[/]");
+            Spectre.Console.AnsiConsole.Write(textPanel);
+            Spectre.Console.AnsiConsole.WriteLine();
+        }
+
+        // Motion info for animated images
+        if (ledger.Identity.IsAnimated && ledger.Motion != null)
+        {
+            Spectre.Console.AnsiConsole.MarkupLine("[yellow]Animation[/]");
+            var motionTable = new Spectre.Console.Table().Border(Spectre.Console.TableBorder.Rounded);
+            motionTable.AddColumn("[dim]Property[/]");
+            motionTable.AddColumn("[green]Value[/]");
+            motionTable.AddRow("Frames", ledger.Motion.FrameCount.ToString());
+            if (ledger.Motion.Duration.HasValue)
+            {
+                motionTable.AddRow("Duration", $"{ledger.Motion.Duration * 1000:F0}ms");
+            }
+            if (ledger.Motion.MotionIntensity > 0)
+            {
+                motionTable.AddRow("Motion Intensity", $"{ledger.Motion.MotionIntensity:F2}");
+            }
+            Spectre.Console.AnsiConsole.Write(motionTable);
+            Spectre.Console.AnsiConsole.WriteLine();
         }
     }
 
@@ -899,7 +1131,10 @@ class Program
 
     static string? GetExtractedText(DynamicImageProfile profile)
     {
-        // Priority: Tier 2/3 corrections > legacy Tier 3 > voting > temporal median > raw OCR
+        // Priority: Vision LLM text (best for stylized fonts) > Tier 2/3 corrections > voting > temporal median > raw OCR
+        var visionText = profile.GetValue<string>("vision.llm.text");
+        if (!string.IsNullOrEmpty(visionText))
+            return visionText;
         if (profile.HasSignal("ocr.final.corrected_text"))
             return profile.GetValue<string>("ocr.final.corrected_text");
         if (profile.HasSignal("ocr.corrected.text"))
@@ -1000,7 +1235,7 @@ class Program
             }
 
             Console.ForegroundColor = ConsoleColor.DarkGray;
-            Console.WriteLine("Usage: imagecli image.gif --pipeline <name>");
+            Console.WriteLine("Usage: imagesummarizer image.gif --pipeline <name>");
             Console.WriteLine($"Default: {config.DefaultPipeline ?? "advancedocr"}");
             Console.ResetColor();
         }
@@ -1066,5 +1301,95 @@ class Program
 
         var app = builder.Build();
         await app.RunAsync();
+    }
+
+    static async Task ListOllamaModels(string ollamaUrl)
+    {
+        try
+        {
+            using var http = new HttpClient { Timeout = TimeSpan.FromSeconds(5) };
+            var response = await http.GetAsync($"{ollamaUrl}/api/tags");
+
+            if (!response.IsSuccessStatusCode)
+            {
+                Spectre.Console.AnsiConsole.MarkupLine($"[red]✗[/] Failed to connect to Ollama at {ollamaUrl}");
+                Spectre.Console.AnsiConsole.MarkupLine("[dim]Make sure Ollama is running: ollama serve[/]");
+                return;
+            }
+
+            var json = await response.Content.ReadAsStringAsync();
+            var doc = JsonDocument.Parse(json);
+
+            Spectre.Console.AnsiConsole.MarkupLine($"[cyan]Available models at {ollamaUrl}:[/]");
+            Spectre.Console.AnsiConsole.WriteLine();
+
+            var visionModels = new List<string>();
+            var otherModels = new List<string>();
+
+            if (doc.RootElement.TryGetProperty("models", out var models))
+            {
+                foreach (var model in models.EnumerateArray())
+                {
+                    var name = model.GetProperty("name").GetString() ?? "";
+                    var size = model.TryGetProperty("size", out var s) ? s.GetInt64() / (1024 * 1024 * 1024.0) : 0;
+
+                    // Vision models typically have these keywords
+                    var isVision = name.Contains("llava", StringComparison.OrdinalIgnoreCase) ||
+                                   name.Contains("vision", StringComparison.OrdinalIgnoreCase) ||
+                                   name.Contains("minicpm-v", StringComparison.OrdinalIgnoreCase) ||
+                                   name.Contains("bakllava", StringComparison.OrdinalIgnoreCase) ||
+                                   name.Contains("moondream", StringComparison.OrdinalIgnoreCase) ||
+                                   name.Contains("llava-phi", StringComparison.OrdinalIgnoreCase);
+
+                    if (isVision)
+                        visionModels.Add($"  [green]★[/] [cyan]{name}[/] [dim]({size:F1} GB) - Vision capable[/]");
+                    else
+                        otherModels.Add($"  [dim]  {name} ({size:F1} GB)[/]");
+                }
+            }
+
+            if (visionModels.Count > 0)
+            {
+                Spectre.Console.AnsiConsole.MarkupLine("[yellow]Vision Models (recommended):[/]");
+                foreach (var m in visionModels)
+                    Spectre.Console.AnsiConsole.MarkupLine(m);
+                Spectre.Console.AnsiConsole.WriteLine();
+            }
+
+            if (otherModels.Count > 0)
+            {
+                Spectre.Console.AnsiConsole.MarkupLine("[dim]Other Models:[/]");
+                foreach (var m in otherModels.Take(10))
+                    Spectre.Console.AnsiConsole.MarkupLine(m);
+                if (otherModels.Count > 10)
+                    Spectre.Console.AnsiConsole.MarkupLine($"[dim]  ... and {otherModels.Count - 10} more[/]");
+                Spectre.Console.AnsiConsole.WriteLine();
+            }
+
+            if (visionModels.Count == 0 && otherModels.Count == 0)
+            {
+                Spectre.Console.AnsiConsole.MarkupLine("[yellow]No models found. Pull a vision model with:[/]");
+                Spectre.Console.AnsiConsole.MarkupLine("[dim]  ollama pull minicpm-v:8b[/]");
+                Spectre.Console.AnsiConsole.MarkupLine("[dim]  ollama pull llava:7b[/]");
+            }
+            else if (visionModels.Count == 0)
+            {
+                Spectre.Console.AnsiConsole.MarkupLine("[yellow]No vision models found. Install one with:[/]");
+                Spectre.Console.AnsiConsole.MarkupLine("[dim]  ollama pull minicpm-v:8b[/]");
+            }
+        }
+        catch (HttpRequestException)
+        {
+            Spectre.Console.AnsiConsole.MarkupLine($"[red]✗[/] Cannot connect to Ollama at {ollamaUrl}");
+            Spectre.Console.AnsiConsole.MarkupLine("[dim]Make sure Ollama is running: ollama serve[/]");
+        }
+        catch (TaskCanceledException)
+        {
+            Spectre.Console.AnsiConsole.MarkupLine($"[red]✗[/] Timeout connecting to Ollama at {ollamaUrl}");
+        }
+        catch (Exception ex)
+        {
+            Spectre.Console.AnsiConsole.MarkupLine($"[red]✗[/] Error: {ex.Message}");
+        }
     }
 }

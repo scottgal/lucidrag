@@ -74,7 +74,8 @@
       "Bash(claude-code:*)",
       "Bash(Select-String -Pattern \"ocr\")",
       "Bash(Select-String -Pattern \"Vision|Caption|llm\")",
-      "Bash(Select-Object -First 10)"
+      "Bash(Select-Object -First 10)",
+      "Bash(dotnet add:*)"
     ]
   }
 }
