@@ -5,7 +5,7 @@
 Core profiling is deterministic and offline; LLM/OCR/CLIP are optional stages controlled by thresholds and configuration.
 
 ![Cat Motion Demo](demo-images/cat_wag.gif)
-*Motion detection extracts keyframes and analyzes movement patterns*
+*Caption: "A cat laying down with body stretched across white bench" • Scene: indoor • Motion: MODERATE object_motion*
 
 ## Mental Model
 
@@ -20,7 +20,7 @@ Core profiling is deterministic and offline; LLM/OCR/CLIP are optional stages co
 ### Core Analysis Pipeline
 
 ![Meme Text Extraction](demo-images/anchorman-not-even-mad.gif)
-*Subtitle extraction across frames - captures "I'm not even mad. That's amazing."*
+*OCR: "I'm not even mad." + "That's amazing." • Caption: "man with mustache wearing grey sweater" • Scene: meme*
 
 - **Deterministic profiling (fast path)** - no ML required
   - Color analysis (dominant colors, grids, saturation)
@@ -110,7 +110,7 @@ Console.WriteLine($"Hash: {hash}");
 The library uses a **Wave-based analysis architecture** where specialized analyzers (Waves) each contribute signals to a unified profile:
 
 ![Alan Shrug](demo-images/alanshrug_opt.gif)
-*Each wave analyzes different aspects: color, motion, text, quality*
+*Multiple waves analyze: ColorWave extracts palette, MotionWave detects gestures, VisionLlmWave generates caption*
 
 ### Wave Architecture
 
@@ -214,7 +214,7 @@ If text likeliness > threshold (default 0.4):
 ### Stage 5: GIF Motion Analysis
 
 ![Shrug GIF](demo-images/alanshrug_opt.gif)
-*Motion analysis detects shoulder movement and gesture patterns*
+*Vision LLM: "A man sitting at table with beer, women behind looking through photo albums"*
 
 For animated GIFs using the MotionWave analyzer:
 
@@ -236,7 +236,7 @@ For animated GIFs using the MotionWave analyzer:
 - This ensures text changes are captured even when main image is static
 
 ![Arse Biscuits](demo-images/arse_biscuits.gif)
-*Multi-line subtitle extraction with gesture recognition*
+*OCR extracts "ARSE BISCUITS" • Vision LLM: "elderly man dressed as bishop...text reading arse biscuits"*
 
 **Example motion signals** (from cat_wag.gif):
 ```csharp
