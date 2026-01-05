@@ -110,7 +110,7 @@ Console.WriteLine($"Hash: {hash}");
 The library uses a **Wave-based analysis architecture** where specialized analyzers (Waves) each contribute signals to a unified profile:
 
 ![Alan Shrug](demo-images/alanshrug_opt.gif)
-*Multiple waves analyze: ColorWave extracts palette, MotionWave detects gestures, VisionLlmWave generates caption*
+*Wave pipeline: ColorWave → MotionWave → VisionLlmWave • Each contributes signals to unified profile*
 
 ### Wave Architecture
 
@@ -214,7 +214,7 @@ If text likeliness > threshold (default 0.4):
 ### Stage 5: GIF Motion Analysis
 
 ![Shrug GIF](demo-images/alanshrug_opt.gif)
-*Vision LLM: "A man sitting at table with beer, women behind looking through photo albums"*
+*MotionWave detects shoulder movement • 31 frames analyzed • Motion: SUBTLE general motion*
 
 For animated GIFs using the MotionWave analyzer:
 
