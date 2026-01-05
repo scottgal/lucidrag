@@ -292,152 +292,22 @@ public class MlContextChecker
     }
 
     /// <summary>
-    /// Train n-gram models by loading pre-trained bigram corpus
-    /// Sources:
-    /// - Google Web 1T n-gram corpus
-    /// - Leipzig Corpora Collection
-    /// - Pre-trained language models
+    /// Initialize n-gram models using embedded English bigram corpus.
+    /// No external downloads required - corpus is compiled into the assembly.
     /// </summary>
-    private async Task TrainOnEnglishCorpusAsync(CancellationToken ct)
+    private Task TrainOnEnglishCorpusAsync(CancellationToken ct)
     {
-        // Path to bigram model files (format: word1 word2 probability)
-        var modelPath = GetBigramModelPath("en");
-
-        if (File.Exists(modelPath))
-        {
-            _logger?.LogInformation("Loading bigram model from {Path}", modelPath);
-            await LoadBigramModelFromFileAsync(modelPath, ct);
-            return;
-        }
-
-        // Auto-download if not present
-        _logger?.LogInformation("Bigram model not found, attempting auto-download...");
-
-        var downloaded = await DownloadBigramModelAsync("en", ct);
-
-        if (downloaded && File.Exists(modelPath))
-        {
-            await LoadBigramModelFromFileAsync(modelPath, ct);
-            return;
-        }
-
-        // Fallback: Use minimal embedded bigrams for basic functionality
-        _logger?.LogWarning("Could not load bigram model, using minimal fallback corpus");
-        LoadMinimalBigramFallback();
+        // Use embedded bigram corpus - no download needed
+        LoadEmbeddedEnglishBigrams();
+        return Task.CompletedTask;
     }
 
     /// <summary>
-    /// Get path for bigram model file
+    /// Embedded English bigram corpus based on Google Web 1T and Brown corpus statistics.
+    /// Includes 200+ most common bigrams for robust OCR quality detection.
+    /// No external downloads required.
     /// </summary>
-    private string GetBigramModelPath(string language)
-    {
-        var appDataPath = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
-        var modelsDir = Path.Combine(appDataPath, "lucidrag", "models", "ngrams");
-        Directory.CreateDirectory(modelsDir);
-        return Path.Combine(modelsDir, $"{language}_bigrams.txt");
-    }
-
-    /// <summary>
-    /// Download pre-trained bigram model
-    /// Format: Google Web 1T style (word1 word2 count)
-    /// </summary>
-    private async Task<bool> DownloadBigramModelAsync(string language, CancellationToken ct)
-    {
-        // URLs for pre-trained bigram models
-        var bigramUrls = new Dictionary<string, string>
-        {
-            ["en"] = "https://huggingface.co/datasets/google/googleweb1t/resolve/main/en_bigrams_top10k.txt",
-            // Fallback: Use Leipzig Corpora
-            ["en_leipzig"] = "https://downloads.wortschatz-leipzig.de/corpora/eng_news_2023_10K-sentences.txt"
-        };
-
-        if (!bigramUrls.TryGetValue(language, out var url))
-        {
-            _logger?.LogWarning("No bigram model URL available for language: {Language}", language);
-            return false;
-        }
-
-        try
-        {
-            using var httpClient = new HttpClient { Timeout = TimeSpan.FromMinutes(5) };
-            var modelPath = GetBigramModelPath(language);
-
-            _logger?.LogInformation("Downloading bigram model from {Url}", url);
-
-            var response = await httpClient.GetAsync(url, ct);
-            if (!response.IsSuccessStatusCode)
-            {
-                _logger?.LogWarning("Failed to download bigram model: {Status}", response.StatusCode);
-                return false;
-            }
-
-            var content = await response.Content.ReadAsStringAsync(ct);
-            await File.WriteAllTextAsync(modelPath, content, ct);
-
-            _logger?.LogInformation("Downloaded bigram model to {Path}", modelPath);
-            return true;
-        }
-        catch (Exception ex)
-        {
-            _logger?.LogError(ex, "Failed to download bigram model");
-            return false;
-        }
-    }
-
-    /// <summary>
-    /// Load bigram model from file
-    /// Format: word1 word2 probability (or word1 word2 count)
-    /// </summary>
-    private async Task LoadBigramModelFromFileAsync(string path, CancellationToken ct)
-    {
-        var lines = await File.ReadAllLinesAsync(path, ct);
-        var totalBigrams = 0;
-        var counts = new Dictionary<(string, string), long>();
-        long totalCount = 0;
-
-        // First pass: Count totals for probability calculation
-        foreach (var line in lines)
-        {
-            if (string.IsNullOrWhiteSpace(line) || line.StartsWith("#"))
-                continue;
-
-            var parts = line.Split('\t', ' ');
-            if (parts.Length < 3)
-                continue;
-
-            var word1 = parts[0].ToLowerInvariant();
-            var word2 = parts[1].ToLowerInvariant();
-
-            if (long.TryParse(parts[2], out var count))
-            {
-                counts[(word1, word2)] = count;
-                totalCount += count;
-                totalBigrams++;
-            }
-        }
-
-        // Second pass: Convert counts to probabilities
-        foreach (var ((word1, word2), count) in counts)
-        {
-            if (!_bigramModel.ContainsKey(word1))
-            {
-                _bigramModel[word1] = new Dictionary<string, double>();
-            }
-
-            // P(word2 | word1) = count(word1, word2) / sum(count(word1, *))
-            var probability = count / (double)totalCount;
-            _bigramModel[word1][word2] = probability;
-        }
-
-        _logger?.LogInformation("Loaded {Count} bigrams from {Path}", totalBigrams, path);
-    }
-
-    /// <summary>
-    /// Enhanced fallback bigram corpus based on English language statistics
-    /// Includes top 1000 most common bigrams for robust OCR correction
-    /// Sources: Google Web 1T corpus statistics, Brown corpus analysis
-    /// </summary>
-    private void LoadMinimalBigramFallback()
+    private void LoadEmbeddedEnglishBigrams()
     {
         // Top English bigrams with normalized probabilities
         // Format: (word1, word2, relative_probability)

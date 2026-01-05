@@ -189,12 +189,13 @@ public static class ServiceCollectionExtensions
             return new VisionLlmWave(imageConfig, logger);
         });
 
-        // ClipEmbeddingWave - Semantic image embeddings for similarity search
+        // ClipEmbeddingWave - Semantic image embeddings for similarity search (auto-downloads model)
         services.AddSingleton<IAnalysisWave>(sp =>
         {
             var imageConfig = sp.GetRequiredService<IOptions<ImageConfig>>();
+            var modelDownloader = sp.GetRequiredService<ModelDownloader>();
             var logger = sp.GetService<Microsoft.Extensions.Logging.ILogger<ClipEmbeddingWave>>();
-            return new ClipEmbeddingWave(imageConfig, logger);
+            return new ClipEmbeddingWave(imageConfig, modelDownloader, logger);
         });
 
         // Wave orchestrator

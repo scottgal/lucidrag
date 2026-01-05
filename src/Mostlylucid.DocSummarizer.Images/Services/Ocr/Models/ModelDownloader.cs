@@ -52,6 +52,22 @@ public class ModelDownloader
             RequiresConversion = false,
             ApproximateSize = 4 * 1024 * 1024, // 4MB
             Description = "Tesseract English language data (fast)"
+        },
+        [ModelType.ClipVisual] = new ModelInfo
+        {
+            FileName = "clip/visual.onnx",
+            Url = "https://clip-as-service.s3.us-east-2.amazonaws.com/models/onnx/ViT-B-32/visual.onnx",
+            RequiresConversion = false,
+            ApproximateSize = 350 * 1024 * 1024, // ~350MB
+            Description = "CLIP ViT-B/32 visual encoder"
+        },
+        [ModelType.ClipTextual] = new ModelInfo
+        {
+            FileName = "clip/textual.onnx",
+            Url = "https://clip-as-service.s3.us-east-2.amazonaws.com/models/onnx/ViT-B-32/textual.onnx",
+            RequiresConversion = false,
+            ApproximateSize = 250 * 1024 * 1024, // ~250MB
+            Description = "CLIP ViT-B/32 text encoder"
         }
     };
 
@@ -294,7 +310,17 @@ public enum ModelType
     /// <summary>
     /// Tesseract English language data (fast variant)
     /// </summary>
-    TesseractEng
+    TesseractEng,
+
+    /// <summary>
+    /// CLIP ViT-B/32 visual encoder for image embeddings
+    /// </summary>
+    ClipVisual,
+
+    /// <summary>
+    /// CLIP ViT-B/32 text encoder for text embeddings
+    /// </summary>
+    ClipTextual
 }
 
 /// <summary>

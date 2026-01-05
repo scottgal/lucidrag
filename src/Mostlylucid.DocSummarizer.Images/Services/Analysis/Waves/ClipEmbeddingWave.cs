@@ -4,6 +4,7 @@ using Microsoft.ML.OnnxRuntime;
 using Microsoft.ML.OnnxRuntime.Tensors;
 using Mostlylucid.DocSummarizer.Images.Config;
 using Mostlylucid.DocSummarizer.Images.Models.Dynamic;
+using Mostlylucid.DocSummarizer.Images.Services.Ocr.Models;
 using SixLabors.ImageSharp;
 using SixLabors.ImageSharp.PixelFormats;
 using SixLabors.ImageSharp.Processing;
@@ -14,11 +15,13 @@ namespace Mostlylucid.DocSummarizer.Images.Services.Analysis.Waves;
 /// <summary>
 /// CLIP Embedding Wave - Generates semantic image embeddings for similarity search
 /// Uses ONNX CLIP model for fast, local embedding generation (no API calls)
+/// Auto-downloads CLIP model on first use (~350MB)
 /// Priority: 45 (runs after vision LLM, provides embeddings for RAG)
 /// </summary>
 public class ClipEmbeddingWave : IAnalysisWave
 {
     private readonly ImageConfig _config;
+    private readonly ModelDownloader? _modelDownloader;
     private readonly ILogger<ClipEmbeddingWave>? _logger;
     private static InferenceSession? _clipSession;
     private static readonly object _modelLock = new();
@@ -33,9 +36,11 @@ public class ClipEmbeddingWave : IAnalysisWave
 
     public ClipEmbeddingWave(
         IOptions<ImageConfig> config,
+        ModelDownloader? modelDownloader = null,
         ILogger<ClipEmbeddingWave>? logger = null)
     {
         _config = config.Value;
+        _modelDownloader = modelDownloader;
         _logger = logger;
     }
 
@@ -144,22 +149,16 @@ public class ClipEmbeddingWave : IAnalysisWave
     {
         if (_clipSession != null) return _clipSession;
 
+        // Get or download the model path
+        var modelPath = await GetOrDownloadClipModelAsync(ct);
+        if (modelPath == null) return null;
+
         lock (_modelLock)
         {
             if (_clipSession != null) return _clipSession;
 
             try
             {
-                var modelPath = GetClipModelPath();
-
-                if (!File.Exists(modelPath))
-                {
-                    _logger?.LogWarning(
-                        "CLIP model not found at {Path}. Download from: https://github.com/openai/CLIP",
-                        modelPath);
-                    return null;
-                }
-
                 _logger?.LogInformation("Loading CLIP model from {Path}", modelPath);
 
                 var sessionOptions = new SessionOptions
@@ -180,32 +179,54 @@ public class ClipEmbeddingWave : IAnalysisWave
         }
     }
 
-    private string GetClipModelPath()
+    private async Task<string?> GetOrDownloadClipModelAsync(CancellationToken ct)
     {
-        // Check config first
+        // Check explicit config path first
         if (!string.IsNullOrEmpty(_config.ClipModelPath) && File.Exists(_config.ClipModelPath))
         {
             return _config.ClipModelPath;
         }
 
-        // Default: models directory
-        var modelsDir = _config.ModelsDirectory ?? "./models";
-        var modelPath = Path.Combine(modelsDir, "clip", "clip-vit-b-32-visual.onnx");
-
-        // Fallback: check AppData
-        if (!File.Exists(modelPath))
+        // Try to get from ModelDownloader (auto-downloads if needed)
+        if (_modelDownloader != null)
         {
-            var appDataPath = Path.Combine(
-                Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
-                "lucidrag", "models", "clip", "clip-vit-b-32-visual.onnx");
-
-            if (File.Exists(appDataPath))
+            try
             {
-                return appDataPath;
+                _logger?.LogInformation("Checking/downloading CLIP model (~350MB on first run)...");
+                var path = await _modelDownloader.GetModelPathAsync(ModelType.ClipVisual, ct);
+                if (path != null && File.Exists(path))
+                {
+                    _logger?.LogDebug("CLIP model ready at: {Path}", path);
+                    return path;
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger?.LogWarning(ex, "Failed to auto-download CLIP model");
             }
         }
 
-        return modelPath;
+        // Fallback to checking default paths
+        return GetClipModelPathFallback();
+    }
+
+    private string? GetClipModelPathFallback()
+    {
+        var paths = new[]
+        {
+            Path.Combine(_config.ModelsDirectory ?? "./models", "clip", "visual.onnx"),
+            Path.Combine(_config.ModelsDirectory ?? "./models", "clip", "clip-vit-b-32-visual.onnx"),
+            Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                "LucidRAG", "models", "clip", "visual.onnx")
+        };
+
+        foreach (var path in paths)
+        {
+            if (File.Exists(path)) return path;
+        }
+
+        _logger?.LogDebug("CLIP model not found in any default location");
+        return null;
     }
 
     private async Task<float[]?> GenerateEmbeddingAsync(
@@ -243,10 +264,13 @@ public class ClipEmbeddingWave : IAnalysisWave
             }
         }
 
-        // Run inference
+        // Run inference - get input name from model metadata (varies by CLIP export)
+        var inputName = session.InputNames.FirstOrDefault() ?? "input";
+        _logger?.LogDebug("CLIP model input name: {InputName}", inputName);
+
         var inputs = new List<NamedOnnxValue>
         {
-            NamedOnnxValue.CreateFromTensor("pixel_values", tensor)
+            NamedOnnxValue.CreateFromTensor(inputName, tensor)
         };
 
         using var results = session.Run(inputs);
