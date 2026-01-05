@@ -36,7 +36,7 @@ public partial class MainViewModel : ObservableObject
     private bool _isStaticImage;
 
     [ObservableProperty]
-    private string _selectedPipeline = "socialmediaalt";
+    private string _selectedPipeline = "caption";
 
     [ObservableProperty]
     private string _selectedOutput = "alttext";
@@ -95,9 +95,9 @@ public partial class MainViewModel : ObservableObject
 
     public ObservableCollection<string> Pipelines { get; } = new()
     {
-        "socialmediaalt",
         "caption",
         "alttext",
+        "socialmediaalt",
         "vision",
         "motion",
         "advancedocr",
@@ -191,9 +191,16 @@ public partial class MainViewModel : ObservableObject
                             foreach (var m in visionModels.OrderBy(x => x))
                                 AvailableModels.Add(m);
 
-                            // Select first available if current not in list
+                            // Select best available model if current not in list
                             if (!visionModels.Contains(VisionModel) && visionModels.Count > 0)
-                                VisionModel = visionModels[0];
+                            {
+                                // Prefer minicpm-v:8b > minicpm-v > llava > first available
+                                var preferred = visionModels.FirstOrDefault(m => m == "minicpm-v:8b")
+                                    ?? visionModels.FirstOrDefault(m => m.StartsWith("minicpm-v"))
+                                    ?? visionModels.FirstOrDefault(m => m.StartsWith("llava"))
+                                    ?? visionModels[0];
+                                VisionModel = preferred;
+                            }
 
                             OllamaStatus = $"{visionModels.Count} vision model(s)";
                         }

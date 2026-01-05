@@ -413,23 +413,47 @@ public class VisionLlmWave : IAnalysisWave
 
     private async Task<string?> GenerateCaptionAsync(string imageBase64, AnalysisContext context, CancellationToken ct)
     {
-        // Check for motion context from MotionWave
+        // Gather motion and object context from prior waves
         var isAnimated = context.GetValue<bool>("motion.is_animated");
         var motionSummary = context.GetValue<string>("motion.summary");
+        var motionType = context.GetValue<string>("motion.motion_type");
         var frameCount = context.GetValue<int>("motion.frame_count");
+        var movingObjects = context.GetValue<List<string>>("motion.moving_objects");
+        var dominantColors = context.GetValue<List<object>>("color.dominant_colors");
 
-        // Minimal prompts - just state the purpose, let the model do its thing
-        // Less instruction text = less room for the model to echo instructions back
-        string prompt;
-        if (isAnimated && frameCount > 1)
+        // Build factual, focused prompt - minimal but grounded
+        // Key: avoid "describe" which invites hallucination; ask for specific observable facts
+        var promptParts = new List<string>();
+
+        // Check if this is a screenshot/document vs natural image
+        var hasText = context.GetValue<double>("content.text_likeliness") > 0.3 ||
+                      !string.IsNullOrEmpty(context.GetValue<string>("ocr.full_text"));
+        var isDocument = context.GetValue<bool>("content.is_document");
+
+        if (hasText || isDocument)
         {
-            prompt = "Alt text for animated image:";
+            // For screenshots/documents, focus on what it IS and what text says
+            promptParts.Add("What is this screenshot of? Include any visible text.");
+        }
+        else if (isAnimated && frameCount > 1)
+        {
+            promptParts.Add($"Alt text for {frameCount}-frame animation");
+
+            if (!string.IsNullOrEmpty(motionType))
+                promptParts[^1] += $" ({motionType})";
+
+            if (movingObjects?.Any() == true)
+                promptParts[^1] += $" showing {string.Join(", ", movingObjects.Take(3))}";
+
+            promptParts.Add(":");
         }
         else
         {
-            prompt = "Alt text:";
+            // For photos, ask for factual description
+            promptParts.Add("Factual alt text (only describe what you actually see):");
         }
 
+        var prompt = string.Join(" ", promptParts);
         var response = await QueryVisionLlmAsync(imageBase64, prompt, ct);
 
         // Clean and extract caption
@@ -511,10 +535,11 @@ public class VisionLlmWave : IAnalysisWave
             // "The provided/given image" patterns
             @"^(?:The |This )?(?:provided |given )?image (?:appears|seems) to (?:be |show |depict |display |feature |contain )?",
             @"^(?:The |This )?(?:provided |given )?image (?:shows|depicts|displays|features|contains|presents)\s*",
+            @"^(?:The |This )?(?:provided |given )?image (?:is |appears to be )(?:a |an )?",
 
             // Standard patterns
             @"^Based on (?:the |this )?(provided |given )?image.*?[:,]\s*",
-            @"^According to the (?:image|guidelines|analysis).*?[:,]\s*",
+            @"^According to (?:the )?(?:provided |given )?(?:image|guidelines|analysis).*?[:,]\s*",
             @"^(?:The |This )?image (?:shows|depicts|displays|features|contains|presents)\s*",
             @"^In (?:the |this )?image,?\s*",
             @"^(?:Here is|Here's) (?:a|the) (?:caption|description).*?:\s*",
@@ -528,11 +553,14 @@ public class VisionLlmWave : IAnalysisWave
             @"\s*```$", // Code block end
             @"^I (?:can )?see\s+",
             @"^(?:Looking at (?:the|this) image,?\s*)?",
-            @"^(?:From|Given) (?:the|this) (?:image|visual).*?[:,]\s*",
+            @"^(?:Sure|Certainly|Of course)[!,.]?\s*",
+            @"^(?:From|Given) (?:the|this) (?:image|visual|provided).*?[:,]\s*",
             @"^(?:Visual|Image) analysis (?:shows|indicates|reveals)[:,]?\s*",
             @"^Using (?:the )?(?:provided |given )?image.*?[:,]\s*",
             @"\*\*(?:Caption|Description|Summary)\*\*:?\s*",  // Markdown bold headers
             @"^(?:\*\*)?(?:Caption|Description|Summary)(?:\*\*)?:?\s*",  // With or without markdown
+            @"^(?:The )?(?:JSON )?output (?:generated|produced|created).*?(?:includes|contains|describes).*?[:,]\s*",
+            @"^(?:The )?(?:generated |produced )?(?:JSON |structured )?(?:output|response|result).*?[:,]\s*",
             @"^(?:The )?image (?:provided|given|shown) (?:seems|appears) to (?:be |show |depict )?",
             @"^.*?(?:does not|doesn't) provide (?:clear |enough )?(?:visual )?(?:information|details).*",
             @"^I (?:observed|noticed|can observe|can see) (?:several |some |many )?(?:notable |key |important )?(?:features|elements|things).*?[.:]\s*",
@@ -682,8 +710,17 @@ If no subtitle text exists, respond with 'NO_TEXT'.";
             response.Contains("<NO_TEXT>", StringComparison.OrdinalIgnoreCase) ||
             response.Contains("no text", StringComparison.OrdinalIgnoreCase) ||
             response.Contains("cannot see", StringComparison.OrdinalIgnoreCase) ||
+            response.Contains("can't see", StringComparison.OrdinalIgnoreCase) ||
             response.Contains("no visible text", StringComparison.OrdinalIgnoreCase) ||
-            response.Contains("no readable text", StringComparison.OrdinalIgnoreCase))
+            response.Contains("no readable text", StringComparison.OrdinalIgnoreCase) ||
+            response.Contains("mistake in your request", StringComparison.OrdinalIgnoreCase) ||
+            response.Contains("please provide another", StringComparison.OrdinalIgnoreCase) ||
+            response.Contains("clarify what", StringComparison.OrdinalIgnoreCase) ||
+            response.Contains("I cannot", StringComparison.OrdinalIgnoreCase) ||
+            response.Contains("unable to", StringComparison.OrdinalIgnoreCase) ||
+            response.Contains("doesn't contain", StringComparison.OrdinalIgnoreCase) ||
+            response.Contains("does not contain", StringComparison.OrdinalIgnoreCase) ||
+            response.Contains("There seems to be", StringComparison.OrdinalIgnoreCase))
         {
             return null;
         }

@@ -2,25 +2,25 @@
 
 A cross-platform Avalonia desktop app for generating alt text, captions, and analyzing images.
 
-![Screenshot](screenshot.png)
-
 ## Features
 
 - **Drag & Drop** - Drop images directly onto the window
 - **Browse** - Select images via file picker
+- **Live Status Indicators** - Traffic lights showing OCR, OpenCV, and LLM availability
+- **Auto Vision Model Detection** - Discovers installed Ollama vision models
 - **Multiple Pipelines** - caption, alttext, vision, motion, OCR, quality, stats
 - **Multiple Output Formats** - alttext, caption, text, json, markdown, signals
-- **Vision LLM Integration** - Uses Ollama for AI-powered captions
+- **Vision LLM Integration** - Uses Ollama with minicpm-v:8b (preferred) or llava
 - **Copy to Clipboard** - One-click copy for easy pasting
-- **Shell Integration** - Right-click context menu for images
+- **Shell Integration** - Right-click context menu for images (Windows)
 
 ## Installation
 
 ### From Release
 
-1. Download the latest release from [Releases](https://github.com/scottgal/lucidrag/releases)
+1. Download `mostlylucid-imagesummarizer-desktop-{platform}.zip` from [Releases](https://github.com/scottgal/lucidrag/releases)
 2. Extract to a folder (e.g., `C:\Tools\ImageSummarizer`)
-3. Run `ImageSummarizer.exe`
+3. Run `ImageSummarizer.exe` (Windows) or `ImageSummarizer` (macOS/Linux)
 
 ### From Source
 
@@ -46,6 +46,18 @@ Add a right-click context menu entry for images:
 ```
 
 After installation, right-click any image file and select **"Get Alt Text"**.
+
+## Status Indicators
+
+The top bar shows service availability:
+
+| Indicator | Green | Red |
+|-----------|-------|-----|
+| **OCR** | Tesseract ready | Tesseract failed |
+| **CV** | OpenCV ready | OpenCV failed |
+| **LLM** | Ollama connected | Ollama not running |
+
+Hover over indicators for detailed status.
 
 ## Usage
 

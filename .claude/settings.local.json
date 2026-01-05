@@ -88,7 +88,10 @@
       "Bash(timeout 90 dotnet run:*)",
       "Bash(dotnet restore:*)",
       "Bash(timeout 120 dotnet run:*)",
-      "Bash(do echo \"=== $img ===\")"
+      "Bash(do echo \"=== $img ===\")",
+      "Bash(timeout 180 dotnet run:*)",
+      "Bash(timeout 60 dotnet run:*)",
+      "Bash(dotnet publish:*)"
     ]
   }
 }

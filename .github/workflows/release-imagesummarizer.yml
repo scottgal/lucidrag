@@ -50,29 +50,29 @@ jobs:
           # Check that the tool builds and help works (basic smoke test)
           timeout 5s dotnet run --project src/Mostlylucid.ImageSummarizer.Cli/Mostlylucid.ImageSummarizer.Cli.csproj --configuration Release --no-build -- --help > /dev/null || true
 
-  build:
+  build-cli:
     needs: test
     strategy:
       matrix:
         include:
           - os: windows-latest
             rid: win-x64
-            artifact: mostlylucid-imagesummarizer-win-x64.zip
+            artifact: mostlylucid-imagesummarizer-cli-win-x64.zip
           - os: windows-latest
             rid: win-arm64
-            artifact: mostlylucid-imagesummarizer-win-arm64.zip
+            artifact: mostlylucid-imagesummarizer-cli-win-arm64.zip
           - os: ubuntu-latest
             rid: linux-x64
-            artifact: mostlylucid-imagesummarizer-linux-x64.tar.gz
+            artifact: mostlylucid-imagesummarizer-cli-linux-x64.tar.gz
           - os: ubuntu-latest
             rid: linux-arm64
-            artifact: mostlylucid-imagesummarizer-linux-arm64.tar.gz
+            artifact: mostlylucid-imagesummarizer-cli-linux-arm64.tar.gz
           - os: macos-latest
             rid: osx-x64
-            artifact: mostlylucid-imagesummarizer-osx-x64.tar.gz
+            artifact: mostlylucid-imagesummarizer-cli-osx-x64.tar.gz
           - os: macos-latest
             rid: osx-arm64
-            artifact: mostlylucid-imagesummarizer-osx-arm64.tar.gz
+            artifact: mostlylucid-imagesummarizer-cli-osx-arm64.tar.gz
 
     runs-on: ${{ matrix.os }}
 
@@ -87,7 +87,7 @@ jobs:
       - name: Restore dependencies
         run: dotnet restore src/Mostlylucid.ImageSummarizer.Cli/Mostlylucid.ImageSummarizer.Cli.csproj
 
-      - name: Publish
+      - name: Publish CLI
         shell: bash
         run: |
           dotnet publish src/Mostlylucid.ImageSummarizer.Cli/Mostlylucid.ImageSummarizer.Cli.csproj \
@@ -97,29 +97,93 @@ jobs:
             -p:PublishSingleFile=true \
             -p:EnableCompressionInSingleFile=true \
             -p:PublishReadyToRun=true \
-            -o ./publish/${{ matrix.rid }}
+            -o ./publish/cli-${{ matrix.rid }}
 
       - name: Create archive (Windows)
         if: runner.os == 'Windows'
         run: |
-          Compress-Archive -Path ./publish/${{ matrix.rid }}/* -DestinationPath ./publish/${{ matrix.artifact }}
+          Compress-Archive -Path ./publish/cli-${{ matrix.rid }}/* -DestinationPath ./publish/${{ matrix.artifact }}
         shell: pwsh
 
       - name: Create archive (Linux/macOS)
         if: runner.os != 'Windows'
         run: |
-          cd ./publish/${{ matrix.rid }}
+          cd ./publish/cli-${{ matrix.rid }}
           tar -czvf ../${{ matrix.artifact }} *
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ matrix.rid }}
+          name: cli-${{ matrix.rid }}
+          path: ./publish/${{ matrix.artifact }}
+          retention-days: 5
+
+  build-desktop:
+    needs: test
+    strategy:
+      matrix:
+        include:
+          - os: windows-latest
+            rid: win-x64
+            artifact: mostlylucid-imagesummarizer-desktop-win-x64.zip
+          - os: windows-latest
+            rid: win-arm64
+            artifact: mostlylucid-imagesummarizer-desktop-win-arm64.zip
+          - os: ubuntu-latest
+            rid: linux-x64
+            artifact: mostlylucid-imagesummarizer-desktop-linux-x64.tar.gz
+          - os: macos-latest
+            rid: osx-x64
+            artifact: mostlylucid-imagesummarizer-desktop-osx-x64.tar.gz
+          - os: macos-latest
+            rid: osx-arm64
+            artifact: mostlylucid-imagesummarizer-desktop-osx-arm64.tar.gz
+
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Restore dependencies
+        run: dotnet restore src/Mostlylucid.ImageSummarizer.Desktop/Mostlylucid.ImageSummarizer.Desktop.csproj
+
+      - name: Publish Desktop App
+        shell: bash
+        run: |
+          dotnet publish src/Mostlylucid.ImageSummarizer.Desktop/Mostlylucid.ImageSummarizer.Desktop.csproj \
+            -c Release \
+            -r ${{ matrix.rid }} \
+            --self-contained true \
+            -p:PublishSingleFile=true \
+            -p:EnableCompressionInSingleFile=true \
+            -o ./publish/desktop-${{ matrix.rid }}
+
+      - name: Create archive (Windows)
+        if: runner.os == 'Windows'
+        run: |
+          Compress-Archive -Path ./publish/desktop-${{ matrix.rid }}/* -DestinationPath ./publish/${{ matrix.artifact }}
+        shell: pwsh
+
+      - name: Create archive (Linux/macOS)
+        if: runner.os != 'Windows'
+        run: |
+          cd ./publish/desktop-${{ matrix.rid }}
+          tar -czvf ../${{ matrix.artifact }} *
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: desktop-${{ matrix.rid }}
           path: ./publish/${{ matrix.artifact }}
           retention-days: 5
 
   release:
-    needs: build
+    needs: [build-cli, build-desktop]
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -149,83 +213,94 @@ jobs:
           body: |
             ## ImageSummarizer v${{ steps.version.outputs.version }}
 
-            Standalone OCR tool with MCP server support. Zero dependencies. Runs entirely offline.
+            Image analysis toolkit with CLI and Desktop GUI. Vision LLM captions, OCR, and MCP server.
 
-            ### Key Features
+            ### Downloads
+
+            **CLI** (Command Line) - MCP server, batch processing, scripting
+            - `mostlylucid-imagesummarizer-cli-{platform}.zip/tar.gz`
+
+            **Desktop** (Avalonia GUI) - Drag & drop, visual preview, one-click copy
+            - `mostlylucid-imagesummarizer-desktop-{platform}.zip/tar.gz`
+
+            ---
+
+            ### Desktop App Features
+            - **Drag & Drop** images or browse
+            - **Live Status** indicators (OCR, OpenCV, LLM availability)
+            - **Vision LLM** integration with Ollama (auto-detects models)
+            - **Multiple Pipelines** - caption, alttext, vision, motion, OCR
+            - **Copy to Clipboard** - one-click copy results
+            - **Shell Integration** - Windows right-click context menu
+
+            ### CLI Features
             - **MCP Integration**: Works as Claude Desktop tool
-            - **3 Pipelines**: Simple (fast) | Advanced (GIFs) | Quality (forensic)
-            - **4 Output Formats**: Text | JSON | Signals | Metrics
-            - **GIF Support**: Handles noisy animations where single-frame OCR fails
-            - **Offline**: ONNX models, no API keys
+            - **Vision LLM**: Ollama integration for AI captions
+            - **8 Pipelines**: caption | alttext | vision | motion | advancedocr | simpleocr | quality | stats
+            - **GIF Support**: Motion analysis, frame strips, temporal voting
+            - **Offline**: ONNX embeddings, Tesseract OCR, no API keys required
 
             ### Quick Start
 
+            **Desktop:**
             ```bash
-            # Download, extract, run
+            # Extract and run
+            ImageSummarizer.exe
+            # Or open with image
+            ImageSummarizer.exe "path/to/image.jpg"
+            ```
+
+            **CLI:**
+            ```bash
+            # Basic usage
             imagesummarizer screenshot.png
 
-            # Choose pipeline
-            imagesummarizer image.gif --pipeline advanced
+            # With Vision LLM
+            imagesummarizer image.jpg --llm
 
-            # Get signals for system building
-            imagesummarizer image.gif --format signals
-            # → {"content.text_likeliness": 0.82, "quality.sharpness": 2140.5, ...}
+            # Animated GIF analysis
+            imagesummarizer animation.gif --pipeline motion
             ```
 
             ### MCP Server Mode (Claude Desktop)
-
-            Run `imagesummarizer --mcp` to start MCP server mode.
 
             Add to `claude_desktop_config.json`:
             ```json
             {
               "mcpServers": {
-                "image-ocr": {
+                "image-analyzer": {
                   "command": "imagesummarizer",
                   "args": ["--mcp"],
                   "env": {
-                    "OCR_PIPELINE": "advancedocr",
-                    "OCR_LANGUAGE": "en_US"
+                    "VISION_MODEL": "minicpm-v:8b"
                   }
                 }
               }
             }
             ```
 
-            **MCP Tools Available (9 total):**
-
-            Core OCR:
+            **MCP Tools (9 total):**
             - `extract_text_from_image` - OCR with configurable pipeline
-            - `analyze_image_quality` - Fast quality metrics
-            - `list_ocr_pipelines` - Pipeline discovery
-            - `batch_extract_text` - Multi-file processing
-
-            Content Generation (NEW):
-            - `summarize_animated_gif` - Motion-aware GIF summaries
             - `generate_caption` - Accessibility captions (WCAG)
-            - `generate_detailed_description` - Comprehensive analysis
-
-            Template System (NEW):
+            - `summarize_animated_gif` - Motion-aware GIF summaries
+            - `analyze_image_quality` - Quality metrics
+            - `batch_extract_text` - Multi-file processing
             - `analyze_with_template` - 9 predefined templates
-            - `list_output_templates` - Template discovery
-
-            ### Pipelines
-
-            | Pipeline | Speed | Quality | Use Case |
-            |----------|-------|---------|----------|
-            | Simple | ⚡⚡⚡ | ⭐⭐ | Clear text, speed critical |
-            | Advanced | ⚡⚡ | ⭐⭐⭐ | GIFs, temporal voting |
-            | Quality | ⚡ | ⭐⭐⭐⭐ | Forensics, compliance |
 
             ### Platforms
-            Windows (x64/ARM64) | Linux (x64/ARM64) | macOS (x64/ARM64)
+            Windows (x64/ARM64) | Linux (x64) | macOS (x64/ARM64)
 
           draft: false
           prerelease: false
           files: |
-            ./artifacts/win-x64/*.zip
-            ./artifacts/win-arm64/*.zip
-            ./artifacts/linux-x64/*.tar.gz
-            ./artifacts/linux-arm64/*.tar.gz
-            ./artifacts/osx-x64/*.tar.gz
-            ./artifacts/osx-arm64/*.tar.gz
+            ./artifacts/cli-win-x64/*.zip
+            ./artifacts/cli-win-arm64/*.zip
+            ./artifacts/cli-linux-x64/*.tar.gz
+            ./artifacts/cli-linux-arm64/*.tar.gz
+            ./artifacts/cli-osx-x64/*.tar.gz
+            ./artifacts/cli-osx-arm64/*.tar.gz
+            ./artifacts/desktop-win-x64/*.zip
+            ./artifacts/desktop-win-arm64/*.zip
+            ./artifacts/desktop-linux-x64/*.tar.gz
+            ./artifacts/desktop-osx-x64/*.tar.gz
+            ./artifacts/desktop-osx-arm64/*.tar.gz
