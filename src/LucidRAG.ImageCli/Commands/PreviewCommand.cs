@@ -1,6 +1,8 @@
 using System.CommandLine;
 using System.CommandLine.Parsing;
 using LucidRAG.ImageCli.Services;
+using Mostlylucid.DocSummarizer.Images.Services;
+using Mostlylucid.DocSummarizer.Images.Services.Vision;
 using Spectre.Console;
 
 namespace LucidRAG.ImageCli.Commands;

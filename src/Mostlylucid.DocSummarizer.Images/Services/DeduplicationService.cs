@@ -2,7 +2,7 @@ using System.Collections.Concurrent;
 using Microsoft.Extensions.Logging;
 using Mostlylucid.DocSummarizer.Images.Services.Analysis;
 
-namespace LucidRAG.ImageCli.Services;
+namespace Mostlylucid.DocSummarizer.Images.Services;
 
 /// <summary>
 /// Service for finding duplicate and similar images using perceptual hashing.

@@ -110,8 +110,20 @@ public static class ServiceCollectionExtensions
             return new ColorWave(colorAnalyzer, streamProcessor);
         });
 
-        // OcrWave has optional parameters - can be constructed directly
-        services.AddSingleton<IAnalysisWave>(sp => new OcrWave());
+        // OcrWave - configured with threshold from OcrConfig
+        services.AddSingleton<IAnalysisWave>(sp =>
+        {
+            var imageConfig = sp.GetRequiredService<IOptions<ImageConfig>>();
+            var logger = sp.GetService<Microsoft.Extensions.Logging.ILogger<OcrWave>>();
+            // Use threshold=0 to always run OCR, or configured threshold
+            var threshold = imageConfig.Value.Ocr.TextDetectionConfidenceThreshold;
+            return new OcrWave(
+                tesseractDataPath: null, // Uses default ./tessdata
+                language: "eng",
+                enabled: imageConfig.Value.EnableOcr,
+                textLikelinessThreshold: threshold,
+                logger: logger);
+        });
 
         // AdvancedOcrWave requires IOcrEngine and IOptions<ImageConfig>
         services.AddSingleton<IAnalysisWave>(sp =>

@@ -5,7 +5,7 @@ using System.Text.Json.Serialization;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 
-namespace LucidRAG.ImageCli.Services;
+namespace Mostlylucid.DocSummarizer.Images.Services.Vision;
 
 /// <summary>
 /// Service for interacting with Ollama vision LLMs (MiniCPM-V 2.6 recommended).

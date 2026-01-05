@@ -11,11 +11,18 @@
     <PackAsTool>true</PackAsTool>
     <ToolCommandName>imagesummarizer</ToolCommandName>
     <PackageId>Mostlylucid.ImageSummarizer.Cli</PackageId>
-    <Description>Standalone image analysis and OCR CLI tool with MCP server support. Part of the LucidRAG Summarizer family.</Description>
+    <Description>Image Intelligence - Heuristic analysis + Vision LLM escalation. Part of the LucidRAG DocSummarizer family.</Description>
     <Authors>Scott Galloway</Authors>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <RootNamespace>Mostlylucid.ImageSummarizer.Cli</RootNamespace>
     <AssemblyName>imagesummarizer</AssemblyName>
+
+    <!-- Single-file publish settings -->
+    <PublishSingleFile>true</PublishSingleFile>
+    <SelfContained>true</SelfContained>
+    <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
+    <IncludeAllContentForSelfExtract>true</IncludeAllContentForSelfExtract>
+    <EnableCompressionInSingleFile>true</EnableCompressionInSingleFile>
   </PropertyGroup>
 
   <ItemGroup>
@@ -25,6 +32,7 @@
     <PackageReference Include="Microsoft.Extensions.Logging.Console" Version="10.0.1" />
     <PackageReference Include="ModelContextProtocol" Version="0.2.0-preview.1" />
     <PackageReference Include="SixLabors.ImageSharp" Version="3.1.12" />
+    <PackageReference Include="Spectre.Console" Version="0.54.0" />
   </ItemGroup>
 
   <ItemGroup>

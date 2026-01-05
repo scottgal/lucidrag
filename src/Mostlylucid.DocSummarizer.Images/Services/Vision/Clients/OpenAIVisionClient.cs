@@ -4,7 +4,7 @@ using System.Text.Json.Serialization;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 
-namespace LucidRAG.ImageCli.Services.VisionClients;
+namespace Mostlylucid.DocSummarizer.Images.Services.Vision.Clients;
 
 /// <summary>
 /// OpenAI GPT-4 Vision client for image analysis

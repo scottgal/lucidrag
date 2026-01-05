@@ -1,8 +1,8 @@
-using LucidRAG.ImageCli.Services.VisionClients;
+using Mostlylucid.DocSummarizer.Images.Services.Vision.Clients;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 
-namespace LucidRAG.ImageCli.Services;
+namespace Mostlylucid.DocSummarizer.Images.Services.Vision;
 
 /// <summary>
 /// Unified vision service that supports multiple providers (Ollama, Anthropic, OpenAI)

@@ -8,6 +8,13 @@ namespace Mostlylucid.RAG.Config;
 public enum VectorStoreBackend
 {
     /// <summary>
+    /// DuckDB embedded database - persistent storage, file-based, no external server required.
+    /// Best for: Development, standalone deployments, local storage with persistence.
+    /// Default option for embedded scenarios.
+    /// </summary>
+    DuckDB,
+
+    /// <summary>
     /// Qdrant vector database - requires external Qdrant server.
     /// Best for: production deployments, multi-vector embeddings, hybrid search.
     /// Supports advanced features: named vectors, filtering, batch operations.
@@ -28,9 +35,9 @@ public class SemanticSearchConfig : IConfigSection
     public bool Enabled { get; set; } = true;
 
     /// <summary>
-    /// Vector store backend: Qdrant (requires external server)
+    /// Vector store backend: DuckDB (default, embedded) or Qdrant (requires external server)
     /// </summary>
-    public VectorStoreBackend Backend { get; set; } = VectorStoreBackend.Qdrant;
+    public VectorStoreBackend Backend { get; set; } = VectorStoreBackend.DuckDB;
 
     /// <summary>
     /// Qdrant server URL (e.g., http://localhost:6333)

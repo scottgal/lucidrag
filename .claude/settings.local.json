@@ -66,7 +66,15 @@
       "Bash(dotnet nuget search:*)",
       "Bash(timeout 3 dotnet run:*)",
       "Bash(git mv:*)",
-      "Bash(timeout 2 dotnet run:*)"
+      "Bash(timeout 2 dotnet run:*)",
+      "WebFetch(domain:github.com)",
+      "Bash(dotnet list:*)",
+      "Bash(git --no-pager diff --stat src/Mostlylucid.ImageSummarizer.Cli/Program.cs src/Mostlylucid.DocSummarizer.Images/Models/Dynamic/ImageLedger.cs src/Mostlylucid.ImageSummarizer.Cli/Mostlylucid.ImageSummarizer.Cli.csproj)",
+      "Bash(claude-code tasks)",
+      "Bash(claude-code:*)",
+      "Bash(Select-String -Pattern \"ocr\")",
+      "Bash(Select-String -Pattern \"Vision|Caption|llm\")",
+      "Bash(Select-Object -First 10)"
     ]
   }
 }

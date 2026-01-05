@@ -1,10 +1,14 @@
 using System.CommandLine;
 using System.CommandLine.Parsing;
 using LucidRAG.ImageCli.Services;
+using Mostlylucid.DocSummarizer.Images.Services;
+using Mostlylucid.DocSummarizer.Images.Services.Vision;
 using LucidRAG.ImageCli.Services.OutputFormatters;
 using Microsoft.Extensions.Configuration;
 using Mostlylucid.DocSummarizer.Images.Models;
 using Spectre.Console;
+using EscalationResult = Mostlylucid.DocSummarizer.Images.Services.EscalationResult;
+using ImageFilter = Mostlylucid.DocSummarizer.Images.Services.Vision.ImageFilter;
 
 namespace LucidRAG.ImageCli.Commands;
 

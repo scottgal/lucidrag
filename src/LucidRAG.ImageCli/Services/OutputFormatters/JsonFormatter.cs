@@ -1,7 +1,7 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Mostlylucid.DocSummarizer.Images.Models;
-using LucidRAG.ImageCli.Services.VisionClients;
+using Mostlylucid.DocSummarizer.Images.Services.Vision.Clients;
 
 namespace LucidRAG.ImageCli.Services.OutputFormatters;
 

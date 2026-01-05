@@ -193,6 +193,55 @@
       ]
     },
     {
+      "name": "stats",
+      "displayName": "Image Statistics",
+      "description": "Fast image analysis - dimensions, colors, sharpness, type detection without OCR or LLM",
+      "category": "speed",
+      "estimatedDurationSeconds": 0.3,
+      "isDefault": false,
+      "tags": ["fast", "stats", "metrics"],
+      "globalSettings": {
+        "maxTotalDurationMs": 1000,
+        "enableParallelization": false
+      },
+      "phases": [
+        {
+          "id": "color-analysis",
+          "name": "Color Analysis",
+          "description": "Analyze color distribution, dominant colors, and visual characteristics",
+          "enabled": true,
+          "priority": 100,
+          "waveType": "ColorWave",
+          "tags": ["color", "metrics"]
+        }
+      ]
+    },
+    {
+      "name": "caption",
+      "displayName": "Vision Caption",
+      "description": "Generate rich caption using vision LLM with evidence-backed claims",
+      "category": "quality",
+      "estimatedDurationSeconds": 5.0,
+      "isDefault": false,
+      "tags": ["caption", "llm", "description"],
+      "globalSettings": {
+        "maxTotalDurationMs": 15000,
+        "enableParallelization": true,
+        "forceEscalation": true
+      },
+      "phases": [
+        {
+          "id": "color-analysis",
+          "name": "Color Analysis",
+          "description": "Analyze color distribution for LLM context",
+          "enabled": true,
+          "priority": 100,
+          "waveType": "ColorWave",
+          "tags": ["preprocessing"]
+        }
+      ]
+    },
+    {
       "name": "alttext",
       "displayName": "Alt Text Generation",
       "description": "Generate comprehensive alt text for images combining OCR, vision analysis, and image characterization",

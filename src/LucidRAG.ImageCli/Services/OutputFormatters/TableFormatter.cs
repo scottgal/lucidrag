@@ -1,5 +1,5 @@
 using Mostlylucid.DocSummarizer.Images.Models;
-using LucidRAG.ImageCli.Services.VisionClients;
+using Mostlylucid.DocSummarizer.Images.Services.Vision.Clients;
 using Spectre.Console;
 
 namespace LucidRAG.ImageCli.Services.OutputFormatters;
@@ -45,11 +45,11 @@ public class TableFormatter : IOutputFormatter
                         profile.TextLikeliness > 0.2 ? "Medium" : "Low";
         table.AddRow("Text Likeliness", $"{profile.TextLikeliness:F3} ([yellow]{textLikely}[/])");
 
-        // Color analysis
+        // Color analysis - include hex to distinguish same-name colors
         if (profile.DominantColors?.Any() == true)
         {
             var colors = string.Join(", ", profile.DominantColors.Take(3)
-                .Select(c => $"{c.Name} ({c.Percentage:F1}%)"));
+                .Select(c => $"{c.Name} [dim]{c.Hex}[/] ({c.Percentage:F1}%)"));
             table.AddRow("Dominant Colors", colors);
         }
 

@@ -11,6 +11,7 @@ using Mostlylucid.DocSummarizer.Images.Services.Analysis;
 using Mostlylucid.DocSummarizer.Images.Models.Dynamic;
 using Mostlylucid.DocSummarizer.Images.Services.Pipelines;
 using SixLabors.ImageSharp.Processing;
+using Spectre.Console;
 
 namespace Mostlylucid.ImageSummarizer.Cli;
 
@@ -30,27 +31,21 @@ class Program
             return 0;
         }
 
-        // Interactive mode when no arguments provided
-        if (args.Length == 0)
-        {
-            return await InteractiveMode();
-        }
+        var rootCommand = new RootCommand("Image Intelligence - Heuristic analysis + Vision LLM escalation");
 
-        var rootCommand = new RootCommand("Image OCR and Analysis CLI - Extract text and analyze images");
-
-        // Arguments
-        var imageArg = new Argument<string>("image", "Path to image file (all ImageSharp formats: JPEG, PNG, GIF, BMP, TIFF, TGA, WebP, PBM)");
+        // Arguments - image is optional now (if not provided, enters interactive mode)
+        var imageArg = new Argument<string?>("image", () => null, "Path to image file (all ImageSharp formats: JPEG, PNG, GIF, BMP, TIFF, TGA, WebP, PBM). If not provided, enters interactive mode.");
 
         // Options
         var pipelineOpt = new Option<string>(
             "--pipeline",
             getDefaultValue: () => "advancedocr",
-            description: "Pipeline to use: advancedocr, simpleocr, quality");
+            description: "Pipeline: advancedocr, simpleocr, quality, stats, caption, alttext");
 
         var outputOpt = new Option<string>(
             "--output",
-            getDefaultValue: () => "text",
-            description: "Output format: text, json, signals, metrics");
+            getDefaultValue: () => "auto",
+            description: "Output: auto (pipeline default), text, json, signals, metrics, caption, alttext, markdown");
 
         var languageOpt = new Option<string>(
             "--language",
@@ -61,6 +56,22 @@ class Program
             "--verbose",
             getDefaultValue: () => false,
             description: "Enable verbose logging");
+
+        // Vision LLM options
+        var llmOpt = new Option<bool?>(
+            "--llm",
+            getDefaultValue: () => null,
+            description: "Enable/disable Vision LLM (default: auto-detect Ollama)");
+
+        var modelOpt = new Option<string?>(
+            "--model",
+            getDefaultValue: () => null,
+            description: "Vision LLM model (default: minicpm-v:8b, or $VISION_MODEL)");
+
+        var ollamaOpt = new Option<string?>(
+            "--ollama",
+            getDefaultValue: () => null,
+            description: "Ollama base URL (default: http://localhost:11434, or $OLLAMA_BASE_URL)");
 
         // Add list-pipelines command
         var listCmd = new Command("list-pipelines", "List all available OCR pipelines");
@@ -74,107 +85,265 @@ class Program
         rootCommand.AddOption(outputOpt);
         rootCommand.AddOption(languageOpt);
         rootCommand.AddOption(verboseOpt);
+        rootCommand.AddOption(llmOpt);
+        rootCommand.AddOption(modelOpt);
+        rootCommand.AddOption(ollamaOpt);
         rootCommand.AddCommand(listCmd);
 
-        rootCommand.SetHandler(async (string imagePath, string pipeline, string output, string language, bool verbose) =>
+        rootCommand.SetHandler(async (string? imagePath, string pipeline, string output, string language, bool verbose, bool? llm, string? model, string? ollama) =>
         {
-            await ProcessImage(imagePath, pipeline, output, language, verbose);
-        }, imageArg, pipelineOpt, outputOpt, languageOpt, verboseOpt);
+            // If no image provided, enter interactive mode with the configured options
+            if (string.IsNullOrWhiteSpace(imagePath))
+            {
+                await InteractiveMode(pipeline, output, language, verbose, llm, model, ollama);
+            }
+            else
+            {
+                await ProcessImage(imagePath, pipeline, output, language, verbose, llm, model, ollama);
+            }
+        }, imageArg, pipelineOpt, outputOpt, languageOpt, verboseOpt, llmOpt, modelOpt, ollamaOpt);
 
         return await rootCommand.InvokeAsync(args);
     }
 
-    static async Task<int> InteractiveMode()
+    static async Task<int> InteractiveMode(
+        string pipeline = "advancedocr",
+        string output = "text",
+        string language = "en_US",
+        bool verbose = false,
+        bool? llm = null,
+        string? model = null,
+        string? ollama = null)
     {
-        // Banner
-        Console.ForegroundColor = ConsoleColor.Cyan;
-        Console.WriteLine(@"
-╔═══════════════════════════════════════════════════════════╗
-║                   ImageCli - OCR Tool                     ║
-║         Advanced multi-frame OCR with spell-check         ║
-╚═══════════════════════════════════════════════════════════╝
-");
-        Console.ResetColor();
+        // Resolve LLM settings from args > env > defaults
+        var ollamaUrl = ollama ?? Environment.GetEnvironmentVariable("OLLAMA_BASE_URL") ?? "http://localhost:11434";
+        var visionModel = model ?? Environment.GetEnvironmentVariable("VISION_MODEL") ?? "minicpm-v:8b";
+        var enableLlm = llm ?? true; // Default enabled, auto-detect will handle availability
 
-        // Prompt for image path
-        Console.Write("📁 Enter image path (or drag & drop file): ");
-        var imagePath = Console.ReadLine()?.Trim().Trim('"') ?? "";
+        // Banner with Spectre.Console
+        var figlet = new Spectre.Console.FigletText("ImageSummarizer");
+        figlet.Color = Spectre.Console.Color.Cyan1;
+        Spectre.Console.AnsiConsole.Write(figlet);
 
-        if (string.IsNullOrWhiteSpace(imagePath))
+        Spectre.Console.AnsiConsole.MarkupLine("[cyan1]Image Intelligence[/] [dim]• Vision AI • Motion • Signals • Color • Quality[/]");
+        Spectre.Console.AnsiConsole.MarkupLine("[dim]Part of the LucidRAG DocSummarizer family[/]");
+        Spectre.Console.AnsiConsole.WriteLine();
+
+        // Show current settings
+        ShowSettings(pipeline, output, language, verbose, enableLlm, visionModel, ollamaUrl);
+        ShowCommands();
+
+        // Interactive loop
+        while (true)
         {
-            Console.ForegroundColor = ConsoleColor.Red;
-            Console.WriteLine("❌ No image path provided");
-            Console.ResetColor();
-            return 1;
+            Spectre.Console.AnsiConsole.Markup("[cyan]>[/] ");
+            var input = Console.ReadLine()?.Trim() ?? "";
+
+            if (string.IsNullOrWhiteSpace(input))
+                continue;
+
+            // Handle slash commands
+            if (input.StartsWith("/"))
+            {
+                var parts = input.Split(' ', 2, StringSplitOptions.RemoveEmptyEntries);
+                var cmd = parts[0].ToLowerInvariant();
+                var arg = parts.Length > 1 ? parts[1].Trim() : null;
+
+                switch (cmd)
+                {
+                    case "/quit" or "/exit" or "/q":
+                        Spectre.Console.AnsiConsole.MarkupLine("[dim]Goodbye![/]");
+                        return 0;
+
+                    case "/help" or "/?":
+                        ShowCommands();
+                        continue;
+
+                    case "/settings":
+                        ShowSettings(pipeline, output, language, verbose);
+                        continue;
+
+                    case "/pipeline":
+                        if (arg == null)
+                        {
+                            Spectre.Console.AnsiConsole.MarkupLine($"[dim]Current pipeline:[/] [cyan]{pipeline}[/]");
+                            Spectre.Console.AnsiConsole.MarkupLine("[dim]Available: advancedocr, simpleocr, quality, stats, caption, alttext[/]");
+                        }
+                        else if (arg is "advancedocr" or "simpleocr" or "quality" or "stats" or "caption" or "alttext")
+                        {
+                            pipeline = arg;
+                            Spectre.Console.AnsiConsole.MarkupLine($"[green]✓[/] Pipeline set to [cyan]{pipeline}[/]");
+                            // Auto-set output format for specialized pipelines
+                            if (arg == "stats" && output == "auto") output = "metrics";
+                            if (arg == "caption" && output == "auto") output = "caption";
+                            if (arg == "alttext" && output == "auto") output = "alttext";
+                        }
+                        else
+                        {
+                            Spectre.Console.AnsiConsole.MarkupLine($"[red]✗[/] Unknown pipeline: {arg}. Use: advancedocr, simpleocr, quality, stats, caption, alttext");
+                        }
+                        continue;
+
+                    case "/output":
+                        if (arg == null)
+                        {
+                            Spectre.Console.AnsiConsole.MarkupLine($"[dim]Current output:[/] [cyan]{output}[/]");
+                            Spectre.Console.AnsiConsole.MarkupLine("[dim]Available: auto, text, json, signals, metrics, caption, alttext, markdown[/]");
+                        }
+                        else if (arg is "auto" or "text" or "json" or "signals" or "metrics" or "caption" or "alttext" or "markdown")
+                        {
+                            output = arg;
+                            Spectre.Console.AnsiConsole.MarkupLine($"[green]✓[/] Output set to [cyan]{output}[/]");
+                        }
+                        else
+                        {
+                            Spectre.Console.AnsiConsole.MarkupLine($"[red]✗[/] Unknown output format: {arg}. Use: auto, text, json, signals, metrics, caption, alttext, markdown");
+                        }
+                        continue;
+
+                    case "/language" or "/lang":
+                        if (arg == null)
+                        {
+                            Spectre.Console.AnsiConsole.MarkupLine($"[dim]Current language:[/] [cyan]{language}[/]");
+                        }
+                        else
+                        {
+                            language = arg;
+                            Spectre.Console.AnsiConsole.MarkupLine($"[green]✓[/] Language set to [cyan]{language}[/]");
+                        }
+                        continue;
+
+                    case "/verbose":
+                        if (arg == null)
+                        {
+                            verbose = !verbose;
+                        }
+                        else
+                        {
+                            verbose = arg.ToLowerInvariant() is "on" or "true" or "1" or "yes";
+                        }
+                        Spectre.Console.AnsiConsole.MarkupLine($"[green]✓[/] Verbose mode: [cyan]{(verbose ? "on" : "off")}[/]");
+                        continue;
+
+                    case "/llm":
+                        if (arg == null)
+                        {
+                            enableLlm = !enableLlm;
+                        }
+                        else
+                        {
+                            enableLlm = arg.ToLowerInvariant() is "on" or "true" or "1" or "yes";
+                        }
+                        Spectre.Console.AnsiConsole.MarkupLine($"[green]✓[/] Vision LLM: [cyan]{(enableLlm ? "enabled" : "disabled")}[/]");
+                        continue;
+
+                    case "/model":
+                        if (arg == null)
+                        {
+                            Spectre.Console.AnsiConsole.MarkupLine($"[dim]Current model:[/] [cyan]{visionModel}[/]");
+                            Spectre.Console.AnsiConsole.MarkupLine("[dim]Use /models to list available Ollama models[/]");
+                        }
+                        else
+                        {
+                            visionModel = arg;
+                            Spectre.Console.AnsiConsole.MarkupLine($"[green]✓[/] Vision model set to [cyan]{visionModel}[/]");
+                        }
+                        continue;
+
+                    case "/ollama":
+                        if (arg == null)
+                        {
+                            Spectre.Console.AnsiConsole.MarkupLine($"[dim]Current Ollama URL:[/] [cyan]{ollamaUrl}[/]");
+                        }
+                        else
+                        {
+                            ollamaUrl = arg;
+                            Spectre.Console.AnsiConsole.MarkupLine($"[green]✓[/] Ollama URL set to [cyan]{ollamaUrl}[/]");
+                        }
+                        continue;
+
+                    case "/models":
+                        await ListOllamaModels(ollamaUrl);
+                        continue;
+
+                    default:
+                        Spectre.Console.AnsiConsole.MarkupLine($"[red]✗[/] Unknown command: {cmd}. Type /help for available commands.");
+                        continue;
+                }
+            }
+
+            // Treat as image path
+            var imagePath = input.Trim('"');
+
+            if (!File.Exists(imagePath))
+            {
+                Spectre.Console.AnsiConsole.MarkupLine($"[red]✗[/] File not found: {Spectre.Console.Markup.Escape(imagePath)}");
+                continue;
+            }
+
+            // Process the image
+            await ProcessImage(imagePath, pipeline, output, language, verbose, enableLlm, visionModel, ollamaUrl);
+            Spectre.Console.AnsiConsole.WriteLine();
         }
+    }
 
-        if (!File.Exists(imagePath))
-        {
-            Console.ForegroundColor = ConsoleColor.Red;
-            Console.WriteLine($"❌ File not found: {imagePath}");
-            Console.ResetColor();
-            return 1;
-        }
+    static void ShowSettings(string pipeline, string output, string language, bool verbose, bool enableLlm = true, string visionModel = "minicpm-v:8b", string ollamaUrl = "http://localhost:11434")
+    {
+        Spectre.Console.AnsiConsole.MarkupLine("[dim]Current settings:[/]");
+        Spectre.Console.AnsiConsole.MarkupLine($"  [dim]pipeline:[/]  [cyan]{pipeline}[/]");
+        Spectre.Console.AnsiConsole.MarkupLine($"  [dim]output:[/]    [cyan]{output}[/]");
+        Spectre.Console.AnsiConsole.MarkupLine($"  [dim]language:[/]  [cyan]{language}[/]");
+        Spectre.Console.AnsiConsole.MarkupLine($"  [dim]verbose:[/]   [cyan]{(verbose ? "on" : "off")}[/]");
+        Spectre.Console.AnsiConsole.MarkupLine($"  [dim]llm:[/]       [cyan]{(enableLlm ? "enabled" : "disabled")}[/]");
+        Spectre.Console.AnsiConsole.MarkupLine($"  [dim]model:[/]     [cyan]{visionModel}[/]");
+        Spectre.Console.AnsiConsole.MarkupLine($"  [dim]ollama:[/]    [cyan]{ollamaUrl}[/]");
+        Spectre.Console.AnsiConsole.WriteLine();
+    }
 
-        // Setup DI
-        var services = new ServiceCollection();
-        services.AddDocSummarizerImages(opt =>
-        {
-            opt.EnableOcr = true;
-            opt.Ocr.UseAdvancedPipeline = true;
-            opt.Ocr.QualityMode = OcrQualityMode.Fast;
-            opt.Ocr.TextDetectionConfidenceThreshold = 0;
-            opt.Ocr.EnableStabilization = true;
-            opt.Ocr.EnableTemporalMedian = true;
-            opt.Ocr.EnableTemporalVoting = true;
-            opt.Ocr.EnableSpellChecking = true;
-            opt.Ocr.SpellCheckLanguage = "en_US";
+    static void ShowCommands()
+    {
+        Spectre.Console.AnsiConsole.MarkupLine("[dim]Commands:[/]");
+        Spectre.Console.AnsiConsole.MarkupLine("  [cyan]/pipeline[/] [dim]<name>[/]    Set pipeline:");
+        Spectre.Console.AnsiConsole.MarkupLine("                         advancedocr, simpleocr, quality, stats, caption, alttext");
+        Spectre.Console.AnsiConsole.MarkupLine("  [cyan]/output[/] [dim]<format>[/]    Set output format:");
+        Spectre.Console.AnsiConsole.MarkupLine("                         auto, text, json, signals, metrics, caption, alttext, markdown");
+        Spectre.Console.AnsiConsole.MarkupLine("  [cyan]/language[/] [dim]<code>[/]    Set spell-check language (e.g., en_US)");
+        Spectre.Console.AnsiConsole.MarkupLine("  [cyan]/verbose[/] [dim][on|off][/]   Toggle verbose logging");
+        Spectre.Console.AnsiConsole.MarkupLine("  [cyan]/settings[/]            Show current settings");
+        Spectre.Console.AnsiConsole.MarkupLine("  [cyan]/quit[/]                Exit");
+        Spectre.Console.AnsiConsole.WriteLine();
 
-            // Enable Vision LLM for Tier 3 Sentinel correction
-            opt.EnableVisionLlm = true;
-            opt.VisionLlmModel = "minicpm-v:8b";
-            opt.OllamaBaseUrl = "http://localhost:11434";
-        });
+        Spectre.Console.AnsiConsole.MarkupLine("[cyan]Pipelines:[/]");
+        Spectre.Console.AnsiConsole.MarkupLine("  [yellow]stats[/]       Fast metrics only - dimensions, colors, sharpness, type");
+        Spectre.Console.AnsiConsole.MarkupLine("  [yellow]simpleocr[/]   Baseline OCR - fastest, lower accuracy");
+        Spectre.Console.AnsiConsole.MarkupLine("  [yellow]advancedocr[/] Multi-frame OCR with voting [dim](default)[/]");
+        Spectre.Console.AnsiConsole.MarkupLine("  [yellow]quality[/]     Maximum OCR accuracy - slower");
+        Spectre.Console.AnsiConsole.MarkupLine("  [yellow]caption[/]     Vision LLM caption with evidence claims");
+        Spectre.Console.AnsiConsole.MarkupLine("  [yellow]alttext[/]     Accessibility-focused alt text generation");
+        Spectre.Console.AnsiConsole.WriteLine();
 
-        var provider = services.BuildServiceProvider();
-        var orchestrator = provider.GetRequiredService<WaveOrchestrator>();
+        Spectre.Console.AnsiConsole.MarkupLine("[dim]Examples:[/]");
+        Spectre.Console.AnsiConsole.MarkupLine("  [dim]# Quick stats for batch processing[/]");
+        Spectre.Console.AnsiConsole.MarkupLine("  imagesummarizer photo.jpg --pipeline stats");
+        Spectre.Console.AnsiConsole.WriteLine();
+        Spectre.Console.AnsiConsole.MarkupLine("  [dim]# Generate LLM caption with evidence[/]");
+        Spectre.Console.AnsiConsole.MarkupLine("  imagesummarizer photo.jpg --pipeline caption");
+        Spectre.Console.AnsiConsole.WriteLine();
+        Spectre.Console.AnsiConsole.MarkupLine("  [dim]# Generate accessibility alt text[/]");
+        Spectre.Console.AnsiConsole.MarkupLine("  imagesummarizer photo.jpg --pipeline alttext");
+        Spectre.Console.AnsiConsole.WriteLine();
+        Spectre.Console.AnsiConsole.MarkupLine("  [dim]# Extract text from screenshot as markdown[/]");
+        Spectre.Console.AnsiConsole.MarkupLine("  imagesummarizer screenshot.png --output markdown");
+        Spectre.Console.AnsiConsole.WriteLine();
+        Spectre.Console.AnsiConsole.MarkupLine("  [dim]# Full JSON output for integration[/]");
+        Spectre.Console.AnsiConsole.MarkupLine("  imagesummarizer image.png --output json");
+        Spectre.Console.AnsiConsole.WriteLine();
+        Spectre.Console.AnsiConsole.MarkupLine("  [dim]# Start MCP server for Claude Desktop[/]");
+        Spectre.Console.AnsiConsole.MarkupLine("  imagesummarizer --mcp");
+        Spectre.Console.AnsiConsole.WriteLine();
 
-        Console.WriteLine();
-        Console.ForegroundColor = ConsoleColor.Yellow;
-        Console.Write("⏳ Analyzing image");
-        Console.ResetColor();
-
-        // Animate while processing
-        var cts = new CancellationTokenSource();
-        var animationTask = Task.Run(() => AnimateSpinner(cts.Token));
-
-        try
-        {
-            var profile = await orchestrator.AnalyzeAsync(imagePath);
-            cts.Cancel();
-            await animationTask;
-
-            Console.WriteLine(" ✓");
-            Console.WriteLine();
-
-            // Show ASCII preview
-            ShowAsciiPreview(imagePath);
-
-            // Show analysis results
-            ShowInteractiveResults(profile);
-
-            return 0;
-        }
-        catch (Exception ex)
-        {
-            cts.Cancel();
-            await animationTask;
-            Console.WriteLine();
-            Console.ForegroundColor = ConsoleColor.Red;
-            Console.WriteLine($"❌ Error: {ex.Message}");
-            Console.ResetColor();
-            return 1;
-        }
+        Spectre.Console.AnsiConsole.MarkupLine("[dim]Enter an image path to analyze, or drag & drop a file.[/]");
+        Spectre.Console.AnsiConsole.WriteLine();
     }
 
     static void AnimateSpinner(CancellationToken ct)
@@ -202,42 +371,25 @@ class Program
 
             image.Mutate(x => x.Resize(targetWidth, targetHeight));
 
-            Console.ForegroundColor = ConsoleColor.Gray;
-            Console.WriteLine("┌" + new string('─', targetWidth + 2) + "┐");
+            // Pixel-art style colored preview using Spectre.Console
+            var canvas = new Spectre.Console.Canvas(targetWidth, targetHeight);
 
             for (int y = 0; y < image.Height; y++)
             {
-                Console.Write("│ ");
                 for (int x = 0; x < image.Width; x++)
                 {
                     var pixel = image[x, y];
-                    var brightness = (pixel.R + pixel.G + pixel.B) / 3;
 
-                    // ASCII gradient
-                    var asciiChar = brightness switch
-                    {
-                        >= 230 => ' ',
-                        >= 200 => '.',
-                        >= 180 => '·',
-                        >= 160 => ':',
-                        >= 140 => '-',
-                        >= 120 => '=',
-                        >= 100 => '+',
-                        >= 80 => '*',
-                        >= 60 => '#',
-                        >= 40 => '%',
-                        >= 20 => '@',
-                        _ => '█'
-                    };
+                    // Convert RGB to Spectre.Console.Color
+                    var color = new Spectre.Console.Color(pixel.R, pixel.G, pixel.B);
 
-                    Console.Write(asciiChar);
+                    // Use block characters for pixel-art effect
+                    canvas.SetPixel(x, y, color);
                 }
-                Console.WriteLine(" │");
             }
 
-            Console.WriteLine("└" + new string('─', targetWidth + 2) + "┘");
-            Console.ResetColor();
-            Console.WriteLine();
+            Spectre.Console.AnsiConsole.Write(canvas);
+            Spectre.Console.AnsiConsole.WriteLine();
         }
         catch
         {
@@ -250,26 +402,27 @@ class Program
         // Get ledger for structured view
         var ledger = profile.GetLedger();
 
-        // Image info
-        Console.ForegroundColor = ConsoleColor.Cyan;
-        Console.WriteLine("📊 Analysis Results");
-        Console.WriteLine("═══════════════════════════════════════════════════════════");
-        Console.ResetColor();
+        Spectre.Console.AnsiConsole.WriteLine();
+        Spectre.Console.AnsiConsole.Write(
+            new Spectre.Console.Rule("[cyan]📊 Analysis Results[/]"));
+        Spectre.Console.AnsiConsole.WriteLine();
 
-        Console.WriteLine($"📁 Image: {Path.GetFileName(profile.ImagePath)}");
-        Console.WriteLine($"⏱️  Duration: {profile.AnalysisDurationMs}ms");
-        Console.WriteLine($"🌊 Waves: {string.Join(", ", profile.ContributingWaves)}");
-        Console.WriteLine($"📡 Signals: {profile.GetAllSignals().Count()}");
-        Console.WriteLine();
+        // Key metrics
+        Spectre.Console.AnsiConsole.MarkupLine($"[dim]Image:[/] [white]{Spectre.Console.Markup.Escape(Path.GetFileName(profile.ImagePath) ?? "")}[/]");
+        Spectre.Console.AnsiConsole.MarkupLine($"[dim]Duration:[/] [yellow]{profile.AnalysisDurationMs}ms[/]");
+        Spectre.Console.AnsiConsole.MarkupLine($"[dim]Waves:[/] [cyan]{profile.ContributingWaves.Count}[/] executed");
+        Spectre.Console.AnsiConsole.MarkupLine($"[dim]Signals:[/] [green]{profile.GetAllSignals().Count()}[/] captured");
+        Spectre.Console.AnsiConsole.WriteLine();
 
         // Show ledger summary
-        Console.ForegroundColor = ConsoleColor.Cyan;
-        Console.WriteLine("📋 Image Ledger (Salient Features):");
-        Console.ResetColor();
-        Console.ForegroundColor = ConsoleColor.Gray;
-        Console.WriteLine(ledger.ToLlmSummary());
-        Console.ResetColor();
-        Console.WriteLine();
+        Spectre.Console.AnsiConsole.Write(new Spectre.Console.Rule("[cyan]📋 Image Intelligence Ledger[/]"));
+        Spectre.Console.AnsiConsole.WriteLine();
+        Spectre.Console.AnsiConsole.MarkupLine($"[dim]{Spectre.Console.Markup.Escape(ledger.ToLlmSummary())}[/]");
+        Spectre.Console.AnsiConsole.WriteLine();
+
+        // Show signal breakdown table
+        ShowSignalBreakdown(profile);
+        Spectre.Console.AnsiConsole.WriteLine();
 
         // Extracted text
         var text = ledger.Text.ExtractedText;
@@ -348,6 +501,11 @@ class Program
             Environment.Exit(1);
         }
 
+        // Resolve 'auto' output format based on pipeline
+        var resolvedOutput = outputFormat.ToLowerInvariant() == "auto"
+            ? GetDefaultOutputForPipeline(pipeline)
+            : outputFormat.ToLowerInvariant();
+
         // Setup DI
         var services = new ServiceCollection();
 
@@ -361,19 +519,27 @@ class Program
             });
         }
 
+        // All features enabled by default - detect what's available
+        var ollamaUrl = Environment.GetEnvironmentVariable("OLLAMA_BASE_URL") ?? "http://localhost:11434";
+        var visionModel = Environment.GetEnvironmentVariable("VISION_MODEL") ?? "minicpm-v:8b";
+
+        // For stats pipeline, keep it fast (no LLM); for others enable all features
+        var enableLlm = pipeline != "stats";
+
         // Configure image analysis based on pipeline
         services.AddDocSummarizerImages(opt =>
         {
-            opt.EnableOcr = true;
+            // OCR is disabled for stats pipeline, enabled for others
+            opt.EnableOcr = pipeline != "stats";
             opt.Ocr.SpellCheckLanguage = language;
             opt.Ocr.PipelineName = pipeline; // Use JSON-configured pipeline
             opt.Ocr.UseAdvancedPipeline = true; // Enable advanced pipeline system
             opt.Ocr.TextDetectionConfidenceThreshold = 0; // Always run (controlled by pipeline config)
 
-            // Enable Vision LLM for Tier 3 Sentinel correction
-            opt.EnableVisionLlm = true;
-            opt.VisionLlmModel = "minicpm-v:8b";
-            opt.OllamaBaseUrl = "http://localhost:11434";
+            // Enable Vision LLM by default for non-stats pipelines
+            opt.EnableVisionLlm = enableLlm;
+            opt.VisionLlmModel = visionModel;
+            opt.OllamaBaseUrl = ollamaUrl;
         });
 
         var provider = services.BuildServiceProvider();
@@ -384,11 +550,29 @@ class Program
             // Analyze image
             var profile = await orchestrator.AnalyzeAsync(imagePath);
 
+            // For caption/alttext pipelines, always escalate to LLM
+            // For others, escalate if auto-escalation conditions are met
+            string? llmCaption = null;
+            if (enableLlm)
+            {
+                var escalationService = provider.GetService<Mostlylucid.DocSummarizer.Images.Services.EscalationService>();
+                if (escalationService != null)
+                {
+                    // Force escalation for caption/alttext, auto-escalate for others
+                    var forceEscalate = pipeline is "caption" or "alttext";
+                    var result = await escalationService.AnalyzeWithEscalationAsync(
+                        imagePath,
+                        forceEscalate: forceEscalate,
+                        enableOcr: pipeline != "stats");
+                    llmCaption = result.LlmCaption;
+                }
+            }
+
             // Output results
-            switch (outputFormat.ToLowerInvariant())
+            switch (resolvedOutput)
             {
                 case "json":
-                    OutputJson(profile);
+                    OutputJson(profile, llmCaption);
                     break;
 
                 case "signals":
@@ -397,6 +581,18 @@ class Program
 
                 case "metrics":
                     OutputMetrics(profile);
+                    break;
+
+                case "caption":
+                    OutputCaption(profile, llmCaption);
+                    break;
+
+                case "alttext":
+                    OutputAltText(profile, llmCaption);
+                    break;
+
+                case "markdown":
+                    OutputMarkdown(profile, llmCaption);
                     break;
 
                 case "text":
@@ -412,6 +608,17 @@ class Program
                 Console.Error.WriteLine(ex.StackTrace);
             Environment.Exit(1);
         }
+    }
+
+    static string GetDefaultOutputForPipeline(string pipeline)
+    {
+        return pipeline switch
+        {
+            "stats" => "metrics",
+            "caption" => "caption",
+            "alttext" => "alttext",
+            _ => "text"
+        };
     }
 
     static void OutputText(DynamicImageProfile profile)
@@ -430,7 +637,7 @@ class Program
         }
     }
 
-    static void OutputJson(DynamicImageProfile profile)
+    static void OutputJson(DynamicImageProfile profile, string? llmCaption = null)
     {
         var ledger = profile.GetLedger();
 
@@ -441,6 +648,7 @@ class Program
             waves = profile.ContributingWaves,
             text = GetExtractedText(profile),
             confidence = GetTextConfidence(profile),
+            caption = llmCaption,
             quality = GetQualityMetrics(profile),
             metadata = GetMetadata(profile),
             // Include ledger for structured access to salient features
@@ -468,6 +676,125 @@ class Program
         Console.WriteLine(JsonSerializer.Serialize(result, options));
     }
 
+    static void OutputCaption(DynamicImageProfile profile, string? llmCaption)
+    {
+        if (!string.IsNullOrWhiteSpace(llmCaption))
+        {
+            Console.WriteLine(llmCaption);
+        }
+        else
+        {
+            // Fallback to ledger summary if no LLM caption
+            var ledger = profile.GetLedger();
+            Console.WriteLine(ledger.ToLlmSummary());
+        }
+    }
+
+    static void OutputAltText(DynamicImageProfile profile, string? llmCaption)
+    {
+        var ledger = profile.GetLedger();
+        var text = GetExtractedText(profile);
+
+        // Build accessibility-focused alt text
+        var parts = new List<string>();
+
+        // Start with LLM caption if available, or ledger summary
+        if (!string.IsNullOrWhiteSpace(llmCaption))
+        {
+            // Extract first sentence for concise alt text
+            var firstSentence = llmCaption.Split(new[] { '.', '!', '?' }, 2)[0].Trim();
+            parts.Add(firstSentence);
+        }
+        else
+        {
+            // Use ledger's alt text context
+            parts.Add(ledger.ToAltTextContext());
+        }
+
+        // Add OCR text if present (important for accessibility)
+        if (!string.IsNullOrWhiteSpace(text) && text.Length <= 100)
+        {
+            parts.Add($"Text: \"{text.Trim()}\"");
+        }
+        else if (!string.IsNullOrWhiteSpace(text))
+        {
+            parts.Add($"Text: \"{text.Trim()[..97]}...\"");
+        }
+
+        Console.WriteLine(string.Join(". ", parts));
+    }
+
+    static void OutputMarkdown(DynamicImageProfile profile, string? llmCaption)
+    {
+        var ledger = profile.GetLedger();
+        var text = GetExtractedText(profile);
+        var fileName = Path.GetFileName(profile.ImagePath) ?? "image";
+
+        Console.WriteLine($"# {fileName}");
+        Console.WriteLine();
+
+        // Image stats
+        Console.WriteLine("## Image Analysis");
+        Console.WriteLine($"- **Dimensions:** {ledger.Identity.Width}x{ledger.Identity.Height}");
+        Console.WriteLine($"- **Format:** {ledger.Identity.Format}");
+
+        // Get type detection from signals
+        var detectedType = profile.GetValue<string>("content.type") ?? "Unknown";
+        var typeConfidence = profile.GetValue<double>("content.type_confidence");
+        Console.WriteLine($"- **Type:** {detectedType} ({typeConfidence:P0} confidence)");
+
+        if (ledger.Quality.Sharpness.HasValue)
+        {
+            Console.WriteLine($"- **Sharpness:** {ledger.Quality.Sharpness:F0}");
+        }
+        Console.WriteLine();
+
+        // Colors
+        if (ledger.Colors.DominantColors?.Any() == true)
+        {
+            Console.WriteLine("## Colors");
+            foreach (var color in ledger.Colors.DominantColors.Take(5))
+            {
+                Console.WriteLine($"- {color.Name} `{color.Hex}` ({color.Percentage:F1}%)");
+            }
+            Console.WriteLine();
+        }
+
+        // Caption
+        if (!string.IsNullOrWhiteSpace(llmCaption))
+        {
+            Console.WriteLine("## Description");
+            Console.WriteLine(llmCaption);
+            Console.WriteLine();
+        }
+
+        // OCR text
+        if (!string.IsNullOrWhiteSpace(text))
+        {
+            Console.WriteLine("## Extracted Text");
+            Console.WriteLine("```");
+            Console.WriteLine(text.Trim());
+            Console.WriteLine("```");
+            Console.WriteLine();
+        }
+
+        // Motion (for animated images)
+        if (ledger.Identity.IsAnimated && ledger.Motion != null)
+        {
+            Console.WriteLine("## Animation");
+            Console.WriteLine($"- **Frames:** {ledger.Motion.FrameCount}");
+            if (ledger.Motion.Duration.HasValue)
+            {
+                Console.WriteLine($"- **Duration:** {ledger.Motion.Duration * 1000:F0}ms");
+            }
+            if (ledger.Motion.MotionIntensity > 0)
+            {
+                Console.WriteLine($"- **Motion Intensity:** {ledger.Motion.MotionIntensity:F2}");
+            }
+            Console.WriteLine();
+        }
+    }
+
     static void OutputSignals(DynamicImageProfile profile)
     {
         var signals = profile.GetAllSignals()
@@ -485,21 +812,88 @@ class Program
 
     static void OutputMetrics(DynamicImageProfile profile)
     {
+        var ledger = profile.GetLedger();
+
         var metrics = new
         {
+            // Basic info
+            file = Path.GetFileName(profile.ImagePath),
             analysis_duration_ms = profile.AnalysisDurationMs,
             waves_executed = profile.ContributingWaves.Count(),
             signals_emitted = profile.GetAllSignals().Count(),
-            frames_processed = profile.GetValue<int>("ocr.frames.extracted"),
-            text_length = GetExtractedText(profile)?.Length ?? 0,
-            confidence = GetTextConfidence(profile),
-            spell_check_score = profile.GetValue<double>("ocr.quality.spell_check_score"),
-            is_garbled = profile.GetValue<bool>("ocr.quality.is_garbled"),
-            stabilization_quality = profile.GetValue<double>("ocr.stabilization.confidence"),
-            frame_agreement = profile.GetValue<double>("ocr.voting.agreement_score")
+
+            // Image identity
+            identity = new
+            {
+                width = ledger.Identity.Width,
+                height = ledger.Identity.Height,
+                format = ledger.Identity.Format,
+                aspect_ratio = ledger.Identity.AspectRatio,
+                file_size = ledger.Identity.FileSize,
+                is_animated = ledger.Identity.IsAnimated
+            },
+
+            // Quality metrics
+            quality = new
+            {
+                sharpness = ledger.Quality.Sharpness,
+                blur = ledger.Quality.Blur,
+                exposure = ledger.Quality.Exposure.ToString(),
+                overall = ledger.Quality.OverallQuality
+            },
+
+            // Color analysis
+            colors = new
+            {
+                is_grayscale = ledger.Colors.IsGrayscale,
+                saturation = ledger.Colors.MeanSaturation,
+                dominant = ledger.Colors.DominantColors.Take(3).Select(c => new { c.Name, c.Hex, c.Percentage })
+            },
+
+            // Composition
+            composition = new
+            {
+                edge_density = ledger.Composition.EdgeDensity,
+                complexity = ledger.Composition.Complexity,
+                brightness = ledger.Composition.Brightness,
+                contrast = ledger.Composition.Contrast
+            },
+
+            // Text detection
+            text = new
+            {
+                detected = !string.IsNullOrEmpty(ledger.Text.ExtractedText),
+                length = ledger.Text.ExtractedText?.Length ?? 0,
+                word_count = ledger.Text.WordCount,
+                confidence = ledger.Text.Confidence,
+                spell_check_score = ledger.Text.SpellCheckScore,
+                is_garbled = ledger.Text.IsGarbled,
+                text_likeliness = ledger.Text.TextLikeliness
+            },
+
+            // Objects
+            objects = new
+            {
+                count = ledger.Objects.ObjectCount,
+                types = ledger.Objects.ObjectTypes,
+                faces = ledger.Objects.Faces.Count
+            },
+
+            // Motion (if animated)
+            motion = ledger.Motion != null ? new
+            {
+                frame_count = ledger.Motion.FrameCount,
+                duration = ledger.Motion.Duration,
+                frame_rate = ledger.Motion.FrameRate,
+                intensity = ledger.Motion.MotionIntensity
+            } : null
         };
 
-        var options = new JsonSerializerOptions { WriteIndented = true };
+        var options = new JsonSerializerOptions
+        {
+            WriteIndented = true,
+            DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
+        };
         Console.WriteLine(JsonSerializer.Serialize(metrics, options));
     }
 
@@ -617,6 +1011,40 @@ class Program
             Console.ResetColor();
             Environment.Exit(1);
         }
+    }
+
+    static void ShowSignalBreakdown(DynamicImageProfile profile)
+    {
+        var signals = profile.GetAllSignals().ToList();
+
+        // Group signals by category (first part of key before '.')
+        var grouped = signals
+            .GroupBy(s => s.Key.Split('.')[0])
+            .OrderByDescending(g => g.Count())
+            .ToList();
+
+        Spectre.Console.AnsiConsole.Write(new Spectre.Console.Rule("[cyan]📡 Signal Breakdown[/]"));
+        Spectre.Console.AnsiConsole.WriteLine();
+
+        var table = new Spectre.Console.Table();
+        table.Border = Spectre.Console.TableBorder.Rounded;
+        table.AddColumn(new Spectre.Console.TableColumn("[cyan]Category[/]"));
+        table.AddColumn(new Spectre.Console.TableColumn("[yellow]Signals[/]"));
+        table.AddColumn(new Spectre.Console.TableColumn("[dim]Key Signals[/]"));
+
+        foreach (var group in grouped)
+        {
+            var category = group.Key;
+            var count = group.Count();
+            var examples = string.Join(", ", group.Take(3).Select(s => s.Key.Split('.').Last()));
+
+            table.AddRow(
+                $"[cyan]{Spectre.Console.Markup.Escape(category)}[/]",
+                $"[yellow]{count}[/]",
+                $"[dim]{Spectre.Console.Markup.Escape(examples)}...[/]");
+        }
+
+        Spectre.Console.AnsiConsole.Write(table);
     }
 
     static async Task RunMcpServer()

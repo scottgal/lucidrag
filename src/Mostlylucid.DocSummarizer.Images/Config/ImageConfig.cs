@@ -104,12 +104,12 @@ public class ImageConfig
     /// <summary>
     /// Enable vision LLM for captions and entity extraction (requires Ollama with vision model)
     /// </summary>
-    public bool EnableVisionLlm { get; set; } = false;
+    public bool EnableVisionLlm { get; set; } = true;
 
     /// <summary>
     /// Vision LLM model to use (e.g., "llava", "llava:13b", "minicpm-v", "bakllava")
     /// </summary>
-    public string? VisionLlmModel { get; set; } = "llava";
+    public string? VisionLlmModel { get; set; } = "minicpm-v:8b";
 
     /// <summary>
     /// Ollama base URL for vision LLM requests

@@ -3,7 +3,7 @@ using System.Text.Json.Serialization;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 
-namespace LucidRAG.ImageCli.Services.VisionClients;
+namespace Mostlylucid.DocSummarizer.Images.Services.Vision.Clients;
 
 /// <summary>
 /// Ollama local vision client for image analysis

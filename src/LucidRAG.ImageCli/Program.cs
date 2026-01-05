@@ -125,18 +125,18 @@ class Program
         services.AddSingleton<Services.OutputFormatters.JsonFormatter>();
         services.AddSingleton<Services.OutputFormatters.MarkdownFormatter>();
 
-        // Add vision LLM services
-        services.AddSingleton<Services.VisionLlmService>();
-        services.AddSingleton<Services.UnifiedVisionService>();
+        // Add vision LLM services (from core library)
+        services.AddSingleton<Mostlylucid.DocSummarizer.Images.Services.Vision.VisionLlmService>();
+        services.AddSingleton<Mostlylucid.DocSummarizer.Images.Services.Vision.UnifiedVisionService>();
 
-        // Add escalation service
-        services.AddSingleton<Services.EscalationService>();
+        // Add escalation service (from core library)
+        services.AddSingleton<Mostlylucid.DocSummarizer.Images.Services.EscalationService>();
 
-        // Add batch processor
+        // Add batch processor (CLI-specific)
         services.AddSingleton<Services.ImageBatchProcessor>();
 
-        // Add deduplication service
-        services.AddSingleton<Services.DeduplicationService>();
+        // Add deduplication service (from core library)
+        services.AddSingleton<Mostlylucid.DocSummarizer.Images.Services.DeduplicationService>();
 
         return services.BuildServiceProvider();
     }

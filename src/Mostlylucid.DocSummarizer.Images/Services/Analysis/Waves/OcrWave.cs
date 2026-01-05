@@ -18,6 +18,7 @@ public class OcrWave : IAnalysisWave
     private readonly string _language;
     private readonly ILogger<OcrWave>? _logger;
     private readonly bool _enabled;
+    private readonly double _textLikelinessThreshold;
 
     public string Name => "OcrWave";
     public int Priority => 60; // Medium priority - runs after forensics
@@ -27,11 +28,13 @@ public class OcrWave : IAnalysisWave
         string? tesseractDataPath = null,
         string language = "eng",
         bool enabled = true,
+        double textLikelinessThreshold = 0.3,
         ILogger<OcrWave>? logger = null)
     {
         _tesseractDataPath = tesseractDataPath;
         _language = language;
         _enabled = enabled;
+        _textLikelinessThreshold = textLikelinessThreshold;
         _logger = logger;
     }
 
@@ -78,23 +81,28 @@ public class OcrWave : IAnalysisWave
         }
 
         // Check if image has sufficient text-likeliness to warrant OCR
-        var textLikeliness = context.GetValue<double>("content.text_likeliness");
-        if (textLikeliness < 0.3)
+        // When threshold is 0, always run OCR
+        if (_textLikelinessThreshold > 0)
         {
-            signals.Add(new Signal
+            var textLikeliness = context.GetValue<double>("content.text_likeliness");
+            if (textLikeliness < _textLikelinessThreshold)
             {
-                Key = "ocr.skipped",
-                Value = true,
-                Confidence = 1.0,
-                Source = Name,
-                Tags = new List<string> { "ocr" },
-                Metadata = new Dictionary<string, object>
+                signals.Add(new Signal
                 {
-                    ["reason"] = "Low text-likeliness score",
-                    ["text_likeliness"] = textLikeliness
-                }
-            });
-            return signals;
+                    Key = "ocr.skipped",
+                    Value = true,
+                    Confidence = 1.0,
+                    Source = Name,
+                    Tags = new List<string> { "ocr" },
+                    Metadata = new Dictionary<string, object>
+                    {
+                        ["reason"] = "Low text-likeliness score",
+                        ["text_likeliness"] = textLikeliness,
+                        ["threshold"] = _textLikelinessThreshold
+                    }
+                });
+                return signals;
+            }
         }
 
         try

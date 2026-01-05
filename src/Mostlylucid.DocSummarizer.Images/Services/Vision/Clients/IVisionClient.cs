@@ -1,4 +1,4 @@
-namespace LucidRAG.ImageCli.Services.VisionClients;
+namespace Mostlylucid.DocSummarizer.Images.Services.Vision.Clients;
 
 /// <summary>
 /// Interface for vision LLM clients (Ollama, Anthropic, OpenAI, etc.)

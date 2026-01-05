@@ -6,8 +6,9 @@ using Mostlylucid.DocSummarizer.Images.Models;
 using Mostlylucid.DocSummarizer.Images.Models.Dynamic;
 using Mostlylucid.DocSummarizer.Images.Services.Analysis;
 using Mostlylucid.DocSummarizer.Images.Services.Storage;
+using Mostlylucid.DocSummarizer.Images.Services.Vision;
 
-namespace LucidRAG.ImageCli.Services;
+namespace Mostlylucid.DocSummarizer.Images.Services;
 
 /// <summary>
 /// Service for managing escalation of image analysis to vision LLMs.
@@ -220,7 +221,7 @@ public class EscalationService
 
         string? llmCaption = null;
         string? extractedText = null;
-        List<VisionClients.EvidenceClaim>? evidenceClaims = null;
+        List<Vision.Clients.EvidenceClaim>? evidenceClaims = null;
         var escalationReason = forceEscalate ? "User requested" : null;
 
         if (shouldEscalate)
@@ -647,7 +648,7 @@ public class EscalationService
         prompt.AppendLine("  \"claims\": [<array of claim objects>],");
         prompt.AppendLine("  \"metadata\": {");
         prompt.AppendLine("    \"tone\": \"<professional|casual|humorous|formal|technical>\",");
-        prompt.AppendLine("    \"sentiment\": <-1.0 to 1.0>,");
+        prompt.AppendLine("    \"valence\": <-1.0 to 1.0>,  // caption tone, not moral judgment");
         prompt.AppendLine("    \"complexity\": <0.0 to 1.0>,");
         prompt.AppendLine("    \"aesthetic_score\": <0.0 to 1.0>,");
         prompt.AppendLine("    \"primary_subject\": \"<main focus>\",");
@@ -656,30 +657,37 @@ public class EscalationService
         prompt.AppendLine("  }");
         prompt.AppendLine("}");
         prompt.AppendLine();
-        prompt.AppendLine("EVIDENCE SOURCES:");
-        prompt.AppendLine("- V = direct visual observation from the image");
-        prompt.AppendLine("- M = motion/animation analysis (for GIFs)");
-        prompt.AppendLine("- O = OCR-extracted text");
-        prompt.AppendLine("- S = deterministic signal from metadata (color, sharpness, type, etc.)");
-        prompt.AppendLine("- G = multiple signals in agreement (consensus)");
-        prompt.AppendLine("- L = synthesis/inference (composition only - NEVER use alone)");
+        prompt.AppendLine("EVIDENCE SOURCES (use these exact names):");
+        prompt.AppendLine("- vision = direct visual observation from the image");
+        prompt.AppendLine("- motion = motion/animation analysis (for GIFs)");
+        prompt.AppendLine("- ocr = OCR-extracted text");
+        prompt.AppendLine("- signal = deterministic signal from metadata (color, sharpness, type, etc.)");
+        prompt.AppendLine("- consensus = multiple signals in agreement");
+        prompt.AppendLine("- inferred = synthesis/inference (composition only - NEVER use alone)");
+        prompt.AppendLine();
+        prompt.AppendLine("EVIDENCE FORMAT:");
+        prompt.AppendLine("- Prefix evidence tokens with their source: sig:sharpness=1591, det:green-shirt, ocr:\"visible text\"");
+        prompt.AppendLine("- Use sig: for signal-based evidence (computed metrics)");
+        prompt.AppendLine("- Use det: for detected features (objects, clothing, colors)");
+        prompt.AppendLine("- Use ocr: for OCR-extracted text");
+        prompt.AppendLine("- Use exif: for EXIF metadata (date, camera, location)");
         prompt.AppendLine();
         prompt.AppendLine("RULES:");
-        prompt.AppendLine("- Every claim MUST have at least one non-L source (V/M/O/S/G)");
-        prompt.AppendLine("- If only synthesis, hedge with 'appears to' or omit the claim");
+        prompt.AppendLine("- Every claim MUST have at least one non-inferred source");
+        prompt.AppendLine("- If only inference, hedge with 'appears to' or omit the claim");
         prompt.AppendLine("- Caption should be natural, readable English");
         prompt.AppendLine();
         prompt.AppendLine("Example JSON:");
         prompt.AppendLine("{");
         prompt.AppendLine("  \"caption\": \"A sharp photograph shows a person wearing dark clothing in an indoor setting with warm lighting.\",");
         prompt.AppendLine("  \"claims\": [");
-        prompt.AppendLine("    { \"text\": \"sharp photograph\", \"sources\": [\"V\", \"S\"], \"evidence\": [\"sharpness=1591\"] },");
-        prompt.AppendLine("    { \"text\": \"person wearing dark clothing\", \"sources\": [\"V\"] },");
-        prompt.AppendLine("    { \"text\": \"indoor setting with warm lighting\", \"sources\": [\"V\", \"S\"], \"evidence\": [\"color.dominant=warm_tones\"] }");
+        prompt.AppendLine("    { \"text\": \"sharp photograph\", \"sources\": [\"vision\", \"signal\"], \"evidence\": [\"sig:sharpness=1591\"] },");
+        prompt.AppendLine("    { \"text\": \"person wearing dark clothing\", \"sources\": [\"vision\"], \"evidence\": [\"det:person\", \"det:dark-clothing\"] },");
+        prompt.AppendLine("    { \"text\": \"indoor setting with warm lighting\", \"sources\": [\"vision\", \"signal\"], \"evidence\": [\"sig:color.dominant=warm_tones\"] }");
         prompt.AppendLine("  ],");
         prompt.AppendLine("  \"metadata\": {");
         prompt.AppendLine("    \"tone\": \"professional\",");
-        prompt.AppendLine("    \"sentiment\": 0.1,");
+        prompt.AppendLine("    \"valence\": 0.1,");
         prompt.AppendLine("    \"complexity\": 0.4,");
         prompt.AppendLine("    \"aesthetic_score\": 0.7,");
         prompt.AppendLine("    \"primary_subject\": \"portrait\",");
@@ -946,7 +954,7 @@ public record EscalationResult(
     string? EscalationReason,
     bool FromCache = false,
     GifMotionProfile? GifMotion = null,
-    List<VisionClients.EvidenceClaim>? EvidenceClaims = null);
+    List<Vision.Clients.EvidenceClaim>? EvidenceClaims = null);
 
 /// <summary>
 /// Progress report for batch processing.

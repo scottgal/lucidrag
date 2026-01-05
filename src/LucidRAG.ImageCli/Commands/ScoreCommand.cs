@@ -6,7 +6,8 @@ using Microsoft.Extensions.DependencyInjection;
 using Mostlylucid.DocSummarizer.Images.Models;
 using Mostlylucid.DocSummarizer.Images.Services.Analysis;
 using Mostlylucid.DocSummarizer.Images.Services.Storage;
-using LucidRAG.ImageCli.Services;
+using Mostlylucid.DocSummarizer.Images.Services;
+using Mostlylucid.DocSummarizer.Images.Services.Vision;
 using Spectre.Console;
 
 namespace LucidRAG.ImageCli.Commands;

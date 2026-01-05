@@ -186,11 +186,16 @@ public class ImageLedger
             parts.Add($"Animation: {Motion.FrameCount} frames{(Motion.Duration.HasValue ? $", {Motion.Duration:F1}s duration" : "")}");
         }
 
-        // Colors
+        // Colors (group by name and sum percentages)
         if (Colors.DominantColors.Count > 0)
         {
-            var colorList = string.Join(", ", Colors.DominantColors.Take(5).Select(c =>
-                $"{c.Name ?? $"#{c.Hex}"}({c.Percentage:F0}%)"));
+            var groupedColors = Colors.DominantColors
+                .GroupBy(c => c.Name ?? $"#{c.Hex}")
+                .Select(g => new { Name = g.Key, Percentage = g.Sum(c => c.Percentage) })
+                .OrderByDescending(c => c.Percentage)
+                .Take(5);
+
+            var colorList = string.Join(", ", groupedColors.Select(c => $"{c.Name}({c.Percentage:F0}%)"));
             parts.Add($"Colors: {colorList}");
         }
 

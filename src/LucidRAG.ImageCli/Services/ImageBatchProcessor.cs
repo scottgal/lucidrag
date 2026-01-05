@@ -3,6 +3,7 @@ using System.Threading.Channels;
 using Microsoft.Extensions.FileSystemGlobbing;
 using Microsoft.Extensions.Logging;
 using LucidRAG.ImageCli.Services.OutputFormatters;
+using Mostlylucid.DocSummarizer.Images.Services;
 
 namespace LucidRAG.ImageCli.Services;
 

@@ -26,10 +26,10 @@ jobs:
           dotnet-version: '10.0.x'
 
       - name: Restore dependencies
-        run: dotnet restore LucidRAG.sln
+        run: dotnet restore src/Mostlylucid.ImageSummarizer.Cli/Mostlylucid.ImageSummarizer.Cli.csproj
 
       - name: Build
-        run: dotnet build LucidRAG.sln --configuration Release --no-restore
+        run: dotnet build src/Mostlylucid.ImageSummarizer.Cli/Mostlylucid.ImageSummarizer.Cli.csproj --configuration Release --no-restore
 
       - name: Run ImageSummarizer Tests
         run: |
