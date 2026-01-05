@@ -563,6 +563,142 @@ else
 }
 ```
 
+## Motion Object Identification
+
+Beyond detecting motion patterns, the system can identify **what specific objects** are moving in an animation using Vision LLM.
+
+### How It Works
+
+1. **Optical Flow First**: Dense optical flow detects that motion exists and characterizes it (direction, magnitude, coverage)
+2. **Context Gathering**: Structured features are gathered from previous analysis waves
+3. **Vision LLM Query**: The image is sent to a Vision LLM with motion context hints
+4. **Fallback**: If LLM can't see motion (single-frame limitation), entities from VisionLlmWave are used as inference
+
+### Structured Features Only (No Captions)
+
+**Critical Design Decision**: The motion identification prompt only passes **structured features** to the Vision LLM, not free-form text like captions or descriptions.
+
+**Why?**
+- Captions/descriptions may contain inaccuracies from earlier analysis
+- Passing inaccurate text to the LLM can compound errors
+- The LLM should see the image "fresh" without bias from potentially wrong descriptions
+
+**What IS passed:**
+- Entity types (e.g., "animal", "person", "vehicle") - not labels/descriptions
+- Face count (integer)
+- Has text (boolean) - not the actual OCR text which may be garbled
+- Frame count, dimensions, aspect ratio
+- Motion facts (type, direction, intensity, coverage)
+
+**What is NOT passed:**
+- Full captions or descriptions
+- Raw OCR text
+- Free-form labels
+- Previous LLM commentary
+
+### Context-Aware Prompt Building
+
+The prompt adapts to available context budget (~800 characters for vision models):
+
+```
+Priority order:
+1. Core task + motion facts (always included)
+2. Entity types (highest priority hints)
+3. Face count (people often move)
+4. Has text indicator (scrolling text)
+5. Frame count (animation length)
+```
+
+Budget management ensures the prompt stays concise - vision models have limited prompt context compared to text models since the image consumes most of the context window.
+
+### Entity Fallback
+
+Vision LLMs can only see a single frame of a GIF, so they may report "no motion visible." When this happens:
+
+1. We know from optical flow that motion **does** exist
+2. VisionLlmWave has already detected entities in the image
+3. We use those entities as the "likely moving objects" with reduced confidence (65% vs 85%)
+
+```csharp
+// Signals indicate the source
+"motion.moving_objects": {
+    "value": ["cat", "ball"],
+    "confidence": 0.65,  // Lower for inferred
+    "tags": ["motion", "objects", "inferred"],
+    "metadata": {
+        "inferred_from_entities": true,
+        "method": "entity_correlation"
+    }
+}
+```
+
+### Output Signals
+
+```
+motion.has_motion       - bool: Whether significant motion was detected
+motion.type             - string: Motion type (oscillating, rotating, panning, object_motion, etc.)
+motion.direction        - string: Dominant direction (up, down, left, right, stationary, etc.)
+motion.magnitude        - double: Average pixel displacement per frame
+motion.activity         - double: Fraction of image with motion (0-1)
+motion.summary          - string: Human-readable summary ("MODERATE oscillating motion (partial coverage)")
+motion.moving_objects   - List<string>: What is moving ["person waving", "car driving"]
+motion.moving.<object>  - Individual signals per object
+```
+
+### Alt Text Integration
+
+Motion signals are automatically integrated into alt text generation:
+
+```csharp
+// Example alt text for animated GIF:
+"A man is sitting at a table. Animated with subtle general motion (localized coverage)"
+
+// With identified moving objects:
+"A cat sitting on a couch. Animated, showing cat tail, ball in motion"
+```
+
+### Example Prompts
+
+**Compact prompt generated:**
+```
+Animated image. What objects/elements are MOVING?
+
+Motion: oscillating, down, moderate, localized
+Objects: animal, person
+Faces: 1
+Frames: 24
+
+List MOVING items only, one per line. Be specific.
+```
+
+**Parsing filters:**
+The parser skips meta-commentary like "Based on the image...", "No motion visible", "Objects detected:", etc. Only extracts concrete moving object descriptions.
+
+### Configurable Signal Weights
+
+Signal importance can be customized in configuration:
+
+```json
+{
+  "Images": {
+    "SignalImportance": {
+      "CustomWeights": {
+        "motion.moving_objects": 9.5,
+        "motion.summary": 8.5,
+        "motion.*": 7.0
+      },
+      "DefaultWeight": 5.0
+    }
+  }
+}
+```
+
+Default signal importance weights for motion signals:
+- `motion.moving_objects`: 9.0 (high - describes dynamic content)
+- `motion.summary`: 8.5
+- `motion.type`: 7.5
+- `motion.direction`: 7.0
+
 ## Limitations and Known Issues
 
 ### Current Limitations
@@ -659,6 +795,6 @@ This implementation is part of the LucidRAG project and follows the same MIT lic
 
 ---
 
-**Last Updated**: 2026-01-04
+**Last Updated**: 2026-01-05
 **OpenCV Version**: 4.11.0
 **Author**: LucidRAG Team

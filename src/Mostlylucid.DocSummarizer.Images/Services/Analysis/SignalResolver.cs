@@ -1,3 +1,4 @@
+using Mostlylucid.DocSummarizer.Images.Config;
 using Mostlylucid.DocSummarizer.Images.Models.Dynamic;
 
 namespace Mostlylucid.DocSummarizer.Images.Services.Analysis;
@@ -10,16 +11,38 @@ namespace Mostlylucid.DocSummarizer.Images.Services.Analysis;
 public class SignalResolver
 {
     /// <summary>
-    /// Signal importance weights for ranking
+    /// Custom weights from configuration (takes priority over defaults)
+    /// </summary>
+    private static Dictionary<string, double>? _customWeights;
+    private static double _defaultWeight = 5.0;
+
+    /// <summary>
+    /// Configure custom signal weights from ImageConfig
+    /// Call this during application startup to override default weights
+    /// </summary>
+    public static void Configure(SignalImportanceConfig config)
+    {
+        _customWeights = config.CustomWeights;
+        _defaultWeight = config.DefaultWeight;
+    }
+
+    /// <summary>
+    /// Default signal importance weights for ranking
     /// Higher weight = more salient/important for LLM understanding
     /// </summary>
-    private static readonly Dictionary<string, double> SignalImportance = new()
+    private static readonly Dictionary<string, double> DefaultSignalImportance = new()
     {
         // Vision LLM signals (highest priority - natural language descriptions)
         ["vision.llm.caption"] = 10.0,
         ["vision.llm.detailed_description"] = 9.0,
         ["vision.llm.entities"] = 8.5,
         ["vision.llm.scene"] = 8.0,
+
+        // Motion signals (high priority for animated images - describes dynamic content)
+        ["motion.moving_objects"] = 9.0,
+        ["motion.summary"] = 8.5,
+        ["motion.type"] = 7.5,
+        ["motion.direction"] = 7.0,
 
         // Text content (high priority - explicit content)
         ["ocr.voting.consensus_text"] = 9.5,
@@ -47,10 +70,6 @@ public class SignalResolver
         ["metadata.exif"] = 2.0,
     };
 
-    /// <summary>
-    /// Default importance for unknown signals
-    /// </summary>
-    private const double DefaultImportance = 5.0;
     /// <summary>
     /// Get first signal value matching a glob pattern
     /// Supports wildcards: "vision.*.caption", "*.caption", "vision.llm.*"
@@ -246,18 +265,41 @@ public class SignalResolver
 
     /// <summary>
     /// Get importance weight for a signal key
-    /// Supports glob patterns in the importance dictionary
+    /// Checks custom weights first (from config), then falls back to built-in defaults.
+    /// Supports glob patterns in both dictionaries.
     /// </summary>
     private static double GetImportance(string signalKey)
     {
-        // Exact match first
-        if (SignalImportance.TryGetValue(signalKey, out var importance))
+        // 1. Check custom weights first (exact match)
+        if (_customWeights != null && _customWeights.TryGetValue(signalKey, out var customImportance))
         {
-            return importance;
+            return customImportance;
         }
 
-        // Try pattern matching
-        foreach (var (pattern, weight) in SignalImportance)
+        // 2. Check custom weights (pattern match)
+        if (_customWeights != null)
+        {
+            foreach (var (pattern, weight) in _customWeights)
+            {
+                if (pattern.Contains('*'))
+                {
+                    var regex = GlobToRegex(pattern);
+                    if (regex.IsMatch(signalKey))
+                    {
+                        return weight;
+                    }
+                }
+            }
+        }
+
+        // 3. Check default weights (exact match)
+        if (DefaultSignalImportance.TryGetValue(signalKey, out var defaultImportance))
+        {
+            return defaultImportance;
+        }
+
+        // 4. Check default weights (pattern match)
+        foreach (var (pattern, weight) in DefaultSignalImportance)
         {
             if (pattern.Contains('*'))
             {
@@ -269,8 +311,8 @@ public class SignalResolver
             }
         }
 
-        // Default importance for unknown signals
-        return DefaultImportance;
+        // 5. Use configured or built-in default
+        return _defaultWeight;
     }
 
     /// <summary>

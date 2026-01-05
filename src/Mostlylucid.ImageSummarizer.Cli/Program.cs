@@ -824,6 +824,27 @@ class Program
             parts.Add(ledger.ToAltTextContext());
         }
 
+        // Add motion context for animated images (critical for accessibility)
+        if (ledger.Identity.IsAnimated && ledger.Motion != null)
+        {
+            if (ledger.Motion.MovingObjects.Count > 0)
+            {
+                parts.Add($"Animated, showing {string.Join(", ", ledger.Motion.MovingObjects)} in motion");
+            }
+            else if (!string.IsNullOrWhiteSpace(ledger.Motion.Summary))
+            {
+                parts.Add($"Animated with {ledger.Motion.Summary.ToLowerInvariant()}");
+            }
+            else if (ledger.Motion.HasMotion)
+            {
+                parts.Add($"Animated GIF with {ledger.Motion.MotionType ?? "general"} motion");
+            }
+            else
+            {
+                parts.Add($"Animated GIF ({ledger.Motion.FrameCount} frames)");
+            }
+        }
+
         // Add OCR text if present (important for accessibility)
         if (!string.IsNullOrWhiteSpace(text) && text.Length <= 100)
         {

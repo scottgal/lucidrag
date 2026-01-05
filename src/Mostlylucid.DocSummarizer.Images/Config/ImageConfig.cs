@@ -160,6 +160,30 @@ public class ImageConfig
     /// Motion detection configuration for animated GIF analysis
     /// </summary>
     public MotionConfig Motion { get; set; } = new();
+
+    /// <summary>
+    /// Signal importance weights for ranking signals by salience.
+    /// Override defaults to customize which signals are prioritized.
+    /// </summary>
+    public SignalImportanceConfig SignalImportance { get; set; } = new();
+}
+
+/// <summary>
+/// Configuration for signal importance weights used in signal ranking and context building
+/// </summary>
+public class SignalImportanceConfig
+{
+    /// <summary>
+    /// Custom signal importance weights (signal key -> weight).
+    /// Higher weight = more important. These override default weights.
+    /// Example: {"motion.moving_objects": 9.5, "vision.llm.caption": 10.0}
+    /// </summary>
+    public Dictionary<string, double> CustomWeights { get; set; } = new();
+
+    /// <summary>
+    /// Default importance for signals not in CustomWeights or defaults
+    /// </summary>
+    public double DefaultWeight { get; set; } = 5.0;
 }
 
 /// <summary>

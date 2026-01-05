@@ -1,6 +1,7 @@
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Mostlylucid.DocSummarizer.Images.Config;
+using Mostlylucid.DocSummarizer.Images.Models;
 using Mostlylucid.DocSummarizer.Images.Models.Dynamic;
 
 namespace Mostlylucid.DocSummarizer.Images.Services.Analysis.Waves;
@@ -298,6 +299,46 @@ public class MotionWave : IAnalysisWave
         return signals;
     }
 
+    // Shared classification helpers (DRY)
+    // Only filter generic CV placeholder labels, NOT language stopwords (breaks non-English)
+    private static readonly HashSet<string> InvalidGenericLabels = new(StringComparer.OrdinalIgnoreCase)
+    {
+        // Generic CV placeholders that aren't meaningful as moving objects
+        "object", "unknown", "unidentified", "undefined", "none", "null", "n/a",
+        "thing", "item", "element", "entity", "instance"
+    };
+
+    private static bool IsValidMovingObjectLabel(string? label)
+    {
+        if (string.IsNullOrWhiteSpace(label))
+            return false;
+        // Too short or too long labels are likely garbage
+        if (label.Length < 2 || label.Length > 100)
+            return false;
+        if (InvalidGenericLabels.Contains(label))
+            return false;
+        // Skip numeric-only labels
+        if (label.All(c => char.IsDigit(c) || char.IsWhiteSpace(c) || c == '.' || c == ','))
+            return false;
+        return true;
+    }
+
+    private static string ClassifyIntensity(double magnitude) => magnitude switch
+    {
+        < 2 => "subtle",
+        < 5 => "moderate",
+        < 10 => "significant",
+        _ => "rapid"
+    };
+
+    private static string ClassifyCoverage(double activity) => activity switch
+    {
+        < 0.1 => "localized",
+        < 0.3 => "partial",
+        < 0.6 => "widespread",
+        _ => "full-frame"
+    };
+
     private string GenerateMotionSummary(MotionAnalysisResult result)
     {
         if (!result.HasMotion)
@@ -307,21 +348,8 @@ public class MotionWave : IAnalysisWave
             ? $"{result.DominantDirection} "
             : "";
 
-        var intensity = result.AverageMagnitude switch
-        {
-            < 2 => "subtle",
-            < 5 => "moderate",
-            < 10 => "significant",
-            _ => "rapid"
-        };
-
-        var coverage = result.MotionActivity switch
-        {
-            < 0.1 => "localized",
-            < 0.3 => "partial",
-            < 0.6 => "widespread",
-            _ => "full-frame"
-        };
+        var intensity = ClassifyIntensity(result.AverageMagnitude);
+        var coverage = ClassifyCoverage(result.MotionActivity);
 
         return $"{intensity.ToUpperInvariant()} {direction}{result.MotionType} motion ({coverage} coverage)";
     }
@@ -339,18 +367,17 @@ public class MotionWave : IAnalysisWave
     {
         try
         {
-            // First, check if VisionLLM already detected entities we can correlate with
-            var existingEntities = context.GetValue<List<EntityDetection>>("vision.llm.entities");
-            var caption = context.GetValue<string>("vision.llm.caption");
+            // Gather salient signals from context to provide rich context to the LLM
+            var salientContext = GatherSalientSignals(context);
 
-            _logger?.LogDebug("Motion identification context: entities={EntityCount}, caption={HasCaption}",
-                existingEntities?.Count ?? 0, !string.IsNullOrEmpty(caption));
+            _logger?.LogDebug("Motion identification context: {SignalCount} salient signals gathered",
+                salientContext.Count);
 
             // Query Vision LLM specifically about what's moving
             var imageBytes = await File.ReadAllBytesAsync(imagePath, ct);
             var imageBase64 = Convert.ToBase64String(imageBytes);
 
-            var prompt = BuildMotionIdentificationPrompt(motionResult, existingEntities, caption);
+            var prompt = BuildMotionIdentificationPrompt(motionResult, salientContext);
             var response = await QueryVisionLlmAsync(imageBase64, prompt, ct);
 
             if (string.IsNullOrEmpty(response))
@@ -369,18 +396,18 @@ public class MotionWave : IAnalysisWave
                 return (parsed, false);
             }
 
-            // If LLM couldn't see motion (single frame limitation), fall back to entities
-            if (existingEntities != null && existingEntities.Count > 0)
+            // If LLM couldn't see motion (single frame limitation), fall back to salient signals
+            var entities = salientContext.GetValueOrDefault("entities") as List<EntityDetection>;
+            if (entities != null && entities.Count > 0)
             {
                 _logger?.LogInformation("Vision LLM couldn't see animation (single frame), inferring from {Count} detected entities",
-                    existingEntities.Count);
+                    entities.Count);
 
                 // Use the entities detected by VisionLlmWave as likely moving objects
-                // Since we know from optical flow that there IS motion, and we have entities,
-                // those entities are likely what's moving
-                var inferred = existingEntities
+                // Filter out generic terms and stopwords
+                var inferred = entities
                     .Select(e => !string.IsNullOrWhiteSpace(e.Label) ? e.Label : e.Type)
-                    .Where(s => !string.IsNullOrEmpty(s))
+                    .Where(IsValidMovingObjectLabel)
                     .Distinct()
                     .Take(5)
                     .ToList();
@@ -400,49 +427,146 @@ public class MotionWave : IAnalysisWave
         }
     }
 
-    private string BuildMotionIdentificationPrompt(
-        MotionAnalysisResult motion,
-        List<EntityDetection>? entities,
-        string? caption)
+    /// <summary>
+    /// Gather salient signals from context based on confidence and importance.
+    /// Only passes structured features (types, counts, measurements) to avoid compounding errors
+    /// from free-form text like captions/descriptions which may contain inaccuracies.
+    /// </summary>
+    private Dictionary<string, object?> GatherSalientSignals(AnalysisContext context)
     {
-        var prompt = new System.Text.StringBuilder();
+        var salient = new Dictionary<string, object?>();
 
-        prompt.AppendLine("This is an animated GIF/image. Analyze the motion and tell me WHAT is moving.");
-        prompt.AppendLine();
-
-        // Add motion analysis context
-        prompt.AppendLine($"Motion analysis detected: {motion.MotionType} motion");
-        prompt.AppendLine($"Direction: {motion.DominantDirection}");
-        prompt.AppendLine($"Intensity: {(motion.AverageMagnitude < 2 ? "subtle" : motion.AverageMagnitude < 5 ? "moderate" : "significant")}");
-        prompt.AppendLine($"Coverage: {(motion.MotionActivity < 0.3 ? "localized" : "widespread")}");
-
-        if (motion.MotionRegions.Count > 0)
-        {
-            prompt.AppendLine($"Motion is concentrated in {motion.MotionRegions.Count} region(s)");
-        }
-
-        prompt.AppendLine();
-
-        // Add known entities for context
+        // Entity TYPES only (not labels/descriptions which may compound errors)
+        var entities = context.GetValue<List<EntityDetection>>("vision.llm.entities");
         if (entities != null && entities.Count > 0)
         {
-            prompt.AppendLine("Objects detected in the image:");
-            foreach (var entity in entities.Take(5))
-            {
-                prompt.AppendLine($"  - {entity.Type}: {entity.Label}");
-            }
-            prompt.AppendLine();
+            // Store full entities for fallback, but prompt will only use types
+            salient["entities"] = entities;
+            salient["entity_types"] = entities
+                .Select(e => e.Type)
+                .Where(t => !string.IsNullOrWhiteSpace(t))
+                .Distinct()
+                .ToList();
         }
 
-        if (!string.IsNullOrEmpty(caption))
+        // NOTE: We deliberately DON'T pass caption or description
+        // Free-form text can compound errors - LLM should see the image fresh
+
+        // Has OCR text (boolean) - indicates text-heavy content without passing potentially garbled text
+        var ocrText = context.GetValue<string>("ocr.final.corrected_text")
+            ?? context.GetValue<string>("ocr.text.voting_consensus")
+            ?? context.GetValue<string>("ocr.text.raw");
+        if (!string.IsNullOrWhiteSpace(ocrText))
         {
-            prompt.AppendLine($"Scene description: {caption}");
-            prompt.AppendLine();
+            salient["has_text"] = true;
+            salient["text_word_count"] = ocrText.Split(' ', StringSplitOptions.RemoveEmptyEntries).Length;
         }
 
-        prompt.AppendLine("Based on the animation, list the specific objects/people/elements that are MOVING.");
-        prompt.AppendLine("Format: One object per line, be specific (e.g., 'person waving hand', 'car driving', 'text scrolling').");
-        prompt.AppendLine("Only list things that are actually moving, not static elements.");
+        // Text likeliness score
+        var textLikeliness = context.GetValue<double>("content.text_likeliness");
+        if (textLikeliness > 0.3)
+        {
+            salient["text_likeliness"] = textLikeliness;
+        }
+
+        // Dominant color names only (structured)
+        var dominantColors = context.GetValue<List<DominantColor>>("color.dominant_colors");
+        if (dominantColors != null && dominantColors.Count > 0)
+        {
+            salient["dominant_colors"] = dominantColors.Take(3).Select(c => c.Name).ToList();
+        }
+
+        // Face count (structured measurement)
+        var hasFaces = context.GetValue<bool>("faces.detected");
+        var faceCount = context.GetValue<int>("faces.count");
+        if (hasFaces || faceCount > 0)
+        {
+            salient["face_count"] = faceCount;
+        }
+
+        // Image dimensions
+        var width = context.GetValue<int>("identity.width");
+        var height = context.GetValue<int>("identity.height");
+        if (width > 0 && height > 0)
+        {
+            salient["dimensions"] = $"{width}x{height}";
+            salient["aspect_ratio"] = Math.Round((double)width / height, 2);
+        }
+
+        // Frame count (for context about animation length)
+        var frameCount = context.GetValue<int>("identity.frame_count");
+        if (frameCount > 1)
+        {
+            salient["frame_count"] = frameCount;
+        }
+
+        return salient;
+    }
+
+    /// <summary>
+    /// Build a context-aware prompt for motion identification.
+    /// Only includes structured features (not free-form text) to avoid compounding errors.
+    /// Adapts based on available context budget.
+    /// </summary>
+    private string BuildMotionIdentificationPrompt(
+        MotionAnalysisResult motion,
+        Dictionary<string, object?> salientContext)
+    {
+        // Estimate available context: vision models typically have 2k-4k context for prompts
+        // Keep prompt concise - the image itself takes most of the context
+        const int maxPromptChars = 800;
+
+        var prompt = new System.Text.StringBuilder();
+
+        // Core task (always included - ~200 chars)
+        prompt.AppendLine("Animated image. What objects/elements are MOVING?");
+        prompt.AppendLine();
+
+        // Motion facts (compact, ~150 chars) - use shared classifiers
+        var intensity = ClassifyIntensity(motion.AverageMagnitude);
+        var coverage = ClassifyCoverage(motion.MotionActivity);
+        prompt.AppendLine($"Motion: {motion.MotionType}, {motion.DominantDirection}, {intensity}, {coverage}");
+
+        // Track remaining budget
+        var remainingBudget = maxPromptChars - prompt.Length - 150; // Reserve 150 for instructions
+
+        // Add structured hints based on budget priority:
+        // 1. Entity types (highest priority - tells LLM what to look for)
+        // 2. Face count (people often move)
+        // 3. Has text (scrolling text)
+        // 4. Dimensions/frames (for context)
+
+        if (remainingBudget > 100 && salientContext.TryGetValue("entity_types", out var typesObj) && typesObj is List<string> types && types.Count > 0)
+        {
+            var typeStr = $"Objects: {string.Join(", ", types.Take(5))}";
+            if (typeStr.Length < remainingBudget)
+            {
+                prompt.AppendLine(typeStr);
+                remainingBudget -= typeStr.Length + 2;
+            }
+        }
+
+        if (remainingBudget > 30 && salientContext.TryGetValue("face_count", out var faceObj) && faceObj is int faces && faces > 0)
+        {
+            prompt.AppendLine($"Faces: {faces}");
+            remainingBudget -= 15;
+        }
+
+        if (remainingBudget > 30 && salientContext.TryGetValue("has_text", out var hasTextObj) && hasTextObj is bool hasText && hasText)
+        {
+            var wordCount = salientContext.GetValueOrDefault("text_word_count") as int? ?? 0;
+            prompt.AppendLine(wordCount > 10 ? "Contains text (may be scrolling)" : "Has text");
+            remainingBudget -= 35;
+        }
+
+        if (remainingBudget > 40 && salientContext.TryGetValue("frame_count", out var frameObj) && frameObj is int frameCount)
+        {
+            prompt.AppendLine($"Frames: {frameCount}");
+        }
+
+        // Compact instructions
+        prompt.AppendLine();
+        prompt.AppendLine("List MOVING items only, one per line. Be specific.");
 
         return prompt.ToString();
     }
@@ -455,22 +579,40 @@ public class MotionWave : IAnalysisWave
 
         foreach (var line in lines)
         {
-            // Skip meta-commentary
+            // Skip meta-commentary and LLM echoing the prompt context
             if (line.StartsWith("Based on", StringComparison.OrdinalIgnoreCase) ||
                 line.StartsWith("The", StringComparison.OrdinalIgnoreCase) && line.Contains("moving") ||
                 line.StartsWith("I can see", StringComparison.OrdinalIgnoreCase) ||
-                line.StartsWith("In this", StringComparison.OrdinalIgnoreCase))
+                line.StartsWith("In this", StringComparison.OrdinalIgnoreCase) ||
+                line.StartsWith("No motion", StringComparison.OrdinalIgnoreCase) ||
+                line.StartsWith("There is no", StringComparison.OrdinalIgnoreCase) ||
+                line.StartsWith("All objects", StringComparison.OrdinalIgnoreCase) ||
+                line.Contains("Objects detected", StringComparison.OrdinalIgnoreCase) ||
+                line.Contains("Scene description", StringComparison.OrdinalIgnoreCase) ||
+                line.Contains("Motion analysis", StringComparison.OrdinalIgnoreCase) ||
+                line.Contains("stationary", StringComparison.OrdinalIgnoreCase) ||
+                line.Contains("no visible motion", StringComparison.OrdinalIgnoreCase) ||
+                line.Contains("appears to be still", StringComparison.OrdinalIgnoreCase) ||
+                line.Contains("nothing listed", StringComparison.OrdinalIgnoreCase))
                 continue;
 
             // Clean up common prefixes
             var cleanedLine = line
-                .TrimStart('-', '*', '•', '1', '2', '3', '4', '5', '.', ' ', '\t')
+                .TrimStart('-', '*', '•', '1', '2', '3', '4', '5', '6', '7', '8', '9', '0', '.', ' ', '\t')
                 .Trim();
 
-            if (!string.IsNullOrEmpty(cleanedLine) && cleanedLine.Length > 2 && cleanedLine.Length < 100)
-            {
-                objects.Add(cleanedLine);
-            }
+            // Skip very short or generic labels
+            if (string.IsNullOrEmpty(cleanedLine) || cleanedLine.Length <= 2 || cleanedLine.Length >= 100)
+                continue;
+
+            // Skip lines that are just category labels without specifics
+            if (cleanedLine.Equals("object", StringComparison.OrdinalIgnoreCase) ||
+                cleanedLine.Equals("person", StringComparison.OrdinalIgnoreCase) ||
+                cleanedLine.Equals("text", StringComparison.OrdinalIgnoreCase) ||
+                cleanedLine.Equals("animal", StringComparison.OrdinalIgnoreCase))
+                continue;
+
+            objects.Add(cleanedLine);
         }
 
         return objects.Distinct().Take(10).ToList();

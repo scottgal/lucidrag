@@ -114,20 +114,42 @@ public class ImageLedger
         // Calculate WordCount from the same text used in ExtractedText
         ledger.Text.WordCount = CountWords(ledger.Text.ExtractedText);
 
-        // Motion (for animations)
-        if (profile.HasSignal("motion.frame_count"))
+        // Motion (for animations) - check multiple signal keys
+        var hasMotionSignals = profile.HasSignal("motion.has_motion") ||
+                               profile.HasSignal("motion.type") ||
+                               profile.HasSignal("identity.is_animated");
+
+        if (hasMotionSignals)
         {
+            var movingObjectsValue = profile.GetValue<object>("motion.moving_objects");
+            var movingObjectsList = movingObjectsValue switch
+            {
+                List<string> list => list,
+                IEnumerable<string> enumerable => enumerable.ToList(),
+                _ => new List<string>()
+            };
+
             ledger.Motion = new MotionLedger
             {
-                FrameCount = profile.GetValue<int?>("motion.frame_count")
+                FrameCount = profile.GetValue<int?>("identity.frame_count")
+                    ?? profile.GetValue<int?>("motion.frame_count")
                     ?? profile.GetValue<int?>("ocr.frames.extracted")
                     ?? 0,
                 Duration = profile.GetValue<double>("motion.duration"),
                 FrameRate = profile.GetValue<double>("motion.frame_rate"),
-                OpticalFlowMagnitude = profile.GetValue<double>("motion.optical_flow_magnitude"),
-                MotionIntensity = profile.GetValue<double>("motion.intensity"),
+                OpticalFlowMagnitude = profile.GetValue<double>("motion.magnitude"),
+                MotionIntensity = profile.GetValue<double>("motion.activity"),
                 StabilizationQuality = profile.GetValue<double>("ocr.stabilization.confidence"),
-                IsLooping = profile.GetValue<bool>("motion.is_looping")
+                IsLooping = profile.GetValue<bool>("motion.is_looping"),
+
+                // New MotionWave signals
+                HasMotion = profile.GetValue<bool>("motion.has_motion"),
+                MotionType = profile.GetValue<string>("motion.type"),
+                Direction = profile.GetValue<string>("motion.direction"),
+                Magnitude = profile.GetValue<double>("motion.magnitude"),
+                Activity = profile.GetValue<double>("motion.activity"),
+                Summary = profile.GetValue<string>("motion.summary"),
+                MovingObjects = movingObjectsList
             };
         }
 
@@ -319,8 +341,25 @@ public class ImageLedger
     {
         var parts = new List<string>();
 
-        // Type of image
-        if (Identity.IsAnimated)
+        // Type of image with motion context
+        if (Identity.IsAnimated && Motion != null)
+        {
+            if (Motion.HasMotion && !string.IsNullOrWhiteSpace(Motion.Summary))
+            {
+                parts.Add($"Animated GIF with {Motion.Summary.ToLowerInvariant()}");
+            }
+            else
+            {
+                parts.Add($"Animated GIF ({Motion.FrameCount} frames)");
+            }
+
+            // Add what's moving if known
+            if (Motion.MovingObjects.Count > 0)
+            {
+                parts.Add($"showing {string.Join(", ", Motion.MovingObjects)} in motion");
+            }
+        }
+        else if (Identity.IsAnimated)
         {
             parts.Add("Animated GIF");
         }
@@ -335,8 +374,8 @@ public class ImageLedger
             parts.Add($"containing text: \"{Text.ExtractedText}\"");
         }
 
-        // Objects
-        if (Objects.ObjectCount > 0)
+        // Objects (skip if motion.MovingObjects already covered this)
+        if (Objects.ObjectCount > 0 && (Motion?.MovingObjects.Count ?? 0) == 0)
         {
             parts.Add($"showing {string.Join(", ", Objects.ObjectTypes)}");
         }
@@ -485,6 +524,15 @@ public class MotionLedger
     public double MotionIntensity { get; set; }
     public double StabilizationQuality { get; set; }
     public bool IsLooping { get; set; }
+
+    // New motion detection fields from MotionWave
+    public bool HasMotion { get; set; }
+    public string? MotionType { get; set; }
+    public string? Direction { get; set; }
+    public double Magnitude { get; set; }
+    public double Activity { get; set; }
+    public string? Summary { get; set; }
+    public List<string> MovingObjects { get; set; } = new();
 }
 
 /// <summary>
