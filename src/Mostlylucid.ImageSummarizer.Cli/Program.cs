@@ -649,7 +649,8 @@ class Program
             "stats" => "metrics",
             "caption" => "caption",
             "alttext" => "alttext",
-            _ => "text"
+            "simpleocr" => "text",  // Simple OCR pipeline wants text output
+            _ => "visual"           // Default to visual for full analysis display
         };
     }
 
@@ -1025,6 +1026,95 @@ class Program
             Spectre.Console.AnsiConsole.Write(motionTable);
             Spectre.Console.AnsiConsole.WriteLine();
         }
+
+        // ALL SIGNALS - Expandable tree view grouped by wave/source
+        OutputSignalsTree(profile);
+    }
+
+    static void OutputSignalsTree(DynamicImageProfile profile)
+    {
+        var allSignals = profile.GetAllSignals().ToList();
+        if (!allSignals.Any()) return;
+
+        Spectre.Console.AnsiConsole.MarkupLine("[yellow]All Signals[/] [dim]({0} total)[/]", allSignals.Count);
+
+        // Group signals by source (wave)
+        var signalsBySource = allSignals
+            .GroupBy(s => s.Source ?? "Unknown")
+            .OrderBy(g => g.Key);
+
+        var tree = new Spectre.Console.Tree("[cyan]Signals[/]");
+
+        foreach (var sourceGroup in signalsBySource)
+        {
+            var sourceNode = tree.AddNode($"[green]{Spectre.Console.Markup.Escape(sourceGroup.Key)}[/] [dim]({sourceGroup.Count()})[/]");
+
+            // Group by key prefix (e.g., "vision.clip", "ocr.text")
+            var keyGroups = sourceGroup
+                .GroupBy(s => GetKeyPrefix(s.Key))
+                .OrderBy(g => g.Key);
+
+            foreach (var keyGroup in keyGroups)
+            {
+                var keyNode = sourceNode.AddNode($"[blue]{Spectre.Console.Markup.Escape(keyGroup.Key)}[/]");
+
+                foreach (var signal in keyGroup.OrderBy(s => s.Key))
+                {
+                    var valueStr = FormatSignalValue(signal.Value);
+                    var confStr = signal.Confidence < 1.0 ? $" [dim]({signal.Confidence:P0})[/]" : "";
+                    var keyName = signal.Key.StartsWith(keyGroup.Key + ".")
+                        ? signal.Key.Substring(keyGroup.Key.Length + 1)
+                        : signal.Key;
+
+                    keyNode.AddNode($"[dim]{Spectre.Console.Markup.Escape(keyName)}:[/] {Spectre.Console.Markup.Escape(valueStr)}{confStr}");
+                }
+            }
+        }
+
+        Spectre.Console.AnsiConsole.Write(tree);
+        Spectre.Console.AnsiConsole.WriteLine();
+    }
+
+    static string GetKeyPrefix(string? key)
+    {
+        if (string.IsNullOrEmpty(key)) return "misc";
+        var parts = key.Split('.');
+        return parts.Length >= 2 ? $"{parts[0]}.{parts[1]}" : parts[0];
+    }
+
+    static string FormatSignalValue(object? value)
+    {
+        if (value == null) return "[null]";
+
+        // Handle arrays (like embeddings, color lists)
+        if (value is float[] floatArray)
+        {
+            if (floatArray.Length <= 5)
+                return $"[{string.Join(", ", floatArray.Select(f => f.ToString("F3")))}]";
+            return $"[{floatArray.Length}D vector: {floatArray[0]:F3}, {floatArray[1]:F3}...{floatArray[^1]:F3}]";
+        }
+
+        if (value is double[] doubleArray)
+        {
+            if (doubleArray.Length <= 5)
+                return $"[{string.Join(", ", doubleArray.Select(d => d.ToString("F3")))}]";
+            return $"[{doubleArray.Length}D vector]";
+        }
+
+        if (value is IEnumerable<object> enumerable && value is not string)
+        {
+            var list = enumerable.ToList();
+            if (list.Count <= 3)
+                return $"[{string.Join(", ", list.Select(o => o?.ToString() ?? "null"))}]";
+            return $"[{list.Count} items]";
+        }
+
+        // Truncate long strings
+        var str = value.ToString() ?? "";
+        if (str.Length > 80)
+            return str.Substring(0, 77) + "...";
+
+        return str;
     }
 
     static void OutputSignals(DynamicImageProfile profile)
