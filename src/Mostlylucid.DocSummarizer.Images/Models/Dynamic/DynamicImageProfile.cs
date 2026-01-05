@@ -226,7 +226,7 @@ public class DynamicImageProfile
             TextLikeliness = GetValueOrDefault<double>("content.text_likeliness", 0),
             SalientRegions = GetValue<List<SaliencyRegion>>("content.salient_regions"),
 
-            DominantColors = GetValue<List<DominantColor>>("color.dominant_colors"),
+            DominantColors = GetValue<List<DominantColor>>("color.dominant_colors") ?? new List<DominantColor>(),
             ColorGrid = GetValue<ColorGrid>("color.grid"),
             MeanSaturation = GetValueOrDefault<double>("color.mean_saturation", 0),
             IsMostlyGrayscale = GetValueOrDefault<bool>("color.is_grayscale", false),

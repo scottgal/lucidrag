@@ -334,8 +334,8 @@ public class SignalResolver
             var signals = GetSignalsByPattern(profile, pattern);
             foreach (var signal in signals)
             {
-                // Use signal key as dictionary key, avoiding duplicates
-                if (!result.ContainsKey(signal.Key))
+                // Use signal key as dictionary key, avoiding duplicates and null values
+                if (signal.Value != null && !result.ContainsKey(signal.Key))
                 {
                     result[signal.Key] = signal.Value;
                 }
