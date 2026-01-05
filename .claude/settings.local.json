@@ -76,7 +76,11 @@
       "Bash(Select-String -Pattern \"Vision|Caption|llm\")",
       "Bash(Select-Object -First 10)",
       "Bash(dotnet add:*)",
-      "WebFetch(domain:gist.github.com)"
+      "WebFetch(domain:gist.github.com)",
+      "Bash(npm init:*)",
+      "Bash(npm install:*)",
+      "Bash(node:*)",
+      "Bash(Select-Object -Last 30)"
     ]
   }
 }

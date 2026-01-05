@@ -240,14 +240,30 @@
           "tags": ["preprocessing"]
         },
         {
-          "id": "simple-ocr",
-          "name": "Quick OCR",
-          "description": "Fast OCR for text-heavy images",
+          "id": "motion-analysis",
+          "name": "Motion Analysis",
+          "description": "Detect motion for animated images",
           "enabled": true,
-          "priority": 60,
-          "waveType": "OcrWave",
-          "maxDurationMs": 1000,
-          "tags": ["ocr", "text"]
+          "priority": 95,
+          "waveType": "MotionWave",
+          "tags": ["motion", "animation"]
+        },
+        {
+          "id": "advanced-ocr",
+          "name": "Multi-Frame OCR",
+          "description": "Extract text from all unique frames for subtitles",
+          "enabled": true,
+          "priority": 59,
+          "waveType": "AdvancedOcrWave",
+          "parameters": {
+            "maxFrames": 50,
+            "ssimThreshold": 0.90,
+            "enableStabilization": true,
+            "enableTemporalMedian": true,
+            "enableVoting": true,
+            "votingConfidenceThreshold": 0.3
+          },
+          "tags": ["ocr", "temporal", "subtitles"]
         },
         {
           "id": "vision-llm",
@@ -323,6 +339,84 @@
             "garbledThreshold": 0.5
           },
           "tags": ["quality"]
+        }
+      ]
+    },
+    {
+      "name": "vision",
+      "displayName": "Vision Only (No OCR)",
+      "description": "Complete visual analysis using Vision LLM only - no Tesseract/OCR dependencies required",
+      "category": "vision",
+      "estimatedDurationSeconds": 4.0,
+      "isDefault": false,
+      "tags": ["vision", "llm", "no-ocr", "lightweight"],
+      "globalSettings": {
+        "maxTotalDurationMs": 15000,
+        "enableParallelization": true,
+        "forceEscalation": true,
+        "disableOcr": true
+      },
+      "phases": [
+        {
+          "id": "color-analysis",
+          "name": "Color Analysis",
+          "description": "Analyze color distribution, dominant colors, and visual characteristics",
+          "enabled": true,
+          "priority": 100,
+          "waveType": "ColorWave",
+          "tags": ["color", "preprocessing"]
+        },
+        {
+          "id": "motion-analysis",
+          "name": "Motion Analysis",
+          "description": "Detect and analyze motion in animated images",
+          "enabled": true,
+          "priority": 95,
+          "waveType": "MotionWave",
+          "tags": ["motion", "animation"]
+        },
+        {
+          "id": "vision-llm",
+          "name": "Vision LLM Analysis",
+          "description": "Full image understanding via Vision LLM - captions, entities, scene, text reading",
+          "enabled": true,
+          "priority": 50,
+          "waveType": "VisionLlmWave",
+          "tags": ["llm", "caption", "entities", "text"]
+        }
+      ]
+    },
+    {
+      "name": "motion",
+      "displayName": "Motion Analysis",
+      "description": "Analyze motion and animation in GIFs - no OCR or LLM dependencies",
+      "category": "analysis",
+      "estimatedDurationSeconds": 1.0,
+      "isDefault": false,
+      "tags": ["motion", "animation", "fast", "no-ocr"],
+      "globalSettings": {
+        "maxTotalDurationMs": 5000,
+        "enableParallelization": true,
+        "disableOcr": true
+      },
+      "phases": [
+        {
+          "id": "color-analysis",
+          "name": "Color Analysis",
+          "description": "Analyze color distribution",
+          "enabled": true,
+          "priority": 100,
+          "waveType": "ColorWave",
+          "tags": ["color"]
+        },
+        {
+          "id": "motion-analysis",
+          "name": "Motion Analysis",
+          "description": "Detect motion type, direction, magnitude, and identify moving objects",
+          "enabled": true,
+          "priority": 95,
+          "waveType": "MotionWave",
+          "tags": ["motion", "animation"]
         }
       ]
     }

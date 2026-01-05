@@ -11,6 +11,7 @@ using Mostlylucid.DocSummarizer.Images.Services.Analysis;
 using Mostlylucid.DocSummarizer.Images.Models.Dynamic;
 using Mostlylucid.DocSummarizer.Images.Services.Pipelines;
 using SixLabors.ImageSharp.Processing;
+using SixLabors.ImageSharp.Formats.Png;
 using Spectre.Console;
 
 namespace Mostlylucid.ImageSummarizer.Cli;
@@ -39,8 +40,8 @@ class Program
         // Options
         var pipelineOpt = new Option<string>(
             "--pipeline",
-            getDefaultValue: () => "advancedocr",
-            description: "Pipeline: advancedocr, simpleocr, quality, stats, caption, alttext");
+            getDefaultValue: () => "caption",
+            description: "Pipeline: caption (default), vision (no OCR), motion (fast), advancedocr, simpleocr, quality, stats, alttext");
 
         var outputOpt = new Option<string>(
             "--output",
@@ -85,6 +86,23 @@ class Program
             await ListPipelines();
         });
 
+        // Add export-strip command for generating frame strips
+        var exportStripCmd = new Command("export-strip", "Export a frame strip from an animated GIF");
+        var stripImageArg = new Argument<string>("image", "Path to animated GIF");
+        var stripOutputArg = new Argument<string?>("output", () => null, "Output path for PNG (default: <image>_strip.png)");
+        var maxFramesOpt = new Option<int>("--max-frames", () => 10, "Maximum frames to include");
+        var dedupeOpt = new Option<bool>("--dedupe", () => false, "Deduplicate similar frames");
+        var modeOpt = new Option<string>("--mode", () => "auto", "Strip mode: auto, ocr (text-changes only), motion (keyframes for inference)");
+        exportStripCmd.AddArgument(stripImageArg);
+        exportStripCmd.AddArgument(stripOutputArg);
+        exportStripCmd.AddOption(maxFramesOpt);
+        exportStripCmd.AddOption(dedupeOpt);
+        exportStripCmd.AddOption(modeOpt);
+        exportStripCmd.SetHandler(async (string imagePath, string? outputPath, int maxFrames, bool dedupe, string mode) =>
+        {
+            await ExportFrameStrip(imagePath, outputPath, maxFrames, dedupe, mode);
+        }, stripImageArg, stripOutputArg, maxFramesOpt, dedupeOpt, modeOpt);
+
         rootCommand.AddArgument(imageArg);
         rootCommand.AddOption(pipelineOpt);
         rootCommand.AddOption(outputOpt);
@@ -94,6 +112,7 @@ class Program
         rootCommand.AddOption(modelOpt);
         rootCommand.AddOption(ollamaOpt);
         rootCommand.AddCommand(listCmd);
+        rootCommand.AddCommand(exportStripCmd);
 
         rootCommand.SetHandler(async (string? inputPath, string pipeline, string output, string language, bool verbose, bool? llm, string? model, string? ollama) =>
         {
@@ -117,8 +136,8 @@ class Program
     }
 
     static async Task<int> InteractiveMode(
-        string pipeline = "advancedocr",
-        string output = "text",
+        string pipeline = "caption",
+        string output = "visual",
         string language = "en_US",
         bool verbose = false,
         bool? llm = null,
@@ -177,9 +196,13 @@ class Program
                         if (arg == null)
                         {
                             Spectre.Console.AnsiConsole.MarkupLine($"[dim]Current pipeline:[/] [cyan]{pipeline}[/]");
-                            Spectre.Console.AnsiConsole.MarkupLine("[dim]Available: advancedocr, simpleocr, quality, stats, caption, alttext[/]");
+                            Spectre.Console.AnsiConsole.MarkupLine("[dim]Available: caption, vision, motion, advancedocr, simpleocr, quality, stats, alttext[/]");
+                            Spectre.Console.AnsiConsole.MarkupLine("[dim]  caption     - Vision LLM captions with OCR fallback[/]");
+                            Spectre.Console.AnsiConsole.MarkupLine("[dim]  vision      - Vision LLM only (no Tesseract required)[/]");
+                            Spectre.Console.AnsiConsole.MarkupLine("[dim]  motion      - Motion analysis only (fast, no LLM/OCR)[/]");
+                            Spectre.Console.AnsiConsole.MarkupLine("[dim]  advancedocr - Multi-frame OCR with stabilization[/]");
                         }
-                        else if (arg is "advancedocr" or "simpleocr" or "quality" or "stats" or "caption" or "alttext")
+                        else if (arg is "advancedocr" or "simpleocr" or "quality" or "stats" or "caption" or "alttext" or "vision" or "motion")
                         {
                             pipeline = arg;
                             Spectre.Console.AnsiConsole.MarkupLine($"[green]✓[/] Pipeline set to [cyan]{pipeline}[/]");
@@ -187,10 +210,12 @@ class Program
                             if (arg == "stats" && output == "auto") output = "metrics";
                             if (arg == "caption" && output == "auto") output = "caption";
                             if (arg == "alttext" && output == "auto") output = "alttext";
+                            if (arg == "motion" && output == "auto") output = "visual";
+                            if (arg == "vision" && output == "auto") output = "visual";
                         }
                         else
                         {
-                            Spectre.Console.AnsiConsole.MarkupLine($"[red]✗[/] Unknown pipeline: {arg}. Use: advancedocr, simpleocr, quality, stats, caption, alttext");
+                            Spectre.Console.AnsiConsole.MarkupLine($"[red]✗[/] Unknown pipeline: {arg}. Use: caption, vision, motion, advancedocr, simpleocr, quality, stats, alttext");
                         }
                         continue;
 
@@ -708,16 +733,45 @@ class Program
 
     static void OutputText(DynamicImageProfile profile)
     {
-        // Extract best text (same priority as GetExtractedText)
-        var text = GetExtractedText(profile);
+        var output = new List<string>();
 
+        // Get OCR text
+        var text = GetExtractedText(profile);
         if (!string.IsNullOrWhiteSpace(text))
         {
-            Console.WriteLine(text.Trim());
+            output.Add(text.Trim());
+        }
+
+        // Get Vision LLM caption
+        var caption = profile.GetValue<string>("vision.llm.caption");
+        if (!string.IsNullOrWhiteSpace(caption))
+        {
+            output.Add($"Caption: {caption}");
+        }
+
+        // Get scene classification
+        var scene = profile.GetValue<string>("vision.llm.scene");
+        if (!string.IsNullOrWhiteSpace(scene))
+        {
+            output.Add($"Scene: {scene}");
+        }
+
+        // Get motion info for animated images
+        var motionType = profile.GetValue<string>("motion.type");
+        var motionSummary = profile.GetValue<string>("motion.summary");
+        if (!string.IsNullOrWhiteSpace(motionType) || !string.IsNullOrWhiteSpace(motionSummary))
+        {
+            var motionDesc = motionSummary ?? motionType ?? "";
+            output.Add($"Motion: {motionDesc}");
+        }
+
+        if (output.Count > 0)
+        {
+            Console.WriteLine(string.Join("\n", output));
         }
         else
         {
-            Console.Error.WriteLine("No text extracted");
+            Console.Error.WriteLine("No content extracted");
             Environment.Exit(1);
         }
     }
@@ -1301,6 +1355,286 @@ class Program
             stabilization_quality = profile.GetValue<double>("ocr.stabilization.confidence"),
             frame_agreement = profile.GetValue<double>("ocr.voting.agreement_score")
         };
+    }
+
+    static async Task ExportFrameStrip(string imagePath, string? outputPath, int maxFrames, bool dedupe = false, string mode = "auto")
+    {
+        try
+        {
+            if (!File.Exists(imagePath))
+            {
+                Console.Error.WriteLine($"File not found: {imagePath}");
+                return;
+            }
+
+            using var image = await SixLabors.ImageSharp.Image.LoadAsync<SixLabors.ImageSharp.PixelFormats.Rgba32>(imagePath);
+
+            if (image.Frames.Count <= 1)
+            {
+                Console.Error.WriteLine("Image is not animated (single frame)");
+                return;
+            }
+
+            var allFrames = new List<SixLabors.ImageSharp.Image<SixLabors.ImageSharp.PixelFormats.Rgba32>>();
+            for (int i = 0; i < image.Frames.Count; i++)
+            {
+                allFrames.Add(image.Frames.CloneFrame(i));
+            }
+
+            List<SixLabors.ImageSharp.Image<SixLabors.ImageSharp.PixelFormats.Rgba32>> frames;
+            string modeName;
+
+            // Determine effective mode
+            var effectiveMode = mode.ToLowerInvariant();
+            if (effectiveMode == "auto")
+            {
+                // Auto-detect: if --dedupe is set, default to OCR mode for subtitle focus
+                effectiveMode = dedupe ? "ocr" : "motion";
+            }
+
+            switch (effectiveMode)
+            {
+                case "ocr":
+                    // OCR mode: Very aggressive deduplication, only keep frames where text changed
+                    // Uses subtitle-aware similarity with very low threshold (0.85)
+                    Console.WriteLine($"Deduplicating {allFrames.Count} frames (OCR mode - text changes only)...");
+                    frames = DeduplicateFramesOcrMode(allFrames, 0.85);
+                    modeName = "ocr";
+                    Console.WriteLine($"  Reduced to {frames.Count} unique text frames");
+                    break;
+
+                case "motion":
+                    // Motion mode: Keep keyframes showing full motion progression
+                    // Uses standard similarity with moderate threshold (0.92)
+                    Console.WriteLine($"Extracting {maxFrames} keyframes from {allFrames.Count} frames (motion mode)...");
+                    frames = ExtractMotionKeyframes(allFrames, maxFrames);
+                    modeName = "motion";
+                    Console.WriteLine($"  Extracted {frames.Count} keyframes for motion inference");
+                    break;
+
+                default:
+                    // Fallback: evenly spaced frames
+                    var step = Math.Max(1, allFrames.Count / maxFrames);
+                    frames = new List<SixLabors.ImageSharp.Image<SixLabors.ImageSharp.PixelFormats.Rgba32>>();
+                    for (int i = 0; i < allFrames.Count && frames.Count < maxFrames; i += step)
+                    {
+                        frames.Add(allFrames[i]);
+                    }
+                    modeName = "strip";
+                    // Dispose unused frames
+                    foreach (var f in allFrames.Where(f => !frames.Contains(f)))
+                        f.Dispose();
+                    break;
+            }
+
+            if (frames.Count == 0)
+            {
+                Console.Error.WriteLine("No frames extracted");
+                return;
+            }
+
+            // Create horizontal strip
+            var frameWidth = frames[0].Width;
+            var frameHeight = frames[0].Height;
+            var stripWidth = frameWidth * frames.Count;
+
+            using var strip = new SixLabors.ImageSharp.Image<SixLabors.ImageSharp.PixelFormats.Rgba32>(stripWidth, frameHeight);
+
+            int xOffset = 0;
+            foreach (var frame in frames)
+            {
+                strip.Mutate(ctx => ctx.DrawImage(frame, new SixLabors.ImageSharp.Point(xOffset, 0), 1f));
+                xOffset += frameWidth;
+                frame.Dispose();
+            }
+
+            // Determine output path
+            var suffix = $"_{modeName}_strip";
+            var finalOutput = outputPath ?? Path.Combine(
+                Path.GetDirectoryName(imagePath) ?? ".",
+                Path.GetFileNameWithoutExtension(imagePath) + suffix + ".png");
+
+            using var fileStream = File.Create(finalOutput);
+            var encoder = new PngEncoder();
+            await strip.SaveAsync(fileStream, encoder);
+            Console.WriteLine($"✓ Saved {modeName} strip to: {finalOutput}");
+            Console.WriteLine($"  Dimensions: {strip.Width}x{strip.Height} ({frames.Count} frames)");
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"Error: {ex.Message}");
+        }
+    }
+
+    /// <summary>
+    /// OCR mode deduplication - aggressive, only keeps frames where text region changed significantly
+    /// </summary>
+    static List<SixLabors.ImageSharp.Image<SixLabors.ImageSharp.PixelFormats.Rgba32>> DeduplicateFramesOcrMode(
+        List<SixLabors.ImageSharp.Image<SixLabors.ImageSharp.PixelFormats.Rgba32>> frames,
+        double threshold)
+    {
+        if (frames.Count <= 1) return frames;
+
+        var deduplicated = new List<SixLabors.ImageSharp.Image<SixLabors.ImageSharp.PixelFormats.Rgba32>> { frames[0] };
+
+        for (int i = 1; i < frames.Count; i++)
+        {
+            var currentFrame = frames[i];
+            var lastFrame = deduplicated[^1];
+
+            // Use subtitle-aware similarity - very sensitive to text changes
+            var similarity = CalculateSubtitleAwareSimilarity(lastFrame, currentFrame);
+
+            if (similarity < threshold)
+            {
+                // Frame is sufficiently different (text changed), keep it
+                deduplicated.Add(currentFrame);
+            }
+            else
+            {
+                // Dispose duplicate
+                currentFrame.Dispose();
+            }
+        }
+
+        return deduplicated;
+    }
+
+    /// <summary>
+    /// Motion mode - extract keyframes showing complete motion sequence
+    /// Uses motion-based sampling to capture key moments of movement
+    /// </summary>
+    static List<SixLabors.ImageSharp.Image<SixLabors.ImageSharp.PixelFormats.Rgba32>> ExtractMotionKeyframes(
+        List<SixLabors.ImageSharp.Image<SixLabors.ImageSharp.PixelFormats.Rgba32>> frames,
+        int maxFrames)
+    {
+        if (frames.Count <= maxFrames)
+            return frames;
+
+        // Calculate motion scores between consecutive frames
+        var motionScores = new List<(int index, double score)>();
+        for (int i = 1; i < frames.Count; i++)
+        {
+            var score = CalculateMotionScore(frames[i - 1], frames[i]);
+            motionScores.Add((i, score));
+        }
+
+        // Always include first and last frame
+        var selectedIndices = new HashSet<int> { 0, frames.Count - 1 };
+
+        // Select frames at high-motion moments (peaks)
+        var peakFrames = motionScores
+            .OrderByDescending(m => m.score)
+            .Take(maxFrames - 2)
+            .Select(m => m.index)
+            .ToList();
+
+        foreach (var idx in peakFrames)
+        {
+            selectedIndices.Add(idx);
+        }
+
+        // If we still need more frames, add evenly spaced ones
+        if (selectedIndices.Count < maxFrames)
+        {
+            var step = frames.Count / (maxFrames - selectedIndices.Count + 1);
+            for (int i = step; i < frames.Count && selectedIndices.Count < maxFrames; i += step)
+            {
+                selectedIndices.Add(i);
+            }
+        }
+
+        // Sort indices and select frames
+        var sortedIndices = selectedIndices.OrderBy(i => i).Take(maxFrames).ToList();
+        var keyframes = sortedIndices.Select(i => frames[i]).ToList();
+
+        // Dispose unused frames
+        for (int i = 0; i < frames.Count; i++)
+        {
+            if (!sortedIndices.Contains(i))
+                frames[i].Dispose();
+        }
+
+        return keyframes;
+    }
+
+    /// <summary>
+    /// Calculate motion score between two frames (higher = more motion)
+    /// </summary>
+    static double CalculateMotionScore(
+        SixLabors.ImageSharp.Image<SixLabors.ImageSharp.PixelFormats.Rgba32> frame1,
+        SixLabors.ImageSharp.Image<SixLabors.ImageSharp.PixelFormats.Rgba32> frame2)
+    {
+        const int sampleStep = 4;
+        double totalDiff = 0;
+        int sampleCount = 0;
+
+        for (int y = 0; y < frame1.Height; y += sampleStep)
+        {
+            for (int x = 0; x < frame1.Width; x += sampleStep)
+            {
+                var p1 = frame1[x, y];
+                var p2 = frame2[x, y];
+
+                // RGB difference
+                var diff = Math.Abs(p1.R - p2.R) + Math.Abs(p1.G - p2.G) + Math.Abs(p1.B - p2.B);
+                totalDiff += diff;
+                sampleCount++;
+            }
+        }
+
+        // Normalize to 0-1 range (max diff per pixel is 765 = 255*3)
+        return sampleCount > 0 ? totalDiff / sampleCount / 765.0 : 0;
+    }
+
+    /// <summary>
+    /// Calculate subtitle-aware similarity between two frames
+    /// </summary>
+    static double CalculateSubtitleAwareSimilarity(
+        SixLabors.ImageSharp.Image<SixLabors.ImageSharp.PixelFormats.Rgba32> frame1,
+        SixLabors.ImageSharp.Image<SixLabors.ImageSharp.PixelFormats.Rgba32> frame2)
+    {
+        const int sampleStep = 4;
+        var subtitleRegionStart = (int)(frame1.Height * 0.75);
+        const double textBrightnessThreshold = 200.0;
+
+        double mainDiff = 0, subtitleDiff = 0, textColorDiff = 0;
+        int mainCount = 0, subtitleCount = 0, textCount = 0;
+
+        for (int y = 0; y < frame1.Height; y += sampleStep)
+        {
+            for (int x = 0; x < frame1.Width; x += sampleStep)
+            {
+                var p1 = frame1[x, y];
+                var p2 = frame2[x, y];
+
+                var lum1 = 0.299 * p1.R + 0.587 * p1.G + 0.114 * p1.B;
+                var lum2 = 0.299 * p2.R + 0.587 * p2.G + 0.114 * p2.B;
+                var diff = Math.Abs(lum1 - lum2);
+
+                if (y >= subtitleRegionStart)
+                {
+                    if (lum1 > textBrightnessThreshold || lum2 > textBrightnessThreshold)
+                    {
+                        textColorDiff += diff * 3.0;
+                        textCount++;
+                    }
+                    subtitleDiff += diff;
+                    subtitleCount++;
+                }
+                else
+                {
+                    mainDiff += diff;
+                    mainCount++;
+                }
+            }
+        }
+
+        var mainSim = 1.0 - (mainCount > 0 ? mainDiff / mainCount / 255.0 : 0);
+        var subtitleSim = 1.0 - (subtitleCount > 0 ? subtitleDiff / subtitleCount / 255.0 : 0);
+        var textSim = 1.0 - Math.Min(textCount > 0 ? textColorDiff / textCount / 255.0 : 0, 1.0);
+
+        return (mainSim * 0.3) + (subtitleSim * 0.4) + (textSim * 0.3);
     }
 
     static async Task ListPipelines()

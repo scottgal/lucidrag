@@ -394,10 +394,87 @@ If no subtitle text exists, respond with 'NO_TEXT'.";
     }
 
     /// <summary>
+    /// Creates frame strips for Vision LLM, preserving temporal order.
+    /// For long GIFs (>10 frames), splits into multiple chunks with overlap.
+    /// Returns list of strips and whether chunking was used.
+    /// </summary>
+    private (List<Image<Rgba32>> Strips, bool Chunked) CreateFrameStrips(List<Image<Rgba32>> frames)
+    {
+        if (frames.Count == 0)
+            throw new ArgumentException("No frames provided");
+
+        if (frames.Count == 1)
+            return (new List<Image<Rgba32>> { frames[0].Clone() }, false);
+
+        // Chunking config
+        const int MaxFramesPerStrip = 8; // Optimal for readability
+        const int OverlapFrames = 2;     // Overlap between chunks for continuity
+
+        // For short GIFs, create single strip
+        if (frames.Count <= MaxFramesPerStrip)
+        {
+            return (new List<Image<Rgba32>> { CreateSingleStrip(frames) }, false);
+        }
+
+        // For long GIFs, create multiple strips with overlap
+        _logger?.LogInformation(
+            "Long GIF ({FrameCount} frames), splitting into chunks of {Max} with {Overlap} overlap",
+            frames.Count, MaxFramesPerStrip, OverlapFrames);
+
+        var strips = new List<Image<Rgba32>>();
+        int start = 0;
+
+        while (start < frames.Count)
+        {
+            int end = Math.Min(start + MaxFramesPerStrip, frames.Count);
+            var chunk = frames.GetRange(start, end - start);
+
+            strips.Add(CreateSingleStrip(chunk));
+            _logger?.LogDebug("Created strip chunk {Index}: frames {Start}-{End}",
+                strips.Count, start, end - 1);
+
+            // Move start forward, accounting for overlap
+            start = end - OverlapFrames;
+
+            // Prevent infinite loop for edge cases
+            if (start >= frames.Count - 1) break;
+        }
+
+        return (strips, true);
+    }
+
+    /// <summary>
     /// Creates a horizontal strip of frames for Vision LLM, preserving temporal order.
     /// Uses maximum resolution the model can handle for best text clarity.
     /// </summary>
     private Image<Rgba32> CreateFrameStrip(List<Image<Rgba32>> frames)
+    {
+        var (strips, _) = CreateFrameStrips(frames);
+        // For backward compatibility, return first strip (caller handles multiple)
+        if (strips.Count == 1) return strips[0];
+
+        // If multiple strips, combine them vertically
+        int totalHeight = strips.Sum(s => s.Height) + (strips.Count - 1) * 4; // 4px gap
+        int maxWidth = strips.Max(s => s.Width);
+
+        var combined = new Image<Rgba32>(maxWidth, totalHeight);
+        combined.Mutate(ctx => ctx.BackgroundColor(Color.Black));
+
+        int yOffset = 0;
+        foreach (var strip in strips)
+        {
+            combined.Mutate(x => x.DrawImage(strip, new Point(0, yOffset), 1f));
+            yOffset += strip.Height + 4;
+            strip.Dispose();
+        }
+
+        return combined;
+    }
+
+    /// <summary>
+    /// Creates a single horizontal strip from a subset of frames
+    /// </summary>
+    private Image<Rgba32> CreateSingleStrip(List<Image<Rgba32>> frames)
     {
         if (frames.Count == 0)
             throw new ArgumentException("No frames provided");
@@ -419,7 +496,6 @@ If no subtitle text exists, respond with 'NO_TEXT'.";
         var firstFrame = frames[0];
         var nativeWidth = firstFrame.Width;
         var nativeHeight = firstFrame.Height;
-        var aspectRatio = (double)nativeWidth / nativeHeight;
 
         // Start with native size
         int totalNativeWidth = nativeWidth * frames.Count;
@@ -432,6 +508,10 @@ If no subtitle text exists, respond with 'NO_TEXT'.";
         // Ensure we don't upscale
         finalFrameWidth = Math.Min(finalFrameWidth, nativeWidth);
         finalFrameHeight = Math.Min(finalFrameHeight, nativeHeight);
+
+        // Minimum size for readability
+        finalFrameWidth = Math.Max(finalFrameWidth, 80);
+        finalFrameHeight = Math.Max(finalFrameHeight, 60);
 
         // Recalculate total width
         int totalWidth = finalFrameWidth * frames.Count;

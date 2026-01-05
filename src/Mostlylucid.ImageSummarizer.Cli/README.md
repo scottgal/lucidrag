@@ -1,71 +1,135 @@
-# ImageSummarizer - Image Intelligence & RAG Ingestion Pipeline
+# ImageSummarizer - Complete Image Intelligence Pipeline
 
 [![License: Unlicense](https://img.shields.io/badge/license-Unlicense-blue.svg)](http://unlicense.org/)
 [![Release](https://img.shields.io/github/v/release/scottgal/lucidrag?label=release)](https://github.com/scottgal/lucidrag/releases)
 [![Build](https://img.shields.io/github/actions/workflow/status/scottgal/lucidrag/release-imagesummarizer.yml?label=build)](https://github.com/scottgal/lucidrag/actions)
 [![.NET](https://img.shields.io/badge/.NET-10.0-purple)](https://dotnet.microsoft.com/)
 
-An image understanding and ingestion pipeline for RAG systems. Extracts structured metadata, text, captions, and visual signals from images and GIFs using an intelligent wave-based architecture that escalates from fast local analysis to Vision LLMs only when heuristics or OCR signals indicate low confidence.
+A complete image understanding and analysis pipeline that extracts **everything** from images and GIFs: text, captions, entities, motion, colors, scene classification, quality metrics, and embeddings. Built for RAG ingestion, accessibility, and intelligent image search.
 
 ## What It Does
 
-- **RAG-Ready Output**: Generates structured JSON with text, captions, colors, quality metrics, and embeddings for vector search
-- **Intelligent Pipeline**: Wave-based architecture routes images through analysis stages - Vision LLMs are used selectively, never as the sole source of truth
+- **Complete Visual Understanding**: Motion detection, scene classification, entity extraction, color analysis, quality assessment
+- **Intelligent Text Extraction**: Multi-strategy OCR with spell-checking, quality scoring, and Vision LLM fallback
+- **Animation Analysis**: Frame deduplication, motion tracking, subtitle extraction, looping detection
 - **Multi-Provider Vision**: Ollama (local), OpenAI (GPT-4o), Anthropic (Claude) - switch providers on the fly
-- **Animated Text & Subtitle Extraction**: Frame strip technology for GIFs, memes, and subtitled clips
-- **Visual Signal Extraction**: Dominant colors, sharpness, motion analysis, confidence-scored image type classification
-- **MCP Server**: Integrate with Claude Desktop for AI-assisted image analysis workflows
+- **Web Capture**: Fetch images from URLs or capture web page screenshots with Puppeteer
+- **RAG-Ready Output**: Structured JSON with confidence scores, embeddings ready for vector search
+- **MCP Server**: Integrate with Claude Desktop for AI-assisted workflows
 
 ## What This Is Not
 
-- Not a generic OCR wrapper
+- Not just an OCR tool - it's a complete image intelligence platform
 - Not a single-model vision API client
 - Not a "CLIP-only" image search tool
 - Not a black-box caption generator
 
 ImageSummarizer prioritizes deterministic signals, confidence scoring, and auditability.
-Vision LLMs are used selectively, never as the sole source of truth.
+Vision LLMs enhance analysis but are never the sole source of truth.
+
+## Demo: What It Can Do
+
+### Motion Detection & Animation Analysis
+![Cat on couch](demo-images/cat_wag.gif)
+
+```bash
+$ imagesummarizer demo-images/cat_wag.gif --pipeline caption --output text
+Caption: A cat is sitting on a white couch.
+Scene: indoor
+Motion: MODERATE object_motion motion (partial coverage)
+```
+
+### Meme & Subtitle Extraction
+![Anchorman meme](demo-images/anchorman-not-even-mad.gif)
+
+```bash
+$ imagesummarizer demo-images/anchorman-not-even-mad.gif --pipeline caption --output text
+"I'm not even mad."
+"That's amazing."
+Caption: A person wearing grey turtleneck sweater showing an emotionless expression
+Scene: meme
+Motion: SUBTLE general motion (localized coverage)
+```
+
+Subtitle-aware frame deduplication detects text changes in the bottom 25% of frames, weighting bright pixels (white/yellow text) more heavily.
+
+### Pet & Object Detection
+![Two dogs playing](demo-images/StyloAndBella.jpg)
+
+```bash
+$ imagesummarizer demo-images/StyloAndBella.jpg --pipeline vision --output text
+Caption: Two dogs, a brown dog with black patches sitting down while another is jumping over its head.
+Scene: outdoor
+```
 
 ## Key Capabilities
 
-### For RAG Ingestion
-- Extract searchable text from images (OCR + Vision LLM fallback)
-- Generate semantic captions for vector embedding
-- Structured JSON output with confidence scores
-- Batch process entire directories with parallel processing
-- Quality signals help filter low-value images
+### Complete Visual Understanding
+- **Motion Detection**: Optical flow analysis, motion type classification (camera pan, object motion, static)
+- **Scene Classification**: indoor, outdoor, food, nature, urban, document, screenshot, meme, art
+- **Entity Extraction**: People, animals, objects, text - with confidence scores
+- **Color Analysis**: Dominant colors with RGB values, contrast ratios, palette extraction
+- **Quality Metrics**: Sharpness, blur, noise, compression artifacts
 
-### For Image Analysis
-- **Caption Generation**: Rich descriptions using Vision LLMs (minicpm-v, llava, llama3.2-vision, GPT-4o, Claude)
-- **Alt Text**: WCAG-compliant accessibility descriptions
-- **Color Analysis**: Dominant colors with RGB values, contrast ratios
-- **Quality Metrics**: Sharpness, text-likeliness, spell-check scores
-- **Animation Analysis**: Frame deduplication, motion detection, subtitle extraction
+### Text Extraction (Optional)
+- **OCR**: Multi-frame temporal voting for animated images
+- **Vision LLM Fallback**: For stylized fonts and memes
+- **Graceful Degradation**: Works without Tesseract using Vision LLM only
+
+### Animation Analysis
+- **Subtitle-Aware Deduplication**: Detects text changes in bottom region, weights bright pixels
+- **Motion Tracking**: Identify what's moving and how
+- **Subtitle Extraction**: Frame strip technology for movie memes
+- **Loop Detection**: Identify seamlessly looping animations
 
 ### Intelligent Escalation
 The agentic pipeline starts fast and escalates intelligently:
 1. **ColorWave** (instant): Visual analysis, text-likeliness detection
-2. **OcrWave** (<1s): Fast Tesseract OCR
-3. **OcrQualityWave** (instant): Spell-check, garbled text detection
-4. **VisionLlmWave** (~3-5s): Only triggered when OCR quality is poor or captions requested
+2. **MotionWave** (~1s): Optical flow analysis for animated images
+3. **OcrWave** (optional, <1s): Fast Tesseract OCR
+4. **VisionLlmWave** (~3-5s): Captions, entities, scene classification
 
-Each wave emits structured signals with confidence scores; downstream waves are activated only when earlier signals fall below quality thresholds.
+Each wave emits structured signals with confidence scores.
 
 ## Key Features
 
-- **Frame Strip Technology**: Creates horizontal film strips from animated GIFs for Vision LLM subtitle reading
-- **Temporal Voting**: Multi-frame OCR with voting consensus for higher accuracy
-- **Interactive Mode**: Live configuration switching (pipeline, model, provider, output format)
-- **Auto-Download Resources**: Dictionaries and tessdata download on first use
-- **Multiple Pipelines**: stats, simpleocr, advancedocr, quality, caption, alttext
-- **Multiple Output Formats**: text, json, visual, markdown, caption, alttext, metrics, signals
+### Frame Strip Technology
+Creates horizontal film strips from animated GIFs for Vision LLM analysis. The LLM sees all key frames at once, enabling subtitle reading and motion inference:
+
+![Frame Strip Example](demo-images/anchorman-not-even-mad_strip.png)
+
+```bash
+# Export a frame strip from any GIF
+$ imagesummarizer export-strip demo-images/anchorman-not-even-mad.gif --max-frames 8
+✓ Saved frame strip to: anchorman-not-even-mad_strip.png
+
+# Frame strips help Vision LLMs read subtitles and infer motion
+$ imagesummarizer demo-images/anchorman-not-even-mad.gif --pipeline caption
+I'm not even mad.
+Caption: A man with a disappointed expression
+Scene: meme
+```
+
+### Multiple Output Formats
+Get exactly what you need:
+
+| Format | Use Case |
+|--------|----------|
+| `text` | Scripts, piping to other tools |
+| `json` | API integration, structured data |
+| `visual` | Rich terminal display with colors |
+| `markdown` | Documentation generation |
+| `signals` | Debugging, full analysis details |
+
+### Auto-Download Resources
+Dictionaries and tessdata download on first use - zero configuration required.
 
 **Pipeline rule of thumb**:
-- `simpleocr` → speed
-- `advancedocr` → default (balanced)
-- `quality` → archival accuracy
+- `vision` → no Tesseract needed, Vision LLM only
+- `motion` → fast animation analysis
 - `caption` → stylized text, memes, subtitles
-- `alttext` → accessibility
+- `advancedocr` → document text extraction
+- `alttext` → accessibility descriptions
 
 ## Installation
 
@@ -215,7 +279,18 @@ imagesummarizer image.gif --output signals
 
 ## Pipelines
 
-Pipelines are fully configurable via JSON! See [PIPELINES.md](../Mostlylucid.DocSummarizer.Images/PIPELINES.md) for complete documentation.
+Choose the right pipeline for your use case. All pipelines degrade gracefully if dependencies aren't available.
+
+### Quick Reference
+
+| Pipeline | Speed | OCR Required | LLM Required | Best For |
+|----------|-------|--------------|--------------|----------|
+| `caption` | ~5s | Optional | Yes | Memes, subtitles, stylized text |
+| `vision` | ~4s | No | Yes | Full analysis without Tesseract |
+| `motion` | ~1s | No | No | Motion detection only |
+| `advancedocr` | ~3s | Yes | No | Document text extraction |
+| `stats` | <1s | No | No | Quick metrics only |
+| `alttext` | ~4s | Optional | Yes | Accessibility descriptions |
 
 ### List Available Pipelines
 
@@ -223,16 +298,37 @@ Pipelines are fully configurable via JSON! See [PIPELINES.md](../Mostlylucid.Doc
 imagesummarizer list-pipelines
 ```
 
-### Caption Pipeline (NEW - Best for Subtitles)
+### Caption Pipeline (Default)
 - **Speed**: ~5s per GIF
-- **Features**: Vision LLM with frame strip, OCR, color analysis
+- **Features**: Vision LLM with frame strip, OCR fallback, color analysis
 - **Use Case**: Movie memes, subtitled GIFs, stylized text
 
 ```bash
 imagesummarizer movie-meme.gif --pipeline caption
 ```
 
-### Advanced OCR (Default)
+### Vision Pipeline (No OCR Dependencies)
+- **Speed**: ~4s per image
+- **Features**: Vision LLM captions, entity extraction, scene classification
+- **Use Case**: When Tesseract isn't installed or for pure LLM analysis
+- **Requires**: Ollama with vision model
+
+```bash
+# Works without Tesseract installed
+imagesummarizer image.jpg --pipeline vision
+```
+
+### Motion Pipeline (Fast, No Dependencies)
+- **Speed**: ~1s per GIF
+- **Features**: Optical flow analysis, motion type detection, moving object identification
+- **Use Case**: Quick animation analysis, motion filtering
+- **Requires**: Nothing - pure image processing
+
+```bash
+imagesummarizer animation.gif --pipeline motion
+```
+
+### Advanced OCR
 - **Speed**: 2-3s per GIF
 - **Accuracy**: +25% vs simple OCR
 - **Features**: Stabilization, temporal median, voting, spell-check
@@ -241,28 +337,19 @@ imagesummarizer movie-meme.gif --pipeline caption
 imagesummarizer image.gif --pipeline advancedocr
 ```
 
-### Quality Pipeline
-- **Speed**: 10-12s per GIF
-- **Accuracy**: +45% vs simple OCR
-- **Features**: All advanced features + higher frame counts + stricter thresholds
-
-```bash
-imagesummarizer image.gif --pipeline quality
-```
-
-### Simple OCR
+### Stats Pipeline (Fastest)
 - **Speed**: < 1s
-- **Accuracy**: Baseline Tesseract
-- **Features**: Basic OCR only
+- **Features**: Dimensions, colors, basic visual metrics
+- **Use Case**: Quick filtering, sorting by color/size
 
 ```bash
-imagesummarizer image.gif --pipeline simpleocr
+imagesummarizer image.gif --pipeline stats
 ```
 
 ### Alt Text Generation
-- **Speed**: ~3.5s per image
-- **Features**: OCR + vision analysis optimized for accessibility
-- **Use Case**: Generating descriptive alt text for images
+- **Speed**: ~4s per image
+- **Features**: Motion-aware descriptions, OCR + vision analysis
+- **Use Case**: WCAG accessibility compliance
 
 ```bash
 imagesummarizer image.gif --pipeline alttext
@@ -271,6 +358,118 @@ imagesummarizer image.gif --pipeline alttext
 ## Vision LLM Integration
 
 The tool automatically escalates to Vision LLM when OCR quality is poor (garbled text, stylized fonts).
+
+### Ollama Setup (Required for Vision LLM)
+
+Ollama provides local Vision LLM inference. **Setup once, use everywhere.**
+
+#### 1. Install Ollama
+
+**Windows:**
+```powershell
+# Download installer from https://ollama.com/download
+# Or use winget:
+winget install Ollama.Ollama
+```
+
+**macOS:**
+```bash
+brew install ollama
+# Or download from https://ollama.com/download
+```
+
+**Linux:**
+```bash
+curl -fsSL https://ollama.com/install.sh | sh
+```
+
+**Docker:**
+```bash
+docker run -d --name ollama -p 11434:11434 \
+  -v ollama_data:/root/.ollama \
+  -v /path/to/images:/images:ro \
+  ollama/ollama
+```
+
+#### 2. Pull Vision Models
+
+```bash
+# Start Ollama service (if not running)
+ollama serve
+
+# Pull recommended vision model (best balance of speed/quality)
+ollama pull minicpm-v:8b
+
+# Alternative models:
+ollama pull llava:7b           # Lighter, faster
+ollama pull llava:13b          # Higher quality, slower
+ollama pull llama3.2-vision:11b # Good quality, latest
+```
+
+#### 3. Verify Installation
+
+```bash
+# Test that Ollama is running
+curl http://localhost:11434/api/tags
+
+# Test vision capability
+imagesummarizer --models
+```
+
+### Directory Mapping (Docker)
+
+When running Ollama in Docker and processing images outside the container:
+
+```bash
+# Mount your image directories as read-only volumes
+docker run -d --name ollama \
+  -p 11434:11434 \
+  -v ollama_data:/root/.ollama \
+  -v /home/user/pictures:/images:ro \
+  -v /home/user/gifs:/gifs:ro \
+  ollama/ollama
+
+# Then reference images via mounted paths
+imagesummarizer /images/photo.jpg --ollama http://localhost:11434
+```
+
+**GPU Support (NVIDIA):**
+```bash
+docker run -d --name ollama \
+  --gpus all \
+  -p 11434:11434 \
+  -v ollama_data:/root/.ollama \
+  ollama/ollama
+```
+
+### Environment Variables
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `OLLAMA_BASE_URL` | `http://localhost:11434` | Ollama API endpoint |
+| `VISION_MODEL` | `minicpm-v:8b` | Default vision model |
+| `OLLAMA_TIMEOUT` | `30000` | Request timeout (ms) |
+
+**Example setup:**
+```bash
+# Add to ~/.bashrc or ~/.zshrc
+export OLLAMA_BASE_URL=http://localhost:11434
+export VISION_MODEL=minicpm-v:8b
+
+# Windows (System Environment Variables or PowerShell profile)
+$env:OLLAMA_BASE_URL = "http://localhost:11434"
+$env:VISION_MODEL = "minicpm-v:8b"
+```
+
+### Recommended Models by Use Case
+
+| Use Case | Model | Pull Command |
+|----------|-------|--------------|
+| **Default/Balanced** | minicpm-v:8b | `ollama pull minicpm-v:8b` |
+| **Fast processing** | llava:7b | `ollama pull llava:7b` |
+| **Maximum quality** | llava:13b | `ollama pull llava:13b` |
+| **Subtitles/Memes** | minicpm-v:8b | `ollama pull minicpm-v:8b` |
+| **Low VRAM (<8GB)** | llava:7b | `ollama pull llava:7b` |
 
 ### Frame Strip Technology
 
@@ -363,22 +562,25 @@ Add to `claude_desktop_config.json`:
 
 ## Quality Signals
 
-The tool automatically assesses OCR quality and escalates to Vision LLM when needed:
+The tool automatically assesses quality and escalates intelligently:
 
+![Stylized text image](demo-images/Frozen_Heart.jpg)
+
+```bash
+$ imagesummarizer demo-images/Frozen_Heart.jpg --output metrics
+{
+  "quality": { "sharpness": 450, "blur": 0.1 },
+  "colors": { "dominant": "Blue (45%)", "is_grayscale": false },
+  "text": { "detected": false, "confidence": 0 }
+}
+```
+
+### Key Quality Metrics
 - **spell_check_score**: 0.0-1.0 (percentage of correctly spelled words)
 - **is_garbled**: true if < 50% correct words (triggers Vision LLM escalation)
 - **text_likeliness**: Pre-OCR estimate of text presence
-
-Example:
-```json
-{
-  "text": "You keep using that word.",
-  "quality": {
-    "spell_check_score": 0.95,
-    "is_garbled": false
-  }
-}
-```
+- **sharpness**: Edge definition score (higher = sharper)
+- **motion.type**: camera_pan, object_motion, static
 
 ## Zero-Setup Auto-Download
 
@@ -553,17 +755,34 @@ imagesummarizer
 
 ## Architecture
 
-The tool uses a wave-based signal architecture:
+The tool uses a wave-based signal architecture where each wave analyzes a specific aspect of the image:
 
-1. **IdentityWave** (Priority 100): Basic image properties
-2. **ColorWave** (Priority 100): Visual analysis, text-likeliness detection
-3. **OcrWave** (Priority 60): Simple baseline OCR
-4. **AdvancedOcrWave** (Priority 59): Multi-frame temporal OCR with voting
-5. **OcrQualityWave** (Priority 58): Spell-check quality assessment
-6. **VisionLlmWave** (Priority 50): Vision LLM text extraction and captioning
-7. **ClipEmbeddingWave** (Priority 45): Semantic image embeddings
+### Visual Analysis Waves (No Dependencies)
+| Wave | Priority | Function |
+|------|----------|----------|
+| **IdentityWave** | 100 | Format, dimensions, frame count |
+| **ColorWave** | 100 | Dominant colors, saturation, grayscale detection |
+| **MotionWave** | 95 | Optical flow, motion type, moving objects |
 
-Each wave emits structured signals with confidence scores and metadata.
+### Text Extraction Waves (Require Tesseract)
+| Wave | Priority | Function |
+|------|----------|----------|
+| **OcrWave** | 60 | Baseline Tesseract OCR with bounding boxes |
+| **AdvancedOcrWave** | 59 | Multi-frame temporal voting, stabilization |
+| **OcrQualityWave** | 58 | Spell-check, garbled text detection |
+
+### ML/AI Waves (Require Ollama or API)
+| Wave | Priority | Function |
+|------|----------|----------|
+| **VisionLlmWave** | 50 | Captions, entities, scene, LLM text reading |
+| **ClipEmbeddingWave** | 45 | Semantic embeddings for similarity search |
+
+Each wave emits structured **signals** with:
+- Unique key (e.g., `motion.type`, `color.dominant`)
+- Value (the detected feature)
+- Confidence score (0.0 - 1.0)
+- Source wave name
+- Tags for filtering
 
 ### Frame Strip Processing (for animated GIFs)
 

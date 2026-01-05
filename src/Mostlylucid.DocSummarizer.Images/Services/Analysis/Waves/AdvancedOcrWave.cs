@@ -611,7 +611,9 @@ public class AdvancedOcrWave : IAnalysisWave
     /// <summary>
     /// Calculate structural similarity between two frames
     /// Returns 0.0 (completely different) to 1.0 (identical)
-    /// Uses a simplified SSIM-like metric based on luminance and structure
+    /// Uses a subtitle-aware metric that weights:
+    /// 1. Bottom region (where subtitles appear) more heavily
+    /// 2. High-brightness pixels (subtitle text is typically white/yellow) more heavily
     /// </summary>
     private double CalculateFrameSimilarity(Image<Rgba32> frame1, Image<Rgba32> frame2)
     {
@@ -621,8 +623,19 @@ public class AdvancedOcrWave : IAnalysisWave
 
         // Sample pixels in a grid pattern for performance
         const int sampleStep = 4; // Sample every 4th pixel
-        long totalDiff = 0;
-        int sampleCount = 0;
+
+        // Subtitle region starts at 75% of frame height (bottom 25%)
+        var subtitleRegionStart = (int)(frame1.Height * 0.75);
+
+        // Brightness threshold for "likely text" pixels (white/yellow subtitles are bright)
+        const double textBrightnessThreshold = 200.0; // Out of 255
+
+        double mainDiff = 0;
+        int mainSampleCount = 0;
+        double subtitleDiff = 0;
+        int subtitleSampleCount = 0;
+        double textColorDiff = 0; // Track changes in bright/text-colored pixels specifically
+        int textColorSampleCount = 0;
 
         for (int y = 0; y < frame1.Height; y += sampleStep)
         {
@@ -631,24 +644,56 @@ public class AdvancedOcrWave : IAnalysisWave
                 var p1 = frame1[x, y];
                 var p2 = frame2[x, y];
 
-                // Calculate luminance difference (YUV Y component)
+                // Calculate luminance (brightness)
                 var lum1 = 0.299 * p1.R + 0.587 * p1.G + 0.114 * p1.B;
                 var lum2 = 0.299 * p2.R + 0.587 * p2.G + 0.114 * p2.B;
 
                 var diff = Math.Abs(lum1 - lum2);
-                totalDiff += (long)diff;
-                sampleCount++;
+
+                // Check if either pixel is bright (likely text color)
+                var isBright1 = lum1 > textBrightnessThreshold;
+                var isBright2 = lum2 > textBrightnessThreshold;
+
+                // Track subtitle region separately (bottom 25%)
+                if (y >= subtitleRegionStart)
+                {
+                    // In subtitle region, weight bright pixel changes even more
+                    if (isBright1 || isBright2)
+                    {
+                        // Text appearing or disappearing - weight 3x
+                        textColorDiff += diff * 3.0;
+                        textColorSampleCount++;
+                    }
+                    subtitleDiff += diff;
+                    subtitleSampleCount++;
+                }
+                else
+                {
+                    mainDiff += diff;
+                    mainSampleCount++;
+                }
             }
         }
 
-        // Average difference per pixel (0-255 range)
-        var avgDiff = totalDiff / (double)sampleCount;
+        // Calculate separate similarities
+        var mainAvgDiff = mainSampleCount > 0 ? mainDiff / mainSampleCount : 0;
+        var subtitleAvgDiff = subtitleSampleCount > 0 ? subtitleDiff / subtitleSampleCount : 0;
+        var textColorAvgDiff = textColorSampleCount > 0 ? textColorDiff / textColorSampleCount : 0;
 
-        // Convert to similarity score (0.0 = different, 1.0 = identical)
-        // Normalize by max possible difference (255)
-        var similarity = 1.0 - (avgDiff / 255.0);
+        var mainSimilarity = 1.0 - (mainAvgDiff / 255.0);
+        var subtitleSimilarity = 1.0 - (subtitleAvgDiff / 255.0);
+        var textColorSimilarity = 1.0 - Math.Min(textColorAvgDiff / 255.0, 1.0);
 
-        return Math.Clamp(similarity, 0.0, 1.0);
+        // Combined weighting:
+        // - 30% main content (background)
+        // - 40% subtitle region (location-based)
+        // - 30% bright text pixels (color-based, most sensitive to subtitle changes)
+        var combinedSimilarity = (mainSimilarity * 0.3) + (subtitleSimilarity * 0.4) + (textColorSimilarity * 0.3);
+
+        _logger?.LogTrace("Frame similarity: main={Main:F3}, subtitle={Subtitle:F3}, text={Text:F3}, combined={Combined:F3}",
+            mainSimilarity, subtitleSimilarity, textColorSimilarity, combinedSimilarity);
+
+        return Math.Clamp(combinedSimilarity, 0.0, 1.0);
     }
 
     private List<Image<Rgba32>> SelectFramesForVoting(List<Image<Rgba32>> frames, int maxFrames)

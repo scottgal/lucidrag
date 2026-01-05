@@ -183,6 +183,29 @@ public class OcrWave : IAnalysisWave
 
         try
         {
+            // Check if Tesseract data is available before attempting OCR
+            var tessdataPath = GetTessdataPath();
+            var tessFile = Path.Combine(tessdataPath, $"{_language}.traineddata");
+            if (!File.Exists(tessFile))
+            {
+                _logger?.LogWarning("Tesseract data not found at {Path}, OCR unavailable. Use 'vision' pipeline instead.", tessdataPath);
+                signals.Add(new Signal
+                {
+                    Key = "ocr.unavailable",
+                    Value = true,
+                    Confidence = 1.0,
+                    Source = Name,
+                    Tags = new List<string> { "ocr", "config" },
+                    Metadata = new Dictionary<string, object>
+                    {
+                        ["reason"] = "Tesseract data not found",
+                        ["expected_path"] = tessFile,
+                        ["hint"] = "Use '--pipeline vision' for Vision LLM-only mode without Tesseract"
+                    }
+                });
+                return signals;
+            }
+
             // Perform OCR with Tesseract
             var textRegions = await Task.Run(() => ExtractTextWithCoordinates(imagePath), ct);
 

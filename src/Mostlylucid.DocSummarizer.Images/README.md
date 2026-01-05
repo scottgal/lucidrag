@@ -1,12 +1,16 @@
 # Mostlylucid.DocSummarizer.Images
 
-**Deterministic image profiling with optional vision-LLM escalation (Ollama) when confidence is low.**
+**Complete Image Intelligence Pipeline** - Deterministic profiling, motion analysis, OCR, and Vision LLM escalation in a single unified library.
 
 Core profiling is deterministic and offline; LLM/OCR/CLIP are optional stages controlled by thresholds and configuration.
+
+![Cat Motion Demo](demo-images/cat_wag.gif)
+*Motion detection extracts keyframes and analyzes movement patterns*
 
 ## Mental Model
 
 - Deterministic analyzers emit signals (quality/color/type/text-likeliness)
+- Motion analysis extracts movement patterns from animated GIFs
 - Escalation rules decide if OCR or Vision LLM is needed
 - Results are stored as confidence-scored signals in SQLite
 - Subsequent runs reuse cached signals by content hash
@@ -14,6 +18,9 @@ Core profiling is deterministic and offline; LLM/OCR/CLIP are optional stages co
 ## Features
 
 ### Core Analysis Pipeline
+
+![Meme Text Extraction](demo-images/anchorman-not-even-mad.gif)
+*Subtitle extraction across frames - captures "I'm not even mad. That's amazing."*
 
 - **Deterministic profiling (fast path)** - no ML required
   - Color analysis (dominant colors, grids, saturation)
@@ -40,8 +47,21 @@ Core profiling is deterministic and offline; LLM/OCR/CLIP are optional stages co
   - Thumbnail generation (WebP format)
   - OCR integration (Tesseract) triggered by text-likeliness
   - CLIP embeddings for similarity search
-  - GIF frame extraction and per-frame analysis
-  - Motion detection (OpenCV optical flow) **(optional, planned)**
+  - **GIF frame extraction and per-frame analysis**
+  - **Motion detection with optical flow analysis**
+  - **Frame strip technology for Vision LLM subtitle reading**
+
+### Frame Strip Technology
+
+For animated GIFs with subtitles, the library generates horizontal frame strips that capture unique text frames:
+
+**OCR Mode Strip** (text changes only - 93 frames → 2 frames):
+![OCR Strip](demo-images/anchorman-not-even-mad_ocr_strip.png)
+
+**Motion Mode Strip** (keyframes for motion inference):
+![Motion Strip](demo-images/cat_wag_motion_strip.png)
+
+This allows Vision LLMs to read all subtitle text in a single API call, dramatically improving accuracy for memes and captioned content.
 
 ### Supported Formats
 
@@ -87,7 +107,23 @@ Console.WriteLine($"Hash: {hash}");
 
 ## Analysis Process
 
-The library uses a multi-stage analysis pipeline that combines fast heuristic analysis with optional AI-powered semantic understanding:
+The library uses a **Wave-based analysis architecture** where specialized analyzers (Waves) each contribute signals to a unified profile:
+
+![Alan Shrug](demo-images/alanshrug_opt.gif)
+*Each wave analyzes different aspects: color, motion, text, quality*
+
+### Wave Architecture
+
+| Wave | Priority | Purpose | Signals Emitted |
+|------|----------|---------|-----------------|
+| **IdentityWave** | 10 | Format, dimensions, hash | `identity.*` |
+| **ColorWave** | 20 | Dominant colors, palette, saturation | `color.*` |
+| **ForensicsWave** | 30 | Edges, sharpness, blur detection | `visual.*`, `quality.*` |
+| **MotionWave** | 40 | GIF frame analysis, optical flow | `motion.*` |
+| **AdvancedOcrWave** | 50 | Multi-frame OCR with voting | `ocr.*` |
+| **VisionLlmWave** | 80 | Vision LLM captions, scene classification | `vision.llm.*` |
+| **ClipEmbeddingWave** | 90 | CLIP vector embeddings | `vision.clip.*` |
+| **ContradictionWave** | 100 | Cross-wave validation | `validation.*` |
 
 ```mermaid
 graph TD
@@ -175,37 +211,50 @@ If text likeliness > threshold (default 0.4):
 2. **Store as Signal**: `content.extracted_text` with confidence 0.9
 3. **Cache**: Store in SignalDatabase for reuse
 
-### Stage 5: GIF Motion Analysis (Optional, Planned)
+### Stage 5: GIF Motion Analysis
 
-For animated GIFs using OpenCvSharp:
+![Shrug GIF](demo-images/alanshrug_opt.gif)
+*Motion analysis detects shoulder movement and gesture patterns*
 
-1. **Frame Extraction**: Extract all frames or keyframes
-2. **Optical Flow**: Compute motion vectors using Farneback dense optical flow
+For animated GIFs using the MotionWave analyzer:
+
+1. **Frame Extraction**: Extract all frames or keyframes using subtitle-aware deduplication
+2. **Optical Flow**: Compute motion vectors between consecutive frames
 3. **Motion Direction**: Analyze dominant motion (left, right, up, down, radial)
 4. **Motion Magnitude**: Calculate average pixel displacement per frame
 5. **Store Signals**:
    - `motion.direction`: Dominant motion direction
    - `motion.magnitude`: Average displacement (pixels/frame)
    - `motion.regions`: Regions with significant motion
+   - `motion.type`: Classification (camera_pan, camera_zoom, object_motion, general)
+   - `motion.is_looping`: Whether animation loops seamlessly
 
-**Optical Flow Algorithm (Farneback)**:
-- Dense optical flow: computes motion for every pixel
-- Polynomial expansion for robust gradient estimation
-- Multi-scale pyramid for large displacements
-- Typical accuracy: 90%+ for consistent motion
+**Subtitle-Aware Frame Deduplication**:
+- Weights bottom 25% of frame at 40% (where subtitles appear)
+- Weights bright pixels (white/yellow text) at 30% with 3x multiplier
+- Main content only 30%
+- This ensures text changes are captured even when main image is static
 
-**Example motion signals**:
+![Arse Biscuits](demo-images/arse_biscuits.gif)
+*Multi-line subtitle extraction with gesture recognition*
+
+**Example motion signals** (from cat_wag.gif):
 ```csharp
-// For a GIF of a dog running right:
-profile.GetValue<string>("motion.direction");      // "right"
-profile.GetValue<double>("motion.magnitude");      // 15.3 (pixels/frame)
-profile.GetValue<List<Region>>("motion.regions");  // [{x:50, y:100, w:200, h:150}]
+// For a GIF with motion:
+profile.GetValue<bool>("motion.has_motion");       // true
+profile.GetValue<string>("motion.type");           // "object_motion"
+profile.GetValue<string>("motion.direction");      // dominant direction
+profile.GetValue<double>("motion.magnitude");      // intensity 0-1
+profile.GetValue<double>("motion.activity");       // coverage percentage
+profile.GetValue<double>("motion.temporal_consistency"); // consistency across frames
 ```
 
-**Alternative: Lucas-Kanade Sparse Optical Flow**
-- Tracks specific feature points instead of all pixels
-- Faster but less complete motion information
-- Better for point-based tracking (e.g., eye tracking)
+**Text output** (from CLI):
+```
+Caption: A cat is laying down with its body stretched out across a white bench...
+Scene: indoor
+Motion: MODERATE object_motion motion (partial coverage)
+```
 
 ### Stage 6: Caching & Storage
 
@@ -784,6 +833,8 @@ await signalDatabase.StoreFeedbackAsync(
 
 ## Use Cases
 
+![Cat Motion](demo-images/cat_wag.gif)
+
 1. **Document Processing** - Classify images in document pipelines
 2. **Photo Library Organization** - Detect and organize photos vs screenshots
 3. **Duplicate Detection** - Find duplicate images using perceptual hashing
@@ -794,6 +845,9 @@ await signalDatabase.StoreFeedbackAsync(
 8. **Color Palette Generation** - Extract color schemes from images
 9. **Semantic Search** - Cache vision LLM captions for natural language search
 10. **Multi-Pipeline Processing** - Signal-based coordination for complex workflows
+11. **Meme Text Extraction** - Extract subtitle text from animated memes
+12. **GIF Captioning** - Generate natural language descriptions of animations
+13. **Motion Classification** - Detect and classify movement patterns
 
 ## Command Line Tool
 
@@ -801,12 +855,37 @@ For interactive use, batch processing, and MCP server integration, see:
 
 **[ImageSummarizer CLI](../Mostlylucid.ImageSummarizer.Cli/README.md)** - Full-featured CLI with Vision LLM integration
 
+![Anchorman Meme](demo-images/anchorman-not-even-mad.gif)
+
 ```bash
 # Download from releases
 # https://github.com/scottgal/lucidrag/releases
 
-# Analyze single image
-imagesummarizer photo.jpg --pipeline caption --output json
+# Analyze single image with visual output
+imagesummarizer demo-images/anchorman-not-even-mad.gif --pipeline caption --output visual
+
+# Extract text from animated meme
+imagesummarizer demo-images/anchorman-not-even-mad.gif --output text
+# Output:
+# "I'm not even i mmad."
+# "That's amazing."
+# Caption: A man with a mustache is wearing grey high neck sweater...
+# Scene: meme
+# Motion: SUBTLE general motion (localized coverage)
+
+# Generate OCR frame strip (text changes only)
+imagesummarizer export-strip demo-images/anchorman-not-even-mad.gif --mode ocr
+# Deduplicating 93 frames (OCR mode - text changes only)...
+#   Reduced to 2 unique text frames
+# ✓ Saved ocr strip to: anchorman-not-even-mad_ocr_strip.png
+#   Dimensions: 600x185 (2 frames)
+
+# Generate motion keyframe strip
+imagesummarizer export-strip demo-images/cat_wag.gif --mode motion --max-frames 6
+# Extracting 6 keyframes from 9 frames (motion mode)...
+#   Extracted 6 keyframes for motion inference
+# ✓ Saved motion strip to: cat_wag_motion_strip.png
+#   Dimensions: 3000x280 (6 frames)
 
 # Batch process directory
 imagesummarizer ./photos --output json
