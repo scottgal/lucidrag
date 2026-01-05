@@ -917,6 +917,15 @@ class Program
         Spectre.Console.AnsiConsole.Write(new Spectre.Console.Rule($"[cyan]{Spectre.Console.Markup.Escape(Path.GetFileName(profile.ImagePath) ?? "Image")}[/]"));
         Spectre.Console.AnsiConsole.WriteLine();
 
+        // Image preview (console rendering)
+        if (!string.IsNullOrEmpty(profile.ImagePath) && File.Exists(profile.ImagePath))
+        {
+            Spectre.Console.AnsiConsole.MarkupLine("[yellow]Preview[/]");
+            var isGrayscale = ledger.Colors.IsGrayscale;
+            Services.ConsoleImageRenderer.RenderToConsole(profile.ImagePath, maxWidth: 60, maxHeight: 15, grayscale: isGrayscale);
+            Spectre.Console.AnsiConsole.WriteLine();
+        }
+
         // Identity panel
         var identityTable = new Spectre.Console.Table().Border(Spectre.Console.TableBorder.Rounded);
         identityTable.AddColumn("[dim]Property[/]");
