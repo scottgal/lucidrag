@@ -314,3 +314,10 @@ vocab.txt
 # Local configuration files with API keys
 appsettings.local.json
 appsettings.*.local.json
+
+# Claude Code local settings (may contain API keys or local paths)
+.claude/settings.local.json
+
+# Test publish directories
+publish-test/
+test-publish/
