@@ -41,11 +41,9 @@ jobs:
             --logger "console;verbosity=normal"
 
           # Test DocSummarizer.Images.Tests (CI-safe: mocked HTTP clients, synthetic data)
-          # Note: Excluding experimental discriminator tests (TextOnlyImageTests) that are still being tuned
           dotnet test src/Mostlylucid.DocSummarizer.Images.Tests/Mostlylucid.DocSummarizer.Images.Tests.csproj \
             --configuration Release \
             --no-build \
-            --filter 'FullyQualifiedName!~TextOnlyImageTests&FullyQualifiedName!~TextOnlyImagePipelineTests' \
             --logger "console;verbosity=normal"
 
       - name: Verify MCP tools can be listed
