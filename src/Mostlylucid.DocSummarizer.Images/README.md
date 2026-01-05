@@ -529,6 +529,108 @@ var bestSignal = dynamicProfile.GetBestSignal("quality.sharpness");
 - `color.mean_saturation` - Average color intensity 0-1 (confidence: 1.0)
 - `color.is_mostly_grayscale` - Boolean flag (confidence: 1.0)
 
+#### Validation Signals
+- `validation.contradiction.count` - Number of contradictions detected (confidence: 1.0)
+- `validation.contradiction.status` - Overall status: "clean", "info", "warning", "error", "critical"
+- `validation.contradiction.<rule_id>` - Details of specific contradiction (when detected)
+
+### Contradiction Detection
+
+The library includes a **config-driven contradiction detection system** that validates signals from different analysis waves for consistency. This catches cases where different analyzers produce conflicting results.
+
+```mermaid
+graph TD
+    A[All Waves Complete] --> B[ContradictionWave]
+    B --> C{Check Rules}
+    C --> D[OCR vs Vision Text]
+    C --> E[Grayscale vs Colors]
+    C --> F[Type Classifications]
+    C --> G[Confidence Conflicts]
+    D --> H{Contradiction?}
+    E --> H
+    F --> H
+    G --> H
+    H -->|Yes| I[Emit Contradiction Signal]
+    H -->|No| J[Status: Clean]
+    I --> K[Apply Resolution Strategy]
+
+    style B stroke:#FFD700
+    style I stroke:#FF6B6B
+    style J stroke:#90EE90
+```
+
+**Built-in Contradiction Rules:**
+
+| Rule ID | Description | Severity |
+|---------|-------------|----------|
+| `ocr_vs_vision_text` | OCR found text but Vision LLM says no text | Warning |
+| `text_likeliness_vs_ocr` | High text score but OCR found nothing | Warning |
+| `grayscale_vs_colors` | Marked grayscale but has colorful dominants | Info |
+| `screenshot_vs_photo_noise` | Screenshot type but photo-like noise | Warning |
+| `llm_vs_heuristic_type` | Vision LLM type differs from heuristics | Info |
+| `face_vs_icon` | Faces detected in Icon/Diagram | Warning |
+| `exif_format_mismatch` | EXIF in format that doesn't support it | Warning |
+| `blur_vs_edges` | Low sharpness but high edge density | Info |
+
+**Resolution Strategies:**
+
+- `PreferHigherConfidence` - Keep signal with higher confidence
+- `PreferMostRecent` - Keep most recent signal
+- `MarkConflicting` - Keep both, flag for review
+- `RemoveBoth` - Neither signal trusted
+- `EscalateToLlm` - Escalate to Vision LLM for resolution
+- `ManualReview` - Flag for human review
+
+**Configuration:**
+
+```json
+{
+  "Images": {
+    "Contradiction": {
+      "Enabled": true,
+      "RejectOnCritical": false,
+      "MinConfidenceThreshold": 0.5,
+      "EnableLlmEscalation": true,
+      "CustomRules": [
+        {
+          "RuleId": "my_custom_rule",
+          "Description": "Custom validation rule",
+          "SignalKeyA": "content.type",
+          "SignalKeyB": "vision.detected_type",
+          "Type": "ValueConflict",
+          "Severity": "Warning",
+          "Resolution": "PreferHigherConfidence"
+        }
+      ]
+    }
+  }
+}
+```
+
+**Programmatic Usage:**
+
+```csharp
+// Get contradiction results from profile
+var contradictions = profile.GetSignals("validation.contradiction")
+    .Where(s => !s.Key.EndsWith(".count") && !s.Key.EndsWith(".status"));
+
+foreach (var signal in contradictions)
+{
+    var metadata = signal.Metadata;
+    Console.WriteLine($"Rule: {metadata["rule_id"]}");
+    Console.WriteLine($"Severity: {metadata["severity"]}");
+    Console.WriteLine($"Explanation: {signal.Value}");
+    Console.WriteLine($"Resolution: {metadata["resolution"]}");
+}
+
+// Check if image should be rejected
+var status = profile.GetValue<string>("validation.contradiction.status");
+if (status == "critical" && config.Contradiction.RejectOnCritical)
+{
+    // Handle rejected image
+}
+```
+
 ### Auto-Escalation to Vision LLM
 
 Automatically escalates low-confidence images to vision LLM for semantic understanding:

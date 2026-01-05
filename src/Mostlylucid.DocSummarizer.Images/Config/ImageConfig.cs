@@ -150,6 +150,129 @@ public class ImageConfig
     /// If not specified, looks in ModelsDirectory/clip/clip-vit-b-32-visual.onnx
     /// </summary>
     public string? ClipModelPath { get; set; }
+
+    /// <summary>
+    /// Contradiction detection configuration for signal validation
+    /// </summary>
+    public ContradictionConfig Contradiction { get; set; } = new();
+
+    /// <summary>
+    /// Motion detection configuration for animated GIF analysis
+    /// </summary>
+    public MotionConfig Motion { get; set; } = new();
+}
+
+/// <summary>
+/// Configuration for motion detection in animated images
+/// </summary>
+public class MotionConfig
+{
+    /// <summary>
+    /// Enable motion detection for animated GIFs
+    /// </summary>
+    public bool Enabled { get; set; } = true;
+
+    /// <summary>
+    /// Maximum number of frames to analyze (0 = all frames)
+    /// </summary>
+    public int MaxFramesToAnalyze { get; set; } = 30;
+
+    /// <summary>
+    /// Minimum motion magnitude to consider as significant motion
+    /// </summary>
+    public double MinMagnitudeThreshold { get; set; } = 0.5;
+
+    /// <summary>
+    /// Minimum motion activity (fraction of image) to report motion regions
+    /// </summary>
+    public double MinActivityThreshold { get; set; } = 0.05;
+
+    /// <summary>
+    /// Enable Vision LLM-based identification of WHAT is moving
+    /// </summary>
+    public bool EnableMotionIdentification { get; set; } = true;
+}
+
+/// <summary>
+/// Configuration for contradiction detection between analysis signals
+/// </summary>
+public class ContradictionConfig
+{
+    /// <summary>
+    /// Enable contradiction detection wave
+    /// </summary>
+    public bool Enabled { get; set; } = true;
+
+    /// <summary>
+    /// Reject images with critical contradictions (halt processing)
+    /// </summary>
+    public bool RejectOnCritical { get; set; } = false;
+
+    /// <summary>
+    /// Minimum confidence threshold for signals to be checked
+    /// </summary>
+    public double MinConfidenceThreshold { get; set; } = 0.5;
+
+    /// <summary>
+    /// Enable escalation to Vision LLM for contradiction resolution
+    /// </summary>
+    public bool EnableLlmEscalation { get; set; } = true;
+
+    /// <summary>
+    /// Custom contradiction rules (added to default rules)
+    /// </summary>
+    public List<CustomContradictionRule>? CustomRules { get; set; }
+}
+
+/// <summary>
+/// Configuration-based custom contradiction rule
+/// </summary>
+public class CustomContradictionRule
+{
+    /// <summary>
+    /// Unique identifier for this rule
+    /// </summary>
+    public required string RuleId { get; set; }
+
+    /// <summary>
+    /// Human-readable description
+    /// </summary>
+    public required string Description { get; set; }
+
+    /// <summary>
+    /// First signal key to compare
+    /// </summary>
+    public required string SignalKeyA { get; set; }
+
+    /// <summary>
+    /// Second signal key to compare
+    /// </summary>
+    public required string SignalKeyB { get; set; }
+
+    /// <summary>
+    /// Type: ValueConflict, NumericDivergence, BooleanOpposite, MutuallyExclusive, MissingImplied
+    /// </summary>
+    public string Type { get; set; } = "ValueConflict";
+
+    /// <summary>
+    /// Threshold for numeric comparisons
+    /// </summary>
+    public double? Threshold { get; set; }
+
+    /// <summary>
+    /// Severity: Info, Warning, Error, Critical
+    /// </summary>
+    public string Severity { get; set; } = "Warning";
+
+    /// <summary>
+    /// Resolution: PreferHigherConfidence, PreferMostRecent, MarkConflicting, RemoveBoth, EscalateToLlm, ManualReview
+    /// </summary>
+    public string Resolution { get; set; } = "PreferHigherConfidence";
+
+    /// <summary>
+    /// Whether this rule is enabled
+    /// </summary>
+    public bool Enabled { get; set; } = true;
 }
 
 /// <summary>

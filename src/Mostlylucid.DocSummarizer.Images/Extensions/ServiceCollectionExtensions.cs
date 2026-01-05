@@ -11,6 +11,7 @@ using Mostlylucid.DocSummarizer.Images.Services.Ocr;
 using Mostlylucid.DocSummarizer.Images.Services.Ocr.Models;
 using Mostlylucid.DocSummarizer.Images.Services.Ocr.PostProcessing;
 using Mostlylucid.DocSummarizer.Images.Services.Vision;
+using Mostlylucid.DocSummarizer.Images.Models.Dynamic;
 using Mostlylucid.DocSummarizer.Services;
 
 namespace Mostlylucid.DocSummarizer.Images.Extensions;
@@ -196,6 +197,61 @@ public static class ServiceCollectionExtensions
             var modelDownloader = sp.GetRequiredService<ModelDownloader>();
             var logger = sp.GetService<Microsoft.Extensions.Logging.ILogger<ClipEmbeddingWave>>();
             return new ClipEmbeddingWave(imageConfig, modelDownloader, logger);
+        });
+
+        // MotionAnalyzer - Optical flow analysis for animated GIFs
+        services.TryAddSingleton<MotionAnalyzer>(sp =>
+        {
+            var logger = sp.GetService<Microsoft.Extensions.Logging.ILogger<MotionAnalyzer>>();
+            return new MotionAnalyzer(logger);
+        });
+
+        // MotionWave - Motion detection for animated images using optical flow
+        services.AddSingleton<IAnalysisWave>(sp =>
+        {
+            var motionAnalyzer = sp.GetRequiredService<MotionAnalyzer>();
+            var imageConfig = sp.GetRequiredService<IOptions<ImageConfig>>();
+            var httpClient = sp.GetService<HttpClient>();
+            var logger = sp.GetService<Microsoft.Extensions.Logging.ILogger<MotionWave>>();
+            return new MotionWave(motionAnalyzer, imageConfig, httpClient, logger);
+        });
+
+        // ContradictionDetector - config-driven signal validation
+        services.TryAddSingleton<ContradictionDetector>(sp =>
+        {
+            var imageConfig = sp.GetRequiredService<IOptions<ImageConfig>>().Value;
+            var logger = sp.GetService<Microsoft.Extensions.Logging.ILogger<ContradictionDetector>>();
+
+            // Convert custom rules from config to ContradictionRule objects
+            var customRules = imageConfig.Contradiction.CustomRules?
+                .Select(r => new ContradictionRule
+                {
+                    RuleId = r.RuleId,
+                    Description = r.Description,
+                    SignalKeyA = r.SignalKeyA,
+                    SignalKeyB = r.SignalKeyB,
+                    Type = Enum.TryParse<ContradictionType>(r.Type, true, out var t)
+                        ? t : ContradictionType.ValueConflict,
+                    Threshold = r.Threshold,
+                    Severity = Enum.TryParse<ContradictionSeverity>(r.Severity, true, out var s)
+                        ? s : ContradictionSeverity.Warning,
+                    Resolution = Enum.TryParse<ResolutionStrategy>(r.Resolution, true, out var rs)
+                        ? rs : ResolutionStrategy.PreferHigherConfidence,
+                    Enabled = r.Enabled,
+                    MinConfidenceThreshold = imageConfig.Contradiction.MinConfidenceThreshold
+                })
+                .ToList();
+
+            return new ContradictionDetector(customRules, logger);
+        });
+
+        // ContradictionWave - Signal validation and conflict detection (runs last)
+        services.AddSingleton<IAnalysisWave>(sp =>
+        {
+            var detector = sp.GetRequiredService<ContradictionDetector>();
+            var imageConfig = sp.GetRequiredService<IOptions<ImageConfig>>();
+            var logger = sp.GetService<Microsoft.Extensions.Logging.ILogger<ContradictionWave>>();
+            return new ContradictionWave(detector, imageConfig, logger);
         });
 
         // Wave orchestrator
