@@ -45,7 +45,7 @@ jobs:
           dotnet test src/Mostlylucid.DocSummarizer.Images.Tests/Mostlylucid.DocSummarizer.Images.Tests.csproj \
             --configuration Release \
             --no-build \
-            --filter "FullyQualifiedName!~TextOnlyImageTests&FullyQualifiedName!~TextOnlyImagePipelineTests" \
+            --filter 'FullyQualifiedName!~TextOnlyImageTests&FullyQualifiedName!~TextOnlyImagePipelineTests' \
             --logger "console;verbosity=normal"
 
       - name: Verify MCP tools can be listed
