@@ -13,7 +13,7 @@
     <PackageId>Mostlylucid.ImageSummarizer.Cli</PackageId>
     <Description>Image Intelligence - Heuristic analysis + Vision LLM escalation. Part of the LucidRAG DocSummarizer family.</Description>
     <Authors>Scott Galloway</Authors>
-    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <PackageLicenseExpression>Unlicense</PackageLicenseExpression>
     <RootNamespace>Mostlylucid.ImageSummarizer.Cli</RootNamespace>
     <AssemblyName>imagesummarizer</AssemblyName>
 
@@ -23,6 +23,12 @@
     <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
     <IncludeAllContentForSelfExtract>true</IncludeAllContentForSelfExtract>
     <EnableCompressionInSingleFile>true</EnableCompressionInSingleFile>
+  </PropertyGroup>
+
+  <!-- Release configuration: no PDB files -->
+  <PropertyGroup Condition="'$(Configuration)' == 'Release'">
+    <DebugSymbols>false</DebugSymbols>
+    <DebugType>none</DebugType>
   </PropertyGroup>
 
   <ItemGroup>
@@ -43,6 +49,14 @@
     <Content Include="Config\output-templates.json">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>
+    <Content Include="appsettings.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <None Include="README.md">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <Pack>true</Pack>
+      <PackagePath>\</PackagePath>
+    </None>
   </ItemGroup>
 
 </Project>

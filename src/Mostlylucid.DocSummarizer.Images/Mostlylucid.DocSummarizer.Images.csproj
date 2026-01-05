@@ -16,6 +16,12 @@
     <PackageTags>docsummarizer;images;vision;imagesharp;clip;florence2;onnx</PackageTags>
   </PropertyGroup>
 
+  <!-- Release configuration: no PDB files -->
+  <PropertyGroup Condition="'$(Configuration)' == 'Release'">
+    <DebugSymbols>false</DebugSymbols>
+    <DebugType>none</DebugType>
+  </PropertyGroup>
+
   <ItemGroup>
     <!-- ONNX Runtime for Florence-2 and CLIP -->
     <PackageReference Include="Microsoft.ML.OnnxRuntime" Version="1.23.0" />

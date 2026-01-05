@@ -122,16 +122,18 @@ public static class ServiceCollectionExtensions
             return new ColorWave(colorAnalyzer, streamProcessor);
         });
 
-        // OcrWave - configured with threshold from OcrConfig
+        // OcrWave - configured with threshold from OcrConfig, uses auto-download
         services.AddSingleton<IAnalysisWave>(sp =>
         {
             var imageConfig = sp.GetRequiredService<IOptions<ImageConfig>>();
+            var modelDownloader = sp.GetRequiredService<ModelDownloader>();
             var logger = sp.GetService<Microsoft.Extensions.Logging.ILogger<OcrWave>>();
             // Use threshold=0 to always run OCR, or configured threshold
             var threshold = imageConfig.Value.Ocr.TextDetectionConfidenceThreshold;
             return new OcrWave(
-                tesseractDataPath: null, // Uses default ./tessdata
-                language: "eng",
+                modelDownloader: modelDownloader,
+                tesseractDataPath: imageConfig.Value.TesseractDataPath,
+                language: imageConfig.Value.TesseractLanguage,
                 enabled: imageConfig.Value.EnableOcr,
                 textLikelinessThreshold: threshold,
                 logger: logger);

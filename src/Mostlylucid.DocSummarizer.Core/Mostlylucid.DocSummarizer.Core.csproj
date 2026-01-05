@@ -45,6 +45,12 @@
         <MinVerSkip Condition="'$(Configuration)' == 'Debug'">true</MinVerSkip>
     </PropertyGroup>
 
+    <!-- Release configuration: no PDB files for library consumers -->
+    <PropertyGroup Condition="'$(Configuration)' == 'Release'">
+        <DebugSymbols>false</DebugSymbols>
+        <DebugType>none</DebugType>
+    </PropertyGroup>
+
     <!-- Package dependencies -->
     <ItemGroup>
         <!-- MinVer -->

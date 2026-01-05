@@ -1,4 +1,5 @@
 using Mostlylucid.DocSummarizer.Images.Models.Dynamic;
+using Mostlylucid.DocSummarizer.Images.Services.Ocr.Models;
 using Tesseract;
 using Microsoft.Extensions.Logging;
 
@@ -7,6 +8,7 @@ namespace Mostlylucid.DocSummarizer.Images.Services.Analysis.Waves;
 /// <summary>
 /// OCR wave using Tesseract for text extraction with bounding box coordinates.
 /// Provides EasyOCR-compatible output format (text, coordinates, confidence).
+/// Auto-downloads tessdata on first use for zero-setup experience.
 ///
 /// References:
 /// - Tesseract.NET: https://github.com/charlesw/tesseract
@@ -14,28 +16,102 @@ namespace Mostlylucid.DocSummarizer.Images.Services.Analysis.Waves;
 /// </summary>
 public class OcrWave : IAnalysisWave
 {
+    private readonly ModelDownloader? _modelDownloader;
     private readonly string? _tesseractDataPath;
     private readonly string _language;
     private readonly ILogger<OcrWave>? _logger;
     private readonly bool _enabled;
     private readonly double _textLikelinessThreshold;
+    private string? _resolvedTessdataPath;
+    private readonly object _initLock = new();
+    private bool _initialized;
 
     public string Name => "OcrWave";
     public int Priority => 60; // Medium priority - runs after forensics
     public IReadOnlyList<string> Tags => new[] { SignalTags.Content, "ocr", "text" };
 
     public OcrWave(
+        ModelDownloader? modelDownloader = null,
         string? tesseractDataPath = null,
         string language = "eng",
         bool enabled = true,
         double textLikelinessThreshold = 0.3,
         ILogger<OcrWave>? logger = null)
     {
+        _modelDownloader = modelDownloader;
         _tesseractDataPath = tesseractDataPath;
         _language = language;
         _enabled = enabled;
         _textLikelinessThreshold = textLikelinessThreshold;
         _logger = logger;
+    }
+
+    private string GetTessdataPath()
+    {
+        if (_initialized && _resolvedTessdataPath != null)
+        {
+            return _resolvedTessdataPath;
+        }
+
+        lock (_initLock)
+        {
+            if (_initialized && _resolvedTessdataPath != null)
+            {
+                return _resolvedTessdataPath;
+            }
+
+            // Priority 1: Explicit path provided
+            if (!string.IsNullOrEmpty(_tesseractDataPath) && Directory.Exists(_tesseractDataPath))
+            {
+                _resolvedTessdataPath = _tesseractDataPath;
+                _initialized = true;
+                _logger?.LogDebug("Using explicit tessdata path: {Path}", _resolvedTessdataPath);
+                return _resolvedTessdataPath;
+            }
+
+            // Priority 2: Auto-download via ModelDownloader
+            if (_modelDownloader != null)
+            {
+                try
+                {
+                    _logger?.LogInformation("Auto-downloading tessdata for first-time setup...");
+                    _resolvedTessdataPath = _modelDownloader.GetTessdataDirectory();
+                    _initialized = true;
+                    _logger?.LogInformation("Tessdata ready at: {Path}", _resolvedTessdataPath);
+                    return _resolvedTessdataPath;
+                }
+                catch (Exception ex)
+                {
+                    _logger?.LogWarning(ex, "Failed to auto-download tessdata, falling back to local paths");
+                }
+            }
+
+            // Priority 3: Check common local paths
+            var localPaths = new[]
+            {
+                "./tessdata",
+                Path.Combine(AppContext.BaseDirectory, "tessdata"),
+                Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "LucidRAG", "models", "tessdata")
+            };
+
+            foreach (var path in localPaths)
+            {
+                var engFile = Path.Combine(path, $"{_language}.traineddata");
+                if (File.Exists(engFile))
+                {
+                    _resolvedTessdataPath = path;
+                    _initialized = true;
+                    _logger?.LogDebug("Found tessdata at: {Path}", _resolvedTessdataPath);
+                    return _resolvedTessdataPath;
+                }
+            }
+
+            // Fallback: Use default and let Tesseract throw if not found
+            _resolvedTessdataPath = "./tessdata";
+            _initialized = true;
+            _logger?.LogWarning("No tessdata found, using default path: {Path}", _resolvedTessdataPath);
+            return _resolvedTessdataPath;
+        }
     }
 
     public async Task<IEnumerable<Signal>> AnalyzeAsync(
@@ -201,8 +277,9 @@ public class OcrWave : IAnalysisWave
     private List<OcrTextRegion> ExtractTextWithCoordinates(string imagePath)
     {
         var regions = new List<OcrTextRegion>();
+        var tessdataPath = GetTessdataPath();
 
-        using var engine = new TesseractEngine(_tesseractDataPath ?? "./tessdata", _language, EngineMode.Default);
+        using var engine = new TesseractEngine(tessdataPath, _language, EngineMode.Default);
 
         // Load image from disk
         using var img = Pix.LoadFromFile(imagePath);
