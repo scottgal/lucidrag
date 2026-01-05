@@ -28,9 +28,28 @@ public class ImageConfig
     public double TextLikelinessThreshold { get; set; } = 0.4;
 
     /// <summary>
-    /// Directory to store downloaded ONNX models (Florence-2, CLIP)
+    /// Directory to store downloaded models (tessdata, ONNX, etc.)
+    /// Defaults to %LOCALAPPDATA%/LucidRAG/models on Windows, ~/.local/share/LucidRAG/models on Linux/macOS
     /// </summary>
-    public string ModelsDirectory { get; set; } = "./models";
+    public string ModelsDirectory { get; set; } = GetDefaultModelsDirectory();
+
+    private static string GetDefaultModelsDirectory()
+    {
+        // Check for environment variable override first
+        var envOverride = Environment.GetEnvironmentVariable("LUCIDRAG_MODELS_DIR");
+        if (!string.IsNullOrEmpty(envOverride))
+        {
+            return envOverride;
+        }
+
+        var localAppData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+        if (string.IsNullOrEmpty(localAppData))
+        {
+            // Fallback for systems without LocalApplicationData
+            localAppData = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".local", "share");
+        }
+        return Path.Combine(localAppData, "LucidRAG", "models");
+    }
 
     /// <summary>
     /// Maximum image dimension before resizing (preserves aspect ratio)

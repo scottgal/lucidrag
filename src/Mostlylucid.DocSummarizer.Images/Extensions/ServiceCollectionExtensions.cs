@@ -71,11 +71,7 @@ public static class ServiceCollectionExtensions
         // Main analyzer
         services.TryAddSingleton<IImageAnalyzer, ImageAnalyzer>();
 
-        // OCR services
-        services.TryAddSingleton<IOcrEngine, TesseractOcrEngine>();
-        services.TryAddSingleton<GifTextExtractor>();
-
-        // Advanced OCR pipeline services (optional, registered when config enables it)
+        // Model downloader for auto-downloading tessdata and ONNX models
         services.TryAddSingleton<ModelDownloader>(sp =>
         {
             var config = sp.GetRequiredService<IOptions<ImageConfig>>().Value;
@@ -84,6 +80,20 @@ public static class ServiceCollectionExtensions
                 autoDownload: true,
                 logger: sp.GetService<Microsoft.Extensions.Logging.ILogger<ModelDownloader>>());
         });
+
+        // OCR services - TesseractOcrEngine with auto-download support
+        services.TryAddSingleton<IOcrEngine>(sp =>
+        {
+            var config = sp.GetRequiredService<IOptions<ImageConfig>>().Value;
+            var modelDownloader = sp.GetRequiredService<ModelDownloader>();
+            var logger = sp.GetService<Microsoft.Extensions.Logging.ILogger<TesseractOcrEngine>>();
+            return new TesseractOcrEngine(
+                modelDownloader: modelDownloader,
+                tesseractDataPath: config.TesseractDataPath,
+                language: config.TesseractLanguage,
+                logger: logger);
+        });
+        services.TryAddSingleton<GifTextExtractor>();
 
         services.TryAddSingleton<AdvancedGifOcrService>(sp =>
         {

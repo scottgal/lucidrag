@@ -44,6 +44,14 @@ public class ModelDownloader
             RequiresConversion = false,
             ApproximateSize = 60 * 1024 * 1024, // 60MB
             Description = "Real-ESRGAN 4x super-resolution"
+        },
+        [ModelType.TesseractEng] = new ModelInfo
+        {
+            FileName = "tessdata/eng.traineddata",
+            Url = "https://github.com/tesseract-ocr/tessdata_fast/raw/main/eng.traineddata",
+            RequiresConversion = false,
+            ApproximateSize = 4 * 1024 * 1024, // 4MB
+            Description = "Tesseract English language data (fast)"
         }
     };
 
@@ -136,6 +144,13 @@ public class ModelDownloader
             modelInfo.Description,
             modelInfo.ApproximateSize / (1024 * 1024));
 
+        // Ensure parent directory exists (for nested paths like tessdata/eng.traineddata)
+        var parentDir = Path.GetDirectoryName(destinationPath);
+        if (!string.IsNullOrEmpty(parentDir))
+        {
+            Directory.CreateDirectory(parentDir);
+        }
+
         var tempPath = destinationPath + ".download";
 
         try
@@ -152,35 +167,36 @@ public class ModelDownloader
             using var response = await httpClient.GetAsync(modelInfo.Url, HttpCompletionOption.ResponseHeadersRead, ct);
             response.EnsureSuccessStatusCode();
 
-            await using var contentStream = await response.Content.ReadAsStreamAsync(ct);
-            await using var fileStream = new FileStream(tempPath, FileMode.Create, FileAccess.Write, FileShare.None, 8192, true);
-
-            var buffer = new byte[8192];
-            long totalRead = 0;
-            int lastReportedPercent = -1;
-
-            while (true)
+            await using (var contentStream = await response.Content.ReadAsStreamAsync(ct))
+            await using (var fileStream = new FileStream(tempPath, FileMode.Create, FileAccess.Write, FileShare.None, 8192, true))
             {
-                var bytesRead = await contentStream.ReadAsync(buffer, ct);
-                if (bytesRead == 0) break;
+                var buffer = new byte[8192];
+                long totalRead = 0;
+                int lastReportedPercent = -1;
 
-                await fileStream.WriteAsync(buffer.AsMemory(0, bytesRead), ct);
-                totalRead += bytesRead;
-
-                // Report progress every 5%
-                var percent = (int)((totalRead * 100) / totalBytes);
-                if (percent >= lastReportedPercent + 5)
+                while (true)
                 {
-                    lastReportedPercent = percent;
-                    _logger?.LogInformation(
-                        "Download progress: {Percent}% ({CurrentMB}/{TotalMB} MB)",
-                        percent,
-                        totalRead / (1024 * 1024),
-                        totalBytes / (1024 * 1024));
-                }
-            }
+                    var bytesRead = await contentStream.ReadAsync(buffer, ct);
+                    if (bytesRead == 0) break;
 
-            await fileStream.FlushAsync(ct);
+                    await fileStream.WriteAsync(buffer.AsMemory(0, bytesRead), ct);
+                    totalRead += bytesRead;
+
+                    // Report progress every 5%
+                    var percent = (int)((totalRead * 100) / totalBytes);
+                    if (percent >= lastReportedPercent + 5)
+                    {
+                        lastReportedPercent = percent;
+                        _logger?.LogInformation(
+                            "Download progress: {Percent}% ({CurrentMB}/{TotalMB} MB)",
+                            percent,
+                            totalRead / (1024 * 1024),
+                            totalBytes / (1024 * 1024));
+                    }
+                }
+
+                await fileStream.FlushAsync(ct);
+            } // Streams are closed here before File.Move
 
             _logger?.LogInformation("Download complete, verifying...");
 
@@ -225,10 +241,38 @@ public class ModelDownloader
             kvp => kvp.Key,
             kvp => (kvp.Value, IsModelAvailable(kvp.Key)));
     }
+
+    /// <summary>
+    /// Get the tessdata directory path, ensuring it exists and contains required files.
+    /// Downloads tessdata if not present.
+    /// </summary>
+    /// <returns>Path to tessdata directory for use with Tesseract</returns>
+    public async Task<string> GetTessdataDirectoryAsync(CancellationToken ct = default)
+    {
+        var tessdataPath = Path.Combine(_modelsDirectory, "tessdata");
+
+        // Ensure eng.traineddata exists
+        var engPath = await GetModelPathAsync(ModelType.TesseractEng, ct);
+        if (engPath == null)
+        {
+            throw new InvalidOperationException(
+                "Failed to download Tesseract language data. Check network connection.");
+        }
+
+        return tessdataPath;
+    }
+
+    /// <summary>
+    /// Synchronously get the tessdata directory path, downloading if necessary.
+    /// </summary>
+    public string GetTessdataDirectory()
+    {
+        return GetTessdataDirectoryAsync().GetAwaiter().GetResult();
+    }
 }
 
 /// <summary>
-/// Type of ONNX model.
+/// Type of downloadable model.
 /// </summary>
 public enum ModelType
 {
@@ -245,7 +289,12 @@ public enum ModelType
     /// <summary>
     /// Real-ESRGAN: Real-world super-resolution
     /// </summary>
-    RealESRGAN
+    RealESRGAN,
+
+    /// <summary>
+    /// Tesseract English language data (fast variant)
+    /// </summary>
+    TesseractEng
 }
 
 /// <summary>

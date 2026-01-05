@@ -8,8 +8,10 @@ public class TesseractOcrEngineTests
     [Fact]
     public void Constructor_WithValidParameters_ShouldSucceed()
     {
-        // Arrange & Act
-        var engine = new TesseractOcrEngine("./tessdata", "eng");
+        // Arrange & Act - uses new constructor with named parameters
+        var engine = new TesseractOcrEngine(
+            tesseractDataPath: "./tessdata",
+            language: "eng");
 
         // Assert
         Assert.NotNull(engine);
@@ -19,7 +21,9 @@ public class TesseractOcrEngineTests
     public void Constructor_WithNullDataPath_ShouldUseDefault()
     {
         // Arrange & Act
-        var engine = new TesseractOcrEngine(null, "eng");
+        var engine = new TesseractOcrEngine(
+            tesseractDataPath: null,
+            language: "eng");
 
         // Assert
         Assert.NotNull(engine);
@@ -28,7 +32,7 @@ public class TesseractOcrEngineTests
     [Fact]
     public void ExtractTextWithCoordinates_WithNonExistentFile_ShouldThrow()
     {
-        // Arrange
+        // Arrange - default constructor uses auto-download or fallback paths
         var engine = new TesseractOcrEngine();
 
         // Act & Assert

@@ -380,17 +380,64 @@ Example:
 }
 ```
 
-## Auto-Downloaded Resources
+## Zero-Setup Auto-Download
 
-On first run, the tool automatically downloads:
+On first run, the tool automatically downloads required resources. **No manual setup required.**
 
-- **English Dictionary**: 539KB (from LibreOffice)
-- **Tesseract Data**: 4MB
-- **Location**: `%APPDATA%/LucidRAG/models/dictionaries/`
+### What Gets Downloaded
 
-Supported languages: en_US, en_GB, es_ES, fr_FR, de_DE, it_IT, pt_BR, ru_RU, zh_CN, ja_JP
+| Resource | Size | Purpose |
+|----------|------|---------|
+| Tesseract English Data | ~4MB | OCR engine language models |
+| English Dictionary | ~500KB | Spell-check for OCR quality scoring |
 
-Change language:
+### Storage Locations by Platform
+
+| Platform | Data Directory |
+|----------|----------------|
+| **Windows** | `%LOCALAPPDATA%\LucidRAG\models\` |
+| **macOS** | `~/Library/Application Support/LucidRAG/models/` |
+| **Linux** | `~/.local/share/LucidRAG/models/` |
+
+**Directory structure:**
+```
+LucidRAG/models/
+├── tessdata/
+│   └── eng.traineddata    # OCR language data
+└── dictionaries/
+    └── en_US.dic          # Spell-check dictionary
+```
+
+### Permission Requirements
+
+The tool needs write access to the data directory for first-run downloads:
+
+**Windows**: No special permissions needed (LocalAppData is user-writable)
+
+**macOS/Linux**:
+```bash
+# If using a shared installation, ensure the data directory is writable:
+mkdir -p ~/.local/share/LucidRAG/models
+chmod 755 ~/.local/share/LucidRAG/models
+```
+
+### Custom Data Directory
+
+Override the default location via environment variable:
+```bash
+# Windows
+set LUCIDRAG_MODELS_DIR=C:\custom\path
+imagesummarizer image.gif
+
+# Linux/macOS
+export LUCIDRAG_MODELS_DIR=/custom/path
+imagesummarizer image.gif
+```
+
+### Supported Languages
+
+OCR: en_US (default), en_GB, es_ES, fr_FR, de_DE, it_IT, pt_BR, ru_RU, zh_CN, ja_JP
+
 ```bash
 imagesummarizer image.gif --language es_ES
 ```
@@ -454,12 +501,27 @@ print(f"Confidence: {data['confidence']}")
 
 ## Troubleshooting
 
-### "Dictionary not available"
-Dictionaries auto-download on first use. Check internet connection or manually download to:
-`%APPDATA%/LucidRAG/models/dictionaries/`
+### "Failed to download" on first run
+Check internet connection. The tool downloads ~5MB on first use. If behind a proxy:
+```bash
+# Windows
+set HTTP_PROXY=http://proxy:port
+set HTTPS_PROXY=http://proxy:port
 
-### "Tesseract not found"
-Ensure tessdata is in project root or `./tessdata/`
+# Linux/macOS
+export HTTP_PROXY=http://proxy:port
+export HTTPS_PROXY=http://proxy:port
+```
+
+### "Permission denied" errors
+Ensure write access to the data directory (see Storage Locations above):
+```bash
+# Linux/macOS - fix permissions
+chmod -R 755 ~/.local/share/LucidRAG
+
+# Or use a custom writable location
+export LUCIDRAG_MODELS_DIR=/tmp/lucidrag-models
+```
 
 ### Low OCR quality on stylized text
 Use the caption pipeline which automatically uses Vision LLM:
@@ -474,10 +536,19 @@ ollama serve
 ollama pull minicpm-v:8b
 ```
 
+### Offline installation
+Pre-download models on a connected machine:
+```bash
+# On connected machine
+imagesummarizer --help  # Triggers download
+# Copy the data directory to the offline machine
+```
+
 ### List available models
 ```bash
-imagesummarizer --mcp  # Then use /models command
-# Or in interactive mode: /models
+# In interactive mode
+imagesummarizer
+/models
 ```
 
 ## Architecture
