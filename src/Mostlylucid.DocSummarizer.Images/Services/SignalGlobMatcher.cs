@@ -1,5 +1,5 @@
-using System.Text.RegularExpressions;
 using Mostlylucid.DocSummarizer.Images.Models.Dynamic;
+using Mostlylucid.Ephemeral;
 
 namespace Mostlylucid.DocSummarizer.Images.Services;
 
@@ -26,7 +26,7 @@ public static class SignalGlobMatcher
         ["faces"] = new[] { "face.*", "vision.llm.entity.person" },
         ["all"] = new[] { "*" },
         // Use case specific collections
-        ["alttext"] = new[] { "vision.llm.caption", "content.text*", "motion.summary", "identity.format" },
+        ["alttext"] = new[] { "vision.llm.caption", "vision.llm.text", "ocr.*", "content.extracted_text", "motion.summary", "identity.format", "identity.is_animated" },
         ["tool"] = new[] { "identity.*", "color.dominant*", "motion.*", "vision.llm.*", "ocr.voting.*" }
     };
 
@@ -64,12 +64,13 @@ public static class SignalGlobMatcher
 
     /// <summary>
     /// Check if a signal key matches any of the glob patterns.
+    /// Uses Ephemeral's StringPatternMatcher for consistent glob matching.
     /// </summary>
     public static bool Matches(string signalKey, IEnumerable<string> patterns)
     {
         foreach (var pattern in patterns)
         {
-            if (GlobMatch(signalKey, pattern))
+            if (StringPatternMatcher.Matches(signalKey, pattern))
                 return true;
         }
         return false;
@@ -151,37 +152,6 @@ public static class SignalGlobMatcher
         }
 
         return tags;
-    }
-
-    /// <summary>
-    /// Simple glob pattern matching.
-    /// Supports * (match any) at end or as segment wildcard.
-    /// </summary>
-    private static bool GlobMatch(string input, string pattern)
-    {
-        // Exact match
-        if (pattern == input)
-            return true;
-
-        // Match all
-        if (pattern == "*")
-            return true;
-
-        // Ends with * (prefix match)
-        if (pattern.EndsWith('*'))
-        {
-            var prefix = pattern[..^1];
-            return input.StartsWith(prefix, StringComparison.OrdinalIgnoreCase);
-        }
-
-        // Contains .* (segment wildcard)
-        if (pattern.Contains(".*"))
-        {
-            var regexPattern = "^" + Regex.Escape(pattern).Replace(@"\.\*", @"\.[^.]+") + "$";
-            return Regex.IsMatch(input, regexPattern, RegexOptions.IgnoreCase);
-        }
-
-        return false;
     }
 
     /// <summary>

@@ -73,11 +73,30 @@ public class VisionLlmWave : IAnalysisWave
 
         try
         {
-            // Convert image to base64 for Ollama
-            var imageBase64 = await ConvertImageToBase64(imagePath, ct);
+            // Check if this is an animated image - if so, create a filmstrip for better caption generation
+            var isAnimated = context.GetValue<bool>("identity.is_animated");
+            var frameCount = context.GetValue<int>("identity.frame_count");
+
+            string imageBase64;
+            int framesUsed = 1;
+
+            if (isAnimated && frameCount > 1)
+            {
+                // For animated GIFs, create a filmstrip showing key frames
+                // This lets the LLM see the animation sequence and describe what happens
+                var filmstripResult = await CreateFilmstripForCaptionAsync(imagePath, frameCount, ct);
+                imageBase64 = filmstripResult.Base64;
+                framesUsed = filmstripResult.FrameCount;
+                _logger?.LogInformation("Created filmstrip with {FrameCount} frames for caption generation", framesUsed);
+            }
+            else
+            {
+                // Static image - use single frame
+                imageBase64 = await ConvertImageToBase64(imagePath, ct);
+            }
 
             // Generate primary caption (with motion context if available)
-            var caption = await GenerateCaptionAsync(imageBase64, context, ct);
+            var caption = await GenerateCaptionAsync(imageBase64, context, ct, framesUsed);
             if (!string.IsNullOrEmpty(caption))
             {
                 signals.Add(new Signal
@@ -106,7 +125,7 @@ public class VisionLlmWave : IAnalysisWave
                 // For animated images, create a mosaic of all unique frames so LLM can read all text
                 string textImageBase64 = imageBase64;
                 string imageSource = "original";
-                int frameCount = 1;
+                int textFrameCount = 1;
 
                 var frames = context.GetCached<List<Image<Rgba32>>>("ocr.frames");
                 if (frames != null && frames.Count > 1)
@@ -120,8 +139,8 @@ public class VisionLlmWave : IAnalysisWave
                         textImageBase64 = Convert.ToBase64String(await File.ReadAllBytesAsync(tempPath, ct));
                         File.Delete(tempPath);
                         imageSource = "frame_strip";
-                        frameCount = frames.Count;
-                        _logger?.LogInformation("Created strip of {FrameCount} frames for Vision LLM text extraction", frameCount);
+                        textFrameCount = frames.Count;
+                        _logger?.LogInformation("Created strip of {FrameCount} frames for Vision LLM text extraction", textFrameCount);
                     }
                     catch (Exception ex)
                     {
@@ -150,7 +169,7 @@ public class VisionLlmWave : IAnalysisWave
                     }
                 }
 
-                var llmText = await ExtractTextAsync(textImageBase64, frameCount, ct);
+                var llmText = await ExtractTextAsync(textImageBase64, textFrameCount, ct);
                 if (!string.IsNullOrEmpty(llmText))
                 {
                     signals.Add(new Signal
@@ -294,6 +313,102 @@ public class VisionLlmWave : IAnalysisWave
         return Convert.ToBase64String(ms.ToArray());
     }
 
+    /// <summary>
+    /// Creates a filmstrip of key frames from an animated GIF for caption generation.
+    /// Extracts evenly-spaced frames to show the animation sequence.
+    /// </summary>
+    private async Task<(string Base64, int FrameCount)> CreateFilmstripForCaptionAsync(string imagePath, int totalFrames, CancellationToken ct)
+    {
+        // Target 4-8 frames for caption filmstrip (enough to show action without overwhelming)
+        const int MinFrames = 4;
+        const int MaxFrames = 8;
+        const int MaxFrameHeight = 256; // Keep frames readable but compact
+
+        var targetFrames = Math.Min(MaxFrames, Math.Max(MinFrames, totalFrames / 3));
+
+        try
+        {
+            // Load the GIF and extract frames
+            using var gif = await SixLabors.ImageSharp.Image.LoadAsync(imagePath, ct);
+            var frameCount = gif.Frames.Count;
+
+            if (frameCount <= 1)
+            {
+                // Not animated, return single frame
+                return (await ConvertImageToBase64(imagePath, ct), 1);
+            }
+
+            // Calculate which frames to extract (evenly spaced)
+            var frameIndices = new List<int>();
+            var step = Math.Max(1, (double)(frameCount - 1) / (targetFrames - 1));
+            for (int i = 0; i < targetFrames && i * step < frameCount; i++)
+            {
+                frameIndices.Add((int)(i * step));
+            }
+
+            // Extract frames
+            var extractedFrames = new List<Image<Rgba32>>();
+            foreach (var idx in frameIndices)
+            {
+                if (idx < frameCount)
+                {
+                    // CloneFrame returns Image, need to convert to Image<Rgba32>
+                    using var genericFrame = gif.Frames.CloneFrame(idx);
+                    var rgbaFrame = genericFrame.CloneAs<Rgba32>();
+                    extractedFrames.Add(rgbaFrame);
+                }
+            }
+
+            if (extractedFrames.Count == 0)
+            {
+                return (await ConvertImageToBase64(imagePath, ct), 1);
+            }
+
+            // Scale frames to reasonable size while maintaining aspect ratio
+            var firstFrame = extractedFrames[0];
+            var scale = Math.Min(1.0, (double)MaxFrameHeight / firstFrame.Height);
+            var frameWidth = (int)(firstFrame.Width * scale);
+            var frameHeight = (int)(firstFrame.Height * scale);
+
+            // Create horizontal filmstrip
+            var stripWidth = frameWidth * extractedFrames.Count + (extractedFrames.Count - 1) * 2; // 2px gap between frames
+            var stripHeight = frameHeight;
+
+            using var filmstrip = new Image<Rgba32>(stripWidth, stripHeight);
+            filmstrip.Mutate(ctx => ctx.BackgroundColor(Color.Black));
+
+            int xOffset = 0;
+            foreach (var frame in extractedFrames)
+            {
+                // Resize frame if needed
+                if (frame.Width != frameWidth || frame.Height != frameHeight)
+                {
+                    frame.Mutate(x => x.Resize(frameWidth, frameHeight));
+                }
+
+                filmstrip.Mutate(x => x.DrawImage(frame, new Point(xOffset, 0), 1f));
+                xOffset += frameWidth + 2; // 2px gap
+
+                frame.Dispose();
+            }
+
+            // Convert to base64
+            using var ms = new MemoryStream();
+            await filmstrip.SaveAsJpegAsync(ms, new SixLabors.ImageSharp.Formats.Jpeg.JpegEncoder { Quality = 85 }, ct);
+            var base64 = Convert.ToBase64String(ms.ToArray());
+
+            _logger?.LogDebug("Created filmstrip: {Width}x{Height}, {FrameCount} frames from {TotalFrames} total",
+                stripWidth, stripHeight, extractedFrames.Count, totalFrames);
+
+            return (base64, frameIndices.Count);
+        }
+        catch (Exception ex)
+        {
+            _logger?.LogWarning(ex, "Failed to create filmstrip for {Path}, falling back to single frame", imagePath);
+            return (await ConvertImageToBase64(imagePath, ct), 1);
+        }
+    }
+
     // Cache for model context sizes
     private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, int> _modelContextCache = new();
 
@@ -411,13 +526,14 @@ public class VisionLlmWave : IAnalysisWave
         return 0; // Fall back to heuristics
     }
 
-    private async Task<string?> GenerateCaptionAsync(string imageBase64, AnalysisContext context, CancellationToken ct)
+    private async Task<string?> GenerateCaptionAsync(string imageBase64, AnalysisContext context, CancellationToken ct, int filmstripFrames = 1)
     {
         // Gather motion and object context from prior waves
-        var isAnimated = context.GetValue<bool>("motion.is_animated");
+        // IMPORTANT: Use correct signal keys from IdentityWave and MotionWave
+        var isAnimated = context.GetValue<bool>("identity.is_animated");
         var motionSummary = context.GetValue<string>("motion.summary");
-        var motionType = context.GetValue<string>("motion.motion_type");
-        var frameCount = context.GetValue<int>("motion.frame_count");
+        var motionType = context.GetValue<string>("motion.type"); // MotionWave emits "motion.type" not "motion.motion_type"
+        var totalFrameCount = context.GetValue<int>("identity.frame_count"); // IdentityWave emits this, not MotionWave
         var movingObjects = context.GetValue<List<string>>("motion.moving_objects");
         var dominantColors = context.GetValue<List<object>>("color.dominant_colors");
 
@@ -435,9 +551,26 @@ public class VisionLlmWave : IAnalysisWave
             // For screenshots/documents, focus on what it IS and what text says
             promptParts.Add("What is this screenshot of? Include any visible text.");
         }
-        else if (isAnimated && frameCount > 1)
+        else if (isAnimated && filmstripFrames > 1)
         {
-            promptParts.Add($"Alt text for {frameCount}-frame animation");
+            // FILMSTRIP MODE: The image shows multiple frames arranged horizontally
+            // Tell the LLM what it's seeing and ask for action description
+            promptParts.Add($"This is a FILMSTRIP of {filmstripFrames} sequential frames from an animated GIF ({totalFrameCount} total frames).");
+            promptParts.Add("The frames are arranged LEFT to RIGHT showing the animation sequence.");
+            promptParts.Add("DESCRIBE THE ACTION: What happens from start to finish? What moves or changes?");
+
+            if (!string.IsNullOrEmpty(motionType))
+                promptParts.Add($"Motion type detected: {motionType}.");
+
+            if (movingObjects?.Any() == true)
+                promptParts.Add($"Moving elements: {string.Join(", ", movingObjects.Take(3))}.");
+
+            promptParts.Add("Write a concise caption describing the animation action:");
+        }
+        else if (isAnimated && totalFrameCount > 1)
+        {
+            // Single frame from animation (no filmstrip available)
+            promptParts.Add($"Alt text for {totalFrameCount}-frame animation");
 
             if (!string.IsNullOrEmpty(motionType))
                 promptParts[^1] += $" ({motionType})";
@@ -732,7 +865,89 @@ If no subtitle text exists, respond with 'NO_TEXT'.";
             .Distinct()
             .ToList();
 
-        return string.Join("\n", uniqueLines);
+        var result = string.Join("\n", uniqueLines);
+
+        // Additional deduplication: remove repeated phrases within a line
+        // e.g., "ARSE BISCUITS ARSE BISCUITS ARSE BISCUITS" -> "ARSE BISCUITS"
+        result = DeduplicateRepeatedPhrases(result);
+
+        return result;
+    }
+
+    /// <summary>
+    /// Removes repeated phrases within text. E.g., "Hello World Hello World Hello World" -> "Hello World"
+    /// </summary>
+    private static string DeduplicateRepeatedPhrases(string text)
+    {
+        if (string.IsNullOrWhiteSpace(text))
+            return text;
+
+        // Process each line separately
+        var lines = text.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        var deduplicatedLines = new List<string>();
+
+        foreach (var line in lines)
+        {
+            var deduped = DeduplicateLineContent(line);
+            if (!string.IsNullOrWhiteSpace(deduped))
+                deduplicatedLines.Add(deduped);
+        }
+
+        return string.Join("\n", deduplicatedLines.Distinct());
+    }
+
+    /// <summary>
+    /// Deduplicates repeated content within a single line.
+    /// Tries to find repeating patterns and reduce to single instance.
+    /// </summary>
+    private static string DeduplicateLineContent(string line)
+    {
+        if (string.IsNullOrWhiteSpace(line) || line.Length < 4)
+            return line;
+
+        // Try to find repeating patterns of various lengths
+        for (int patternLen = 2; patternLen <= line.Length / 2; patternLen++)
+        {
+            var pattern = line.Substring(0, patternLen).Trim();
+            if (string.IsNullOrWhiteSpace(pattern))
+                continue;
+
+            // Check if this pattern repeats throughout the string
+            var cleaned = line.Replace(pattern, "").Trim();
+
+            // If removing the pattern leaves only whitespace/punctuation, it was repeated
+            if (cleaned.Length < pattern.Length && string.IsNullOrWhiteSpace(cleaned.Replace(" ", "").Replace(",", "").Replace(".", "")))
+            {
+                return pattern;
+            }
+        }
+
+        // Also try splitting by common separators and deduplicating
+        var words = line.Split(new[] { ' ', ',', ';' }, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        if (words.Length > 2)
+        {
+            // Check for repeated word sequences
+            for (int phraseLen = 1; phraseLen <= words.Length / 2; phraseLen++)
+            {
+                var phrase = string.Join(" ", words.Take(phraseLen));
+                var allMatch = true;
+
+                for (int i = phraseLen; i < words.Length; i += phraseLen)
+                {
+                    var nextPhrase = string.Join(" ", words.Skip(i).Take(phraseLen));
+                    if (!phrase.Equals(nextPhrase, StringComparison.OrdinalIgnoreCase))
+                    {
+                        allMatch = false;
+                        break;
+                    }
+                }
+
+                if (allMatch)
+                    return phrase;
+            }
+        }
+
+        return line;
     }
 
     /// <summary>

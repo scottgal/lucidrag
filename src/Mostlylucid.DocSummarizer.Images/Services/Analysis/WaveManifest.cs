@@ -127,6 +127,30 @@ public static class WaveRegistry
 
         new WaveManifest
         {
+            WaveName = "MlOcrWave",
+            Priority = 28,
+            Tags = ["ocr", "ml", "opencv", "content"],
+            Emits = [
+                // OpenCV fast detection signals
+                "ocr.opencv.has_text",
+                "ocr.opencv.text_regions",
+                "ocr.opencv.has_subtitles",
+                // ML OCR results
+                "ocr.ml.text",
+                "ocr.ml.has_text",
+                "ocr.ml.frames_with_text",
+                "ocr.ml.skipped",
+                // Escalation signals for downstream OCR
+                "ocr.escalation.run_tesseract",
+                "ocr.escalation.skip_tesseract"
+            ],
+            Requires = [],
+            Optional = ["identity.is_animated", "identity.frame_count", "content.text_likeliness"],
+            Description = "Fast OpenCV MSER + Florence-2 text detection before Tesseract (caches text regions for targeted OCR)"
+        },
+
+        new WaveManifest
+        {
             WaveName = "OcrWave",
             Priority = 30,
             Tags = ["ocr", "content"],
@@ -136,8 +160,14 @@ public static class WaveRegistry
                 "content.extracted_text"
             ],
             Requires = [],
-            Optional = ["content.text_likeliness"],
-            Description = "Basic OCR text extraction using Tesseract"
+            Optional = [
+                "content.text_likeliness",
+                "ocr.escalation.run_tesseract",
+                "ocr.escalation.skip_tesseract",
+                "ocr.opencv.text_regions",  // Use cached OpenCV regions for targeted OCR
+                "ocr.opencv.has_text"
+            ],
+            Description = "Basic OCR text extraction using Tesseract (uses OpenCV regions if available)"
         },
 
         new WaveManifest
@@ -153,8 +183,13 @@ public static class WaveRegistry
                 "ocr.frame_count"
             ],
             Requires = [],
-            Optional = ["identity.is_animated", "content.text_likeliness"],
-            Description = "Multi-frame OCR with voting for animated images"
+            Optional = [
+                "identity.is_animated",
+                "content.text_likeliness",
+                "ocr.ml.text_changed_indices",       // Use ML-detected text change frames
+                "ocr.opencv.per_frame_regions"       // Use per-frame text regions for targeted OCR
+            ],
+            Description = "Multi-frame OCR with voting for animated images (uses OpenCV regions if available)"
         },
 
         new WaveManifest

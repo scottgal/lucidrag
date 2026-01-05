@@ -2,6 +2,8 @@ using Mostlylucid.DocSummarizer.Images.Models.Dynamic;
 using Mostlylucid.DocSummarizer.Images.Services.Ocr.Models;
 using Tesseract;
 using Microsoft.Extensions.Logging;
+using SixLabors.ImageSharp;
+using SixLabors.ImageSharp.Processing;
 
 namespace Mostlylucid.DocSummarizer.Images.Services.Analysis.Waves;
 
@@ -156,12 +158,37 @@ public class OcrWave : IAnalysisWave
             return signals;
         }
 
+        // Check MlOcrWave escalation signals first (priority over text-likeliness)
+        var skipTesseract = context.GetValue<bool>("ocr.escalation.skip_tesseract");
+        if (skipTesseract)
+        {
+            _logger?.LogDebug("MlOcrWave signaled to skip Tesseract OCR");
+            signals.Add(new Signal
+            {
+                Key = "ocr.skipped",
+                Value = true,
+                Confidence = 1.0,
+                Source = Name,
+                Tags = new List<string> { "ocr" },
+                Metadata = new Dictionary<string, object>
+                {
+                    ["reason"] = "MlOcrWave escalation signal",
+                    ["signal"] = "ocr.escalation.skip_tesseract"
+                }
+            });
+            return signals;
+        }
+
+        // Check if MlOcrWave found text and recommends Tesseract
+        var runTesseract = context.GetValue<bool>("ocr.escalation.run_tesseract");
+        var opencvHasText = context.GetValue<bool>("ocr.opencv.has_text");
+
         // Check if image has sufficient text-likeliness to warrant OCR
-        // When threshold is 0, always run OCR
-        if (_textLikelinessThreshold > 0)
+        // Skip this check if MlOcrWave explicitly requested Tesseract
+        if (!runTesseract && _textLikelinessThreshold > 0)
         {
             var textLikeliness = context.GetValue<double>("content.text_likeliness");
-            if (textLikeliness < _textLikelinessThreshold)
+            if (textLikeliness < _textLikelinessThreshold && !opencvHasText)
             {
                 signals.Add(new Signal
                 {
@@ -180,6 +207,9 @@ public class OcrWave : IAnalysisWave
                 return signals;
             }
         }
+
+        // Get OpenCV text regions if available (for targeted OCR)
+        var opencvRegions = context.GetCached<List<Dictionary<string, int>>>("ocr.opencv.text_regions");
 
         try
         {
@@ -206,8 +236,31 @@ public class OcrWave : IAnalysisWave
                 return signals;
             }
 
-            // Perform OCR with Tesseract
-            var textRegions = await Task.Run(() => ExtractTextWithCoordinates(imagePath), ct);
+            // Perform OCR with Tesseract - use OpenCV regions if available for targeted OCR
+            List<OcrTextRegion> textRegions;
+
+            if (opencvRegions != null && opencvRegions.Count > 0)
+            {
+                _logger?.LogDebug("Using {Count} OpenCV text regions for targeted Tesseract OCR", opencvRegions.Count);
+                textRegions = await Task.Run(() => ExtractTextFromRegions(imagePath, opencvRegions), ct);
+
+                signals.Add(new Signal
+                {
+                    Key = "ocr.targeted",
+                    Value = true,
+                    Confidence = 1.0,
+                    Source = Name,
+                    Tags = new List<string> { "ocr", "opencv" },
+                    Metadata = new Dictionary<string, object>
+                    {
+                        ["opencv_region_count"] = opencvRegions.Count
+                    }
+                });
+            }
+            else
+            {
+                textRegions = await Task.Run(() => ExtractTextWithCoordinates(imagePath), ct);
+            }
 
             if (textRegions.Count == 0)
             {
@@ -222,12 +275,13 @@ public class OcrWave : IAnalysisWave
                 return signals;
             }
 
-            // Add individual text regions as signals
-            foreach (var region in textRegions)
+            // Add individual text regions as signals (indexed to avoid duplicate keys)
+            for (var i = 0; i < textRegions.Count; i++)
             {
+                var region = textRegions[i];
                 signals.Add(new Signal
                 {
-                    Key = "ocr.text_region",
+                    Key = $"ocr.text_region.{i}",
                     Value = region,
                     Confidence = region.Confidence,
                     Source = Name,
@@ -236,10 +290,25 @@ public class OcrWave : IAnalysisWave
                     {
                         ["text"] = region.Text,
                         ["bbox"] = region.BoundingBox,
-                        ["confidence"] = region.Confidence
+                        ["confidence"] = region.Confidence,
+                        ["index"] = i
                     }
                 });
             }
+
+            // Also emit all regions as a single collection signal
+            signals.Add(new Signal
+            {
+                Key = "ocr.text_regions",
+                Value = textRegions,
+                Confidence = textRegions.Count > 0 ? textRegions.Average(r => r.Confidence) : 0,
+                Source = Name,
+                Tags = new List<string> { "ocr", SignalTags.Content },
+                Metadata = new Dictionary<string, object>
+                {
+                    ["count"] = textRegions.Count
+                }
+            });
 
             // Add combined full text
             var fullText = string.Join("\n", textRegions.Select(r => r.Text));
@@ -342,6 +411,91 @@ public class OcrWave : IAnalysisWave
         } while (iter.Next(PageIteratorLevel.Word));
 
         return regions;
+    }
+
+    /// <summary>
+    /// Extract text from specific OpenCV-detected regions.
+    /// More accurate than full-image OCR as it focuses on text areas only.
+    /// </summary>
+    private List<OcrTextRegion> ExtractTextFromRegions(
+        string imagePath,
+        List<Dictionary<string, int>> opencvRegions)
+    {
+        var allRegions = new List<OcrTextRegion>();
+        var tessdataPath = GetTessdataPath();
+        var tempPaths = new List<string>();
+
+        try
+        {
+            using var engine = new TesseractEngine(tessdataPath, _language, EngineMode.Default);
+            using var fullImg = SixLabors.ImageSharp.Image.Load(imagePath);
+
+            foreach (var region in opencvRegions.Take(10)) // Limit to 10 regions for performance
+            {
+                try
+                {
+                    // Extract region bounds with padding
+                    var padding = 5;
+                    var x = Math.Max(0, region["x"] - padding);
+                    var y = Math.Max(0, region["y"] - padding);
+                    var width = Math.Min(fullImg.Width - x, region["width"] + padding * 2);
+                    var height = Math.Min(fullImg.Height - y, region["height"] + padding * 2);
+
+                    if (width < 10 || height < 10) continue; // Skip tiny regions
+
+                    // Crop the region from the image using ImageSharp
+                    var cropRect = new Rectangle(x, y, width, height);
+                    using var cropped = fullImg.Clone(ctx => ctx.Crop(cropRect));
+
+                    // Save to temp file for Tesseract
+                    var tempPath = Path.Combine(Path.GetTempPath(), $"ocr_region_{Guid.NewGuid()}.png");
+                    tempPaths.Add(tempPath);
+                    cropped.SaveAsPng(tempPath);
+
+                    // Process the cropped region with Tesseract
+                    using var pixCropped = Pix.LoadFromFile(tempPath);
+                    using var page = engine.Process(pixCropped);
+
+                    // Get text from this region
+                    var text = page.GetText()?.Trim();
+                    if (string.IsNullOrWhiteSpace(text)) continue;
+
+                    var confidence = page.GetMeanConfidence();
+
+                    allRegions.Add(new OcrTextRegion
+                    {
+                        Text = text,
+                        Confidence = confidence,
+                        BoundingBox = new BoundingBox
+                        {
+                            X1 = x,
+                            Y1 = y,
+                            X2 = x + width,
+                            Y2 = y + height,
+                            Width = width,
+                            Height = height
+                        }
+                    });
+                }
+                catch (Exception ex)
+                {
+                    _logger?.LogTrace(ex, "Failed to OCR region, skipping");
+                }
+            }
+
+            _logger?.LogDebug("Extracted text from {Count}/{Total} OpenCV regions",
+                allRegions.Count, opencvRegions.Count);
+        }
+        finally
+        {
+            // Cleanup temp files
+            foreach (var path in tempPaths)
+            {
+                try { if (File.Exists(path)) File.Delete(path); } catch { }
+            }
+        }
+
+        return allRegions;
     }
 }
 

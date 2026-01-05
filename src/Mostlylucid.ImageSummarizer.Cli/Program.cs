@@ -902,15 +902,29 @@ class Program
         // If specific signals requested via globs, output filtered or all computed
         if (!string.IsNullOrWhiteSpace(signalGlobs))
         {
+            // Group by key and pick highest confidence signal for each key
+            // (multiple waves can emit the same signal, e.g., vision.llm.caption from Florence2 and VisionLlm)
             var allSignals = profile.GetAllSignals()
-                .ToDictionary(s => s.Key, s => new { value = s.Value, confidence = s.Confidence });
+                .GroupBy(s => s.Key)
+                .ToDictionary(
+                    g => g.Key,
+                    g => {
+                        var best = g.OrderByDescending(s => s.Confidence).First();
+                        return new { value = best.Value, confidence = best.Confidence, source = best.Source };
+                    });
 
             // When allComputed=true, show all computed signals with requested pattern noted
             // When false, filter to only matching signals
             var outputSignals = allComputed
                 ? allSignals
                 : SignalGlobMatcher.FilterSignals(profile, signalGlobs)
-                    .ToDictionary(s => s.Key, s => new { value = s.Value, confidence = s.Confidence });
+                    .GroupBy(s => s.Key)
+                    .ToDictionary(
+                        g => g.Key,
+                        g => {
+                            var best = g.OrderByDescending(s => s.Confidence).First();
+                            return new { value = best.Value, confidence = best.Confidence, source = best.Source };
+                        });
 
             var filteredResult = new
             {

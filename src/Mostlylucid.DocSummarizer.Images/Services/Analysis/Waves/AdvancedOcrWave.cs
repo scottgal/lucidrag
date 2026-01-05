@@ -213,38 +213,73 @@ public class AdvancedOcrWave : IAnalysisWave
 
         var frames = new List<Image<Rgba32>>();
 
+        // Check if MlOcrWave already detected which frames have text changes
+        var mlTextChangedIndices = context.GetCached<List<int>>("ocr.ml.text_changed_indices");
+
         using (var image = await Image.LoadAsync<Rgba32>(imagePath, ct))
         {
             var frameCount = image.Frames.Count;
 
-            // Extract all frames
-            for (int i = 0; i < frameCount; i++)
+            // If MlOcrWave already identified text-changed frames, use those
+            if (mlTextChangedIndices != null && mlTextChangedIndices.Count > 0)
             {
-                var frame = image.Frames.CloneFrame(i);
-                frames.Add(frame);
-            }
+                _logger?.LogDebug("Using {Count} MlOcrWave text-changed frame indices", mlTextChangedIndices.Count);
 
-            // SSIM deduplication if enabled
-            if (frameCount > 1 && _config.SsimDeduplicationThreshold > 0)
-            {
-                var originalCount = frames.Count;
-                frames = DeduplicateFramesSsim(frames, _config.SsimDeduplicationThreshold);
+                foreach (var idx in mlTextChangedIndices)
+                {
+                    if (idx >= 0 && idx < frameCount)
+                    {
+                        var frame = image.Frames.CloneFrame(idx);
+                        frames.Add(frame);
+                    }
+                }
 
                 signals.Add(new Signal
                 {
-                    Key = "ocr.frames.deduplicated",
+                    Key = "ocr.frames.ml_filtered",
                     Value = true,
                     Confidence = 1.0,
                     Source = Name,
-                    Tags = new List<string> { "ocr", "preprocessing" },
+                    Tags = new List<string> { "ocr", "preprocessing", "opencv" },
                     Metadata = new Dictionary<string, object>
                     {
-                        ["original_count"] = originalCount,
-                        ["deduplicated_count"] = frames.Count,
-                        ["removed"] = originalCount - frames.Count,
-                        ["threshold"] = _config.SsimDeduplicationThreshold
+                        ["total_frames"] = frameCount,
+                        ["text_changed_frames"] = frames.Count,
+                        ["method"] = "MlOcrWave_text_change_detection"
                     }
                 });
+            }
+            else
+            {
+                // Fallback: Extract all frames
+                for (int i = 0; i < frameCount; i++)
+                {
+                    var frame = image.Frames.CloneFrame(i);
+                    frames.Add(frame);
+                }
+
+                // SSIM deduplication if enabled
+                if (frameCount > 1 && _config.SsimDeduplicationThreshold > 0)
+                {
+                    var originalCount = frames.Count;
+                    frames = DeduplicateFramesSsim(frames, _config.SsimDeduplicationThreshold);
+
+                    signals.Add(new Signal
+                    {
+                        Key = "ocr.frames.deduplicated",
+                        Value = true,
+                        Confidence = 1.0,
+                        Source = Name,
+                        Tags = new List<string> { "ocr", "preprocessing" },
+                        Metadata = new Dictionary<string, object>
+                        {
+                            ["original_count"] = originalCount,
+                            ["deduplicated_count"] = frames.Count,
+                            ["removed"] = originalCount - frames.Count,
+                            ["threshold"] = _config.SsimDeduplicationThreshold
+                        }
+                    });
+                }
             }
         }
 

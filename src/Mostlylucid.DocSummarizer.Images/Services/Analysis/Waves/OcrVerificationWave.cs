@@ -66,16 +66,16 @@ public class OcrVerificationWave : IAnalysisWave
             return signals;
         }
 
-        // Get OCR results from context
-        var ocrSignals = context.GetSignals("ocr.text_region").ToList();
-        if (!ocrSignals.Any())
+        // Get OCR results from context (use the collection signal)
+        var ocrRegionsSignal = context.GetBestSignal("ocr.text_regions");
+        if (ocrRegionsSignal == null)
         {
             // No OCR results to verify
             return signals;
         }
 
         // Check if verification is needed (low confidence OCR results)
-        var avgConfidence = ocrSignals.Average(s => s.Confidence);
+        var avgConfidence = ocrRegionsSignal.Confidence;
         if (avgConfidence >= _confidenceThreshold)
         {
             signals.Add(new Signal

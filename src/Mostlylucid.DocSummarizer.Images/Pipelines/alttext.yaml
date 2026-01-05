@@ -12,8 +12,10 @@ signals:
   - color.dominant*
   - motion.type
   - motion.summary
-  - content.text*
+  - ocr.*                    # OCR text extraction
+  - content.extracted_text   # Extracted text signal
   - vision.llm.caption
+  - vision.llm.text          # Vision LLM can also read text
 
 output:
   format: alttext
