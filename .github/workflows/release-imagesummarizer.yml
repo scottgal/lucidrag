@@ -34,16 +34,13 @@ jobs:
       - name: Run ImageSummarizer Tests
         run: |
           # Test ImageCli.Tests (CI-safe: local SQLite temp files only)
-          # All 22 tests pass reliably
           dotnet test src/LucidRAG.ImageCli.Tests/LucidRAG.ImageCli.Tests.csproj \
             --configuration Release \
-            --no-build \
             --logger "console;verbosity=normal"
 
           # Test DocSummarizer.Images.Tests (CI-safe: mocked HTTP clients, synthetic data)
           dotnet test src/Mostlylucid.DocSummarizer.Images.Tests/Mostlylucid.DocSummarizer.Images.Tests.csproj \
             --configuration Release \
-            --no-build \
             --logger "console;verbosity=normal"
 
       - name: Verify MCP tools can be listed
