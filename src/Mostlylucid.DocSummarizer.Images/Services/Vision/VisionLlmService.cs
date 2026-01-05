@@ -72,7 +72,9 @@ public class VisionLlmService
 
             _logger.LogInformation("Vision LLM analysis completed for {ImagePath}", imagePath);
 
-            return new VisionLlmResult(true, null, result.Response);
+            // Extract caption from JSON response if present, otherwise use cleaned response
+            var caption = ExtractCaptionFromResponse(result.Response);
+            return new VisionLlmResult(true, null, caption);
         }
         catch (HttpRequestException ex)
         {
@@ -177,6 +179,143 @@ Only return valid JSON, nothing else.";
         {
             return (false, $"Connection failed: {ex.Message}");
         }
+    }
+
+    /// <summary>
+    /// Extract caption text from LLM response, handling JSON or verbose plain text.
+    /// Enforces WCAG-compliant length limits and strips prompt leakage.
+    /// </summary>
+    private string ExtractCaptionFromResponse(string response)
+    {
+        if (string.IsNullOrWhiteSpace(response))
+            return "";
+
+        // Try to extract from JSON format: {"caption": "..."}
+        try
+        {
+            var jsonStart = response.IndexOf('{');
+            var jsonEnd = response.LastIndexOf('}');
+            if (jsonStart >= 0 && jsonEnd > jsonStart)
+            {
+                var jsonStr = response.Substring(jsonStart, jsonEnd - jsonStart + 1);
+                var doc = JsonDocument.Parse(jsonStr);
+                // Check multiple possible property names
+                foreach (var propName in new[] { "caption", "description", "scene", "summary" })
+                {
+                    if (doc.RootElement.TryGetProperty(propName, out var prop))
+                    {
+                        var val = prop.GetString();
+                        if (!string.IsNullOrWhiteSpace(val))
+                            return SanitizeAndTruncate(val);
+                    }
+                }
+            }
+        }
+        catch
+        {
+            // JSON parsing failed, continue to regex fallback
+        }
+
+        // Fallback: Try regex extraction
+        var match = System.Text.RegularExpressions.Regex.Match(
+            response, @"""(?:caption|description)""\s*:\s*""([^""]+)""");
+        if (match.Success && match.Groups.Count > 1)
+        {
+            return SanitizeAndTruncate(match.Groups[1].Value);
+        }
+
+        // Plain text - sanitize and truncate
+        return SanitizeAndTruncate(response);
+    }
+
+    /// <summary>
+    /// Sanitize caption by removing prompt leakage and truncating for WCAG.
+    /// </summary>
+    private static string SanitizeAndTruncate(string text)
+    {
+        if (string.IsNullOrWhiteSpace(text))
+            return "";
+
+        var result = text.Trim();
+
+        // Strip common prompt leakage patterns
+        var leakagePatterns = new[]
+        {
+            @"^Based on (?:the |this )?(provided |given )?image.*?[:,]\s*",
+            @"^According to the (?:image|guidelines).*?[:,]\s*",
+            @"^(?:The |This )?image (?:shows|depicts|displays|features|contains|presents)\s*",
+            @"^In (?:the |this )?image,?\s*",
+            @"^(?:Here is|Here's) (?:a|the) (?:caption|description).*?:\s*",
+            @"^For accessibility[:,]\s*",
+            @"^(?:Caption|Description):\s*",
+            @"^\{[^}]*\}\s*",
+            @"^I (?:can )?see\s+",
+            @"^(?:Looking at (?:the|this) image,?\s*)?",
+        };
+
+        foreach (var pattern in leakagePatterns)
+        {
+            result = System.Text.RegularExpressions.Regex.Replace(
+                result, pattern, "", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+        }
+
+        // Clean up quotes and whitespace
+        result = result.Trim('"', '\'', ' ');
+
+        // Skip markdown or verbose preamble
+        if (result.StartsWith("```") || result.StartsWith("**") || result.StartsWith("#"))
+        {
+            var lines = result.Split('\n', StringSplitOptions.RemoveEmptyEntries);
+            foreach (var line in lines)
+            {
+                var trimmed = line.Trim().TrimStart('*', '#', '-', ' ');
+                if (trimmed.Length > 10 && char.IsLetter(trimmed[0]))
+                {
+                    result = trimmed;
+                    break;
+                }
+            }
+        }
+
+        // Capitalize first letter
+        if (result.Length > 0 && char.IsLower(result[0]))
+        {
+            result = char.ToUpper(result[0]) + result[1..];
+        }
+
+        return TruncateForWcag(result);
+    }
+
+    /// <summary>
+    /// Truncate text to WCAG-compliant length (~125 chars max).
+    /// Preserves complete sentences where possible.
+    /// </summary>
+    private static string TruncateForWcag(string text, int maxLength = 125)
+    {
+        if (string.IsNullOrWhiteSpace(text))
+            return "";
+
+        text = text.Trim();
+
+        if (text.Length <= maxLength)
+            return text;
+
+        // Find last sentence boundary within limit
+        var truncated = text[..maxLength];
+        var lastPeriod = truncated.LastIndexOf('.');
+        if (lastPeriod > 40) // Keep at least 40 chars
+        {
+            return truncated[..(lastPeriod + 1)];
+        }
+
+        // No good sentence boundary, truncate at word boundary
+        var lastSpace = truncated.LastIndexOf(' ');
+        if (lastSpace > 40)
+        {
+            return truncated[..lastSpace] + "...";
+        }
+
+        return truncated[..(maxLength - 3)] + "...";
     }
 }
 

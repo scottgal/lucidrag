@@ -44,6 +44,21 @@ public class WaveOrchestrator
         {
             try
             {
+                // Check preconditions before running expensive waves
+                if (!wave.ShouldRun(imagePath, context))
+                {
+                    _logger?.LogDebug("Wave {WaveName} skipped (preconditions not met)", wave.Name);
+                    profile.AddSignal(new Signal
+                    {
+                        Key = $"wave.skipped.{wave.Name}",
+                        Value = "preconditions_not_met",
+                        Confidence = 1.0,
+                        Source = "WaveOrchestrator",
+                        Tags = new List<string> { "orchestration" }
+                    });
+                    continue;
+                }
+
                 _logger?.LogDebug("Executing wave: {WaveName} (priority: {Priority})",
                     wave.Name, wave.Priority);
 

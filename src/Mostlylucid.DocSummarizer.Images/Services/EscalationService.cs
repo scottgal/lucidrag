@@ -14,6 +14,7 @@ namespace Mostlylucid.DocSummarizer.Images.Services;
 /// Service for managing escalation of image analysis to vision LLMs.
 /// Supports auto-escalation, user-triggered escalation, and feedback loops.
 /// Includes content-based caching with xxhash64 for fast lookups.
+/// Uses PromptTemplateService for weighted signal-based prompt building.
 /// </summary>
 public class EscalationService
 {
@@ -23,19 +24,22 @@ public class EscalationService
     private readonly ISignalDatabase? _signalDatabase;
     private readonly ILogger<EscalationService> _logger;
     private readonly EscalationConfig _config;
+    private readonly PromptTemplateService _promptTemplateService;
 
     public EscalationService(
         IImageAnalyzer imageAnalyzer,
         VisionLlmService visionLlmService,
         ILogger<EscalationService> logger,
         ISignalDatabase? signalDatabase = null,
-        UnifiedVisionService? unifiedVisionService = null)
+        UnifiedVisionService? unifiedVisionService = null,
+        PromptTemplateService? promptTemplateService = null)
     {
         _imageAnalyzer = imageAnalyzer;
         _visionLlmService = visionLlmService;
         _unifiedVisionService = unifiedVisionService;
         _signalDatabase = signalDatabase;
         _logger = logger;
+        _promptTemplateService = promptTemplateService ?? new PromptTemplateService();
 
         // Default escalation configuration
         _config = new EscalationConfig
@@ -45,7 +49,9 @@ public class EscalationService
             TextLikelinessThreshold = 0.4,
             BlurThreshold = 300,
             EnableFeedbackLoop = true,
-            EnableCaching = true
+            EnableCaching = true,
+            OcrConfidenceThreshold = 0.85, // Skip LLM if OCR confidence is this high
+            SkipLlmIfOcrHighConfidence = true
         };
     }
 
@@ -185,7 +191,8 @@ public class EscalationService
                     EscalationReason: null,
                     FromCache: true,
                     GifMotion: cachedGifMotion,
-                    EvidenceClaims: null); // Not cached yet
+                    EvidenceClaims: null, // Not cached yet
+                    OcrConfidence: 0.0); // Not cached yet
             }
 
             _logger.LogDebug("Cache miss for {ImagePath} (hash: {Hash})", imagePath, xxhash);
@@ -216,13 +223,93 @@ public class EscalationService
             }
         }
 
-        // Step 2: Decide if escalation is needed
+        // Step 2: Run OCR early if text detected (before escalation decision)
+        string? extractedText = null;
+        double ocrConfidence = 0.0;
+
+        if (enableOcr && analyzedProfile.TextLikeliness >= _config.TextLikelinessThreshold)
+        {
+            _logger.LogInformation("Image {ImagePath} has high text likeliness ({Score:F3}), performing OCR early",
+                imagePath, analyzedProfile.TextLikeliness);
+
+            try
+            {
+                // Check if this is an animated image (GIF/WebP)
+                var isAnimatedForOcr = analyzedProfile.Format?.Equals("GIF", StringComparison.OrdinalIgnoreCase) == true ||
+                                 analyzedProfile.Format?.Equals("WEBP", StringComparison.OrdinalIgnoreCase) == true;
+
+                if (isAnimatedForOcr)
+                {
+                    // Use multi-frame text extraction for animated images
+                    _logger.LogDebug("Using multi-frame text extraction for {Format}", analyzedProfile.Format);
+
+                    var ocrEngine = new Mostlylucid.DocSummarizer.Images.Services.Ocr.TesseractOcrEngine();
+                    var imageConfig = new Mostlylucid.DocSummarizer.Images.Config.ImageConfig();
+                    var gifExtractor = new Mostlylucid.DocSummarizer.Images.Services.Ocr.GifTextExtractor(
+                        ocrEngine,
+                        imageConfig,
+                        advancedOcrService: null,
+                        logger: _logger as ILogger<Mostlylucid.DocSummarizer.Images.Services.Ocr.GifTextExtractor>);
+
+                    var result = await gifExtractor.ExtractTextAsync(imagePath, ct);
+
+                    extractedText = result.CombinedText;
+                    // Estimate confidence based on how many frames had text
+                    ocrConfidence = result.TotalFrames > 0
+                        ? Math.Min(0.95, 0.7 + (0.25 * result.FramesWithText / result.TotalFrames))
+                        : 0.0;
+
+                    _logger.LogInformation("Extracted text from {Frames} frames (confidence: {Conf:P0}): {Preview}",
+                        result.FramesWithText,
+                        ocrConfidence,
+                        extractedText.Length > 50 ? extractedText.Substring(0, 50) + "..." : extractedText);
+                }
+                else
+                {
+                    // Use standard single-frame OCR for static images
+                    var ocrEngine = new Mostlylucid.DocSummarizer.Images.Services.Ocr.TesseractOcrEngine();
+                    var regions = ocrEngine.ExtractTextWithCoordinates(imagePath);
+
+                    extractedText = string.Join(" ", regions.Select(r => r.Text));
+                    // Calculate average confidence from regions
+                    ocrConfidence = regions.Count > 0
+                        ? regions.Average(r => r.Confidence)
+                        : 0.0;
+
+                    _logger.LogInformation("Extracted {Count} text regions (confidence: {Conf:P0}): {Preview}",
+                        regions.Count,
+                        ocrConfidence,
+                        extractedText.Length > 50 ? extractedText.Substring(0, 50) + "..." : extractedText);
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "OCR failed for {ImagePath}", imagePath);
+            }
+        }
+
+        // Step 3: Decide if escalation is needed (skip if OCR is high confidence)
         var shouldEscalate = forceEscalate || ShouldAutoEscalate(analyzedProfile);
 
+        // Skip LLM escalation if OCR has high confidence text
+        var skippedDueToOcr = false;
+        if (shouldEscalate && !forceEscalate &&
+            _config.SkipLlmIfOcrHighConfidence &&
+            !string.IsNullOrWhiteSpace(extractedText) &&
+            ocrConfidence >= _config.OcrConfidenceThreshold)
+        {
+            _logger.LogInformation(
+                "Skipping LLM escalation - OCR has high confidence ({Conf:P0}) text: {Preview}",
+                ocrConfidence,
+                extractedText.Length > 30 ? extractedText.Substring(0, 30) + "..." : extractedText);
+            shouldEscalate = false;
+            skippedDueToOcr = true;
+        }
+
         string? llmCaption = null;
-        string? extractedText = null;
         List<Vision.Clients.EvidenceClaim>? evidenceClaims = null;
-        var escalationReason = forceEscalate ? "User requested" : null;
+        var escalationReason = forceEscalate ? "User requested" :
+            skippedDueToOcr ? $"Skipped - OCR confidence {ocrConfidence:P0}" : null;
 
         if (shouldEscalate)
         {
@@ -233,8 +320,14 @@ public class EscalationService
             }
 
             // Step 3: Escalate to vision LLM
-            // Build custom prompt with color information to improve accuracy
-            var customPrompt = BuildVisionPrompt(analyzedProfile);
+            // Build prompt using template service with weighted signals
+            var customPrompt = _promptTemplateService.BuildPrompt(
+                analyzedProfile,
+                outputFormat: "alttext",
+                motion: gifMotionProfile,
+                extractedText: null); // OCR not available yet
+
+            _logger.LogDebug("Built prompt for {ImagePath}: {PromptLength} chars", imagePath, customPrompt.Length);
 
             // Check if model spec includes provider (e.g., "anthropic:claude-3-5-sonnet")
             if (!string.IsNullOrEmpty(visionModel) && visionModel.Contains(':') && _unifiedVisionService != null)
@@ -272,60 +365,7 @@ public class EscalationService
             }
         }
 
-        // Step 4: OCR if text detected and enabled
-        if (enableOcr && analyzedProfile.TextLikeliness >= _config.TextLikelinessThreshold)
-        {
-            _logger.LogInformation("Image {ImagePath} has high text likeliness ({Score:F3}), performing OCR",
-                imagePath, analyzedProfile.TextLikeliness);
-
-            try
-            {
-                // Check if this is an animated image (GIF/WebP)
-                var isAnimated = analyzedProfile.Format?.Equals("GIF", StringComparison.OrdinalIgnoreCase) == true ||
-                                 analyzedProfile.Format?.Equals("WEBP", StringComparison.OrdinalIgnoreCase) == true;
-
-                if (isAnimated)
-                {
-                    // Use multi-frame text extraction for animated images
-                    _logger.LogInformation("Using multi-frame text extraction for {Format}", analyzedProfile.Format);
-
-                    var ocrEngine = new Mostlylucid.DocSummarizer.Images.Services.Ocr.TesseractOcrEngine();
-                    var imageConfig = new Mostlylucid.DocSummarizer.Images.Config.ImageConfig(); // Use default config
-                    var gifExtractor = new Mostlylucid.DocSummarizer.Images.Services.Ocr.GifTextExtractor(
-                        ocrEngine,
-                        imageConfig,
-                        advancedOcrService: null, // No advanced pipeline in CLI
-                        logger: _logger as ILogger<Mostlylucid.DocSummarizer.Images.Services.Ocr.GifTextExtractor>);
-
-                    var result = await gifExtractor.ExtractTextAsync(imagePath, ct);
-
-                    extractedText = result.CombinedText;
-
-                    _logger.LogInformation("Extracted text from {Frames} frames (out of {Total}): {Preview}",
-                        result.FramesWithText,
-                        result.TotalFrames,
-                        extractedText.Length > 100 ? extractedText.Substring(0, 100) + "..." : extractedText);
-                }
-                else
-                {
-                    // Use standard single-frame OCR for static images
-                    var ocrEngine = new Mostlylucid.DocSummarizer.Images.Services.Ocr.TesseractOcrEngine();
-                    var regions = ocrEngine.ExtractTextWithCoordinates(imagePath);
-
-                    extractedText = string.Join(" ", regions.Select(r => r.Text));
-
-                    _logger.LogInformation("Extracted {Count} text regions from static image: {Preview}",
-                        regions.Count,
-                        extractedText.Length > 100 ? extractedText.Substring(0, 100) + "..." : extractedText);
-                }
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "OCR failed for {ImagePath}", imagePath);
-            }
-        }
-
-        // Step 5: Store in cache if enabled
+        // Step 4: Store in cache if enabled
         if (_config.EnableCaching && _signalDatabase != null)
         {
             // Use SHA256 from earlier or compute it now
@@ -495,7 +535,8 @@ public class EscalationService
             EscalationReason: escalationReason,
             FromCache: false,
             GifMotion: gifMotionProfile,
-            EvidenceClaims: evidenceClaims);
+            EvidenceClaims: evidenceClaims,
+            OcrConfidence: ocrConfidence);
     }
 
     /// <summary>
@@ -624,152 +665,82 @@ public class EscalationService
     }
 
     /// <summary>
-    /// Build a custom vision LLM prompt that includes deterministic analysis signals,
-    /// anti-hallucination constraints, and evidence citation requirements.
+    /// Build a vision LLM prompt tailored to the detected image type.
+    /// Only passes relevant context signals to reduce hallucination.
     /// </summary>
     private static string BuildVisionPrompt(ImageProfile profile)
     {
         var prompt = new StringBuilder();
 
-        // Main instruction with hallucination prevention
-        prompt.AppendLine("Analyze this image and provide a JSON response with clean caption and evidence-backed claims.");
+        // Core instruction - always the same
+        prompt.AppendLine("Describe this image factually for accessibility.");
         prompt.AppendLine();
-        prompt.AppendLine("CRITICAL CONSTRAINTS:");
-        prompt.AppendLine("- Only describe what is visually present in the image");
-        prompt.AppendLine("- Only reference metadata values provided below");
-        prompt.AppendLine("- Do NOT infer, assume, or guess information not visible or provided");
-        prompt.AppendLine("- Do NOT identify specific people, brands, or copyrighted content unless the text is clearly visible");
-        prompt.AppendLine("- If uncertain about something, say 'appears to be' or 'seems like' rather than stating as fact");
-        prompt.AppendLine();
-        prompt.AppendLine("REQUIRED JSON OUTPUT FORMAT:");
-        prompt.AppendLine("You MUST respond with ONLY a valid JSON object (no markdown code blocks, no explanation):");
-        prompt.AppendLine("{");
-        prompt.AppendLine("  \"caption\": \"<clean English description>\",");
-        prompt.AppendLine("  \"claims\": [<array of claim objects>],");
-        prompt.AppendLine("  \"metadata\": {");
-        prompt.AppendLine("    \"tone\": \"<professional|casual|humorous|formal|technical>\",");
-        prompt.AppendLine("    \"valence\": <-1.0 to 1.0>,  // caption tone, not moral judgment");
-        prompt.AppendLine("    \"complexity\": <0.0 to 1.0>,");
-        prompt.AppendLine("    \"aesthetic_score\": <0.0 to 1.0>,");
-        prompt.AppendLine("    \"primary_subject\": \"<main focus>\",");
-        prompt.AppendLine("    \"purpose\": \"<educational|entertainment|commercial|documentation>\",");
-        prompt.AppendLine("    \"target_audience\": \"<general|technical|children|professionals>\"");
-        prompt.AppendLine("  }");
-        prompt.AppendLine("}");
-        prompt.AppendLine();
-        prompt.AppendLine("EVIDENCE SOURCES (use these exact names):");
-        prompt.AppendLine("- vision = direct visual observation from the image");
-        prompt.AppendLine("- motion = motion/animation analysis (for GIFs)");
-        prompt.AppendLine("- ocr = OCR-extracted text");
-        prompt.AppendLine("- signal = deterministic signal from metadata (color, sharpness, type, etc.)");
-        prompt.AppendLine("- consensus = multiple signals in agreement");
-        prompt.AppendLine("- inferred = synthesis/inference (composition only - NEVER use alone)");
-        prompt.AppendLine();
-        prompt.AppendLine("EVIDENCE FORMAT:");
-        prompt.AppendLine("- Prefix evidence tokens with their source: sig:sharpness=1591, det:green-shirt, ocr:\"visible text\"");
-        prompt.AppendLine("- Use sig: for signal-based evidence (computed metrics)");
-        prompt.AppendLine("- Use det: for detected features (objects, clothing, colors)");
-        prompt.AppendLine("- Use ocr: for OCR-extracted text");
-        prompt.AppendLine("- Use exif: for EXIF metadata (date, camera, location)");
-        prompt.AppendLine();
-        prompt.AppendLine("RULES:");
-        prompt.AppendLine("- Every claim MUST have at least one non-inferred source");
-        prompt.AppendLine("- If only inference, hedge with 'appears to' or omit the claim");
-        prompt.AppendLine("- Caption should be natural, readable English");
-        prompt.AppendLine();
-        prompt.AppendLine("Example JSON:");
-        prompt.AppendLine("{");
-        prompt.AppendLine("  \"caption\": \"A sharp photograph shows a person wearing dark clothing in an indoor setting with warm lighting.\",");
-        prompt.AppendLine("  \"claims\": [");
-        prompt.AppendLine("    { \"text\": \"sharp photograph\", \"sources\": [\"vision\", \"signal\"], \"evidence\": [\"sig:sharpness=1591\"] },");
-        prompt.AppendLine("    { \"text\": \"person wearing dark clothing\", \"sources\": [\"vision\"], \"evidence\": [\"det:person\", \"det:dark-clothing\"] },");
-        prompt.AppendLine("    { \"text\": \"indoor setting with warm lighting\", \"sources\": [\"vision\", \"signal\"], \"evidence\": [\"sig:color.dominant=warm_tones\"] }");
-        prompt.AppendLine("  ],");
-        prompt.AppendLine("  \"metadata\": {");
-        prompt.AppendLine("    \"tone\": \"professional\",");
-        prompt.AppendLine("    \"valence\": 0.1,");
-        prompt.AppendLine("    \"complexity\": 0.4,");
-        prompt.AppendLine("    \"aesthetic_score\": 0.7,");
-        prompt.AppendLine("    \"primary_subject\": \"portrait\",");
-        prompt.AppendLine("    \"purpose\": \"documentation\",");
-        prompt.AppendLine("    \"target_audience\": \"general\"");
-        prompt.AppendLine("  }");
-        prompt.AppendLine("}");
-        prompt.AppendLine();
-        prompt.AppendLine("DESCRIBE:");
-        prompt.AppendLine("- Objects, people, animals, and their positions");
-        prompt.AppendLine("- Setting, environment, and background");
-        prompt.AppendLine("- Any text that is visible (transcribe it exactly)");
-        prompt.AppendLine("- Actions, expressions, and mood based on visible cues");
-        prompt.AppendLine("- Visual qualities: lighting, composition, style");
+        prompt.AppendLine("Reply ONLY with JSON: {\"caption\": \"<description>\"}");
         prompt.AppendLine();
 
-        // Add metadata context
-        prompt.AppendLine("METADATA SIGNALS (computed from image analysis):");
-        prompt.AppendLine();
+        // Check if animated (GIF or animated WebP)
+        var isAnimated = profile.Format?.Equals("GIF", StringComparison.OrdinalIgnoreCase) == true ||
+                         profile.Format?.Equals("WEBP", StringComparison.OrdinalIgnoreCase) == true;
 
-        // Color information
-        if (profile.DominantColors?.Any() == true)
+        if (isAnimated)
         {
-            prompt.Append("• Dominant Colors: ");
-            var colorDescriptions = profile.DominantColors
-                .Take(3)
-                .Select(c => $"{c.Name} ({c.Percentage:F0}%)");
-            prompt.AppendLine(string.Join(", ", colorDescriptions));
+            prompt.AppendLine("This is an ANIMATED image (GIF/WebP).");
+            prompt.AppendLine("Focus on: the action/movement, what is happening, any text shown.");
+            prompt.AppendLine("The image shows a filmstrip of frames - describe the animation.");
+        }
+        else
+        {
+            // Type-specific hints based on detected image type
+            switch (profile.DetectedType)
+            {
+                case ImageType.Screenshot:
+                    prompt.AppendLine("This appears to be a SCREENSHOT.");
+                    prompt.AppendLine("Focus on: UI elements, application name, visible text, what action is shown.");
+                    if (profile.TextLikeliness > 0.3)
+                        prompt.AppendLine("Note: Text was detected - include key visible text.");
+                    break;
 
-            if (profile.IsMostlyGrayscale)
-            {
-                prompt.AppendLine("  → Image is mostly grayscale (low saturation)");
-            }
-            else if (profile.MeanSaturation > 0.5)
-            {
-                prompt.AppendLine("  → Image has vibrant, saturated colors");
+                case ImageType.Diagram:
+                case ImageType.Chart:
+                    prompt.AppendLine($"This appears to be a {profile.DetectedType.ToString().ToUpper()}.");
+                    prompt.AppendLine("Focus on: chart type, what data it shows, labels, title, key takeaway.");
+                    break;
+
+                case ImageType.Artwork:
+                    prompt.AppendLine("This appears to be ARTWORK or illustration.");
+                    prompt.AppendLine("Focus on: subject matter, style, colors, mood.");
+                    break;
+
+                case ImageType.Meme:
+                    prompt.AppendLine("This appears to be a MEME image.");
+                    prompt.AppendLine("Focus on: the visual content and any text/captions shown.");
+                    break;
+
+                case ImageType.ScannedDocument:
+                    prompt.AppendLine("This appears to be a SCANNED DOCUMENT.");
+                    prompt.AppendLine("Focus on: document type and key visible text content.");
+                    break;
+
+                case ImageType.Icon:
+                    prompt.AppendLine("This appears to be an ICON or logo.");
+                    prompt.AppendLine("Focus on: what the icon represents, shape, colors.");
+                    break;
+
+                case ImageType.Photo:
+                default:
+                    // For photos, minimal context to avoid over-interpretation
+                    prompt.AppendLine("This is a PHOTOGRAPH.");
+                    prompt.AppendLine("Focus on: main subject, setting, action/pose.");
+                    break;
             }
         }
 
-        // Image quality signals
-        prompt.AppendLine($"• Sharpness: {profile.LaplacianVariance:F0} (Laplacian variance)");
-        if (profile.LaplacianVariance < 100)
-        {
-            prompt.AppendLine("  → Image is blurry or soft-focused");
-        }
-        else if (profile.LaplacianVariance > 500)
-        {
-            prompt.AppendLine("  → Image is sharp with clear details");
-        }
-
-        // Image type detection
-        prompt.AppendLine($"• Detected Type: {profile.DetectedType} (confidence: {profile.TypeConfidence:P0})");
-        prompt.AppendLine($"  → Photo={profile.TypeConfidence > 0.3}, Screenshot={profile.TypeConfidence < 0.3 && profile.EdgeDensity > 0.15}, Diagram/Chart={profile.DetectedType is ImageType.Diagram or ImageType.Chart}");
-
-        // Text likelihood
-        prompt.AppendLine($"• Text Likelihood: {profile.TextLikeliness:F2}");
-        if (profile.TextLikeliness > 0.4)
-        {
-            prompt.AppendLine("  → High probability of containing readable text - look carefully for text elements");
-        }
-
-        // Luminance/exposure
-        prompt.AppendLine($"• Luminance: Mean={profile.MeanLuminance:F1}, StdDev={profile.LuminanceStdDev:F1}");
-        if (profile.MeanLuminance < 50)
-        {
-            prompt.AppendLine("  → Image is dark or underexposed");
-        }
-        else if (profile.MeanLuminance > 200)
-        {
-            prompt.AppendLine("  → Image is bright or overexposed");
-        }
-
-        // Edge density (complexity)
-        prompt.AppendLine($"• Edge Density: {profile.EdgeDensity:F3}");
-        if (profile.EdgeDensity > 0.2)
-        {
-            prompt.AppendLine("  → Image has high visual complexity with many edges/details");
-        }
-
         prompt.AppendLine();
-        prompt.AppendLine("Use these metadata signals to guide your description and validate what you observe.");
-        prompt.AppendLine("Your description should be grounded in observable facts only.");
+        prompt.AppendLine("Rules:");
+        prompt.AppendLine("- 1-2 sentences describing what is visible");
+        prompt.AppendLine("- ONLY describe what you can actually see");
+        prompt.AppendLine("- Do NOT identify specific people by name");
+        prompt.AppendLine("- Do NOT guess or assume details");
 
         return prompt.ToString();
     }
@@ -940,6 +911,18 @@ public class EscalationConfig
     /// Caches analysis results to avoid reprocessing identical files (even if renamed).
     /// </summary>
     public bool EnableCaching { get; set; } = true;
+
+    /// <summary>
+    /// OCR confidence threshold (0.0-1.0). If OCR confidence is above this,
+    /// skip LLM escalation for text-heavy images (documents, memes, etc).
+    /// </summary>
+    public double OcrConfidenceThreshold { get; set; } = 0.85;
+
+    /// <summary>
+    /// If true, skip LLM escalation when OCR returns high-confidence text.
+    /// This prevents unnecessary LLM calls for clear text like documents.
+    /// </summary>
+    public bool SkipLlmIfOcrHighConfidence { get; set; } = true;
 }
 
 /// <summary>
@@ -954,7 +937,8 @@ public record EscalationResult(
     string? EscalationReason,
     bool FromCache = false,
     GifMotionProfile? GifMotion = null,
-    List<Vision.Clients.EvidenceClaim>? EvidenceClaims = null);
+    List<Vision.Clients.EvidenceClaim>? EvidenceClaims = null,
+    double OcrConfidence = 0.0);
 
 /// <summary>
 /// Progress report for batch processing.

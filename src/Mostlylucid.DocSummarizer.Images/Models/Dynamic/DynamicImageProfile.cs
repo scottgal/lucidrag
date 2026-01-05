@@ -297,6 +297,66 @@ public class DynamicImageProfile
     {
         return ImageLedger.FromProfile(this);
     }
+
+    /// <summary>
+    /// Create RAG-ready document data with salience synthesis.
+    /// Returns a record that can be used to construct ImageDocument for vector stores.
+    /// </summary>
+    /// <param name="purpose">Optimization purpose for salience weighting</param>
+    public RagImageData ToRagData(string purpose = "caption")
+    {
+        var ledger = GetLedger();
+
+        return new RagImageData
+        {
+            Id = GetValue<string>("identity.sha256") ?? GetValue<string>("fingerprint.composite") ?? Guid.NewGuid().ToString(),
+            Path = ImagePath ?? "",
+            Format = GetValue<string>("identity.format") ?? "Unknown",
+            Width = GetValue<int>("identity.width"),
+            Height = GetValue<int>("identity.height"),
+            DetectedType = GetValue<string>("content.type"),
+            TypeConfidence = GetValue<double>("content.type_confidence"),
+            ExtractedText = ledger.Text.ExtractedText,
+            LlmCaption = ledger.Vision.Caption,
+            SalienceSummary = ledger.ToSalienceSummary(purpose),
+            SalientSignals = ledger.GetSalientSignals(purpose),
+            DominantColors = ledger.Colors.DominantColors?.Take(5).Select(c => c.Hex).ToArray(),
+            MotionDirection = ledger.Motion?.MotionType,
+            AnimationType = ledger.Identity.IsAnimated ? (ledger.Motion?.Summary ?? "animated") : null,
+            IsAnimated = ledger.Identity.IsAnimated,
+            FaceCount = ledger.Objects.Faces.Count,
+            HasText = !string.IsNullOrWhiteSpace(ledger.Text.ExtractedText),
+            Scene = ledger.Vision.Scene,
+            AnalysisDurationMs = AnalysisDurationMs
+        };
+    }
+}
+
+/// <summary>
+/// RAG-ready image data with salience synthesis.
+/// Can be used to construct ImageDocument for vector stores.
+/// </summary>
+public record RagImageData
+{
+    public required string Id { get; init; }
+    public required string Path { get; init; }
+    public required string Format { get; init; }
+    public int Width { get; init; }
+    public int Height { get; init; }
+    public string? DetectedType { get; init; }
+    public double TypeConfidence { get; init; }
+    public string? ExtractedText { get; init; }
+    public string? LlmCaption { get; init; }
+    public string? SalienceSummary { get; init; }
+    public Dictionary<string, object?>? SalientSignals { get; init; }
+    public string[]? DominantColors { get; init; }
+    public string? MotionDirection { get; init; }
+    public string? AnimationType { get; init; }
+    public bool IsAnimated { get; init; }
+    public int FaceCount { get; init; }
+    public bool HasText { get; init; }
+    public string? Scene { get; init; }
+    public long AnalysisDurationMs { get; init; }
 }
 
 /// <summary>

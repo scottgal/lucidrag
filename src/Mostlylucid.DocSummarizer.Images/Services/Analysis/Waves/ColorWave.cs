@@ -158,9 +158,28 @@ public class ColorWave : IAnalysisWave
             Tags = new List<string> { SignalTags.Color },
             Metadata = new Dictionary<string, object>
             {
-                ["saturation_threshold"] = 0.1
+                ["saturation_threshold"] = 0.02
             }
         });
+
+        // Tinted grayscale detection (sepia, blue tint, aged photos, etc.)
+        var (isTinted, tintType, colorCast) = _colorAnalyzer.DetectColorCastOpenCv(imagePath);
+        if (isTinted && !string.IsNullOrEmpty(tintType))
+        {
+            signals.Add(new Signal
+            {
+                Key = "color.tint_type",
+                Value = tintType,
+                Confidence = Math.Min(1.0, colorCast / 20.0), // Higher cast = more confident
+                Source = Name,
+                Tags = new List<string> { SignalTags.Color },
+                Metadata = new Dictionary<string, object>
+                {
+                    ["color_cast_magnitude"] = colorCast,
+                    ["is_tinted_grayscale"] = true
+                }
+            });
+        }
 
         // Color palette (hex codes)
         if (dominantColors?.Any() == true)

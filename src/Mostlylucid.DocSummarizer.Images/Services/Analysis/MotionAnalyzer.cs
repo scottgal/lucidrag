@@ -482,6 +482,244 @@ public class MotionAnalyzer
         // Convert to consistency score (0-1, higher = more consistent)
         return Math.Max(0, 1 - coeffOfVariation);
     }
+
+    /// <summary>
+    /// Detect and track multiple objects with independent motion vectors.
+    /// Uses background subtraction and contour detection to identify distinct moving objects.
+    /// </summary>
+    public List<TrackedObject> DetectMultipleObjects(Mat frame1, Mat frame2, Mat flow)
+    {
+        var objects = new List<TrackedObject>();
+
+        try
+        {
+            // Convert flow to magnitude image for motion detection
+            using var magnitude = new Mat();
+            using var angle = new Mat();
+
+            Cv2.Split(flow, out var channels);
+            Cv2.CartToPolar(channels[0], channels[1], magnitude, angle, true);
+
+            // Threshold to find moving regions
+            using var motionMask = new Mat();
+            Cv2.Threshold(magnitude, motionMask, 2.0, 255, ThresholdTypes.Binary);
+            motionMask.ConvertTo(motionMask, MatType.CV_8UC1);
+
+            // Morphological cleanup
+            using var kernel = Cv2.GetStructuringElement(MorphShapes.Ellipse, new OpenCvSharp.Size(5, 5));
+            Cv2.MorphologyEx(motionMask, motionMask, MorphTypes.Close, kernel);
+            Cv2.MorphologyEx(motionMask, motionMask, MorphTypes.Open, kernel);
+
+            // Find contours of moving regions
+            Cv2.FindContours(motionMask, out var contours, out _, RetrievalModes.External, ContourApproximationModes.ApproxSimple);
+
+            // Process each contour as a potential object
+            foreach (var contour in contours)
+            {
+                var area = Cv2.ContourArea(contour);
+                if (area < 100) continue; // Skip tiny regions
+
+                var rect = Cv2.BoundingRect(contour);
+
+                // Calculate average motion vector for this object
+                var objFlow = ExtractRegionFlow(flow, rect);
+                if (objFlow == null) continue;
+
+                var (avgDx, avgDy, avgMag) = objFlow.Value;
+                var objAngle = Math.Atan2(avgDy, avgDx) * 180 / Math.PI;
+                if (objAngle < 0) objAngle += 360;
+
+                objects.Add(new TrackedObject
+                {
+                    Id = objects.Count,
+                    BoundingBox = rect,
+                    CenterX = rect.X + rect.Width / 2,
+                    CenterY = rect.Y + rect.Height / 2,
+                    Area = area,
+                    DirectionAngle = objAngle,
+                    DirectionName = AngleToDirection(objAngle),
+                    Velocity = avgMag,
+                    VelocityX = avgDx,
+                    VelocityY = avgDy
+                });
+            }
+
+            // Cleanup
+            foreach (var ch in channels) ch.Dispose();
+
+            // Detect motion relationships between objects
+            if (objects.Count >= 2)
+            {
+                DetectMotionRelationships(objects);
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger?.LogWarning(ex, "Multi-object detection failed");
+        }
+
+        return objects;
+    }
+
+    private (double dx, double dy, double mag)? ExtractRegionFlow(Mat flow, Rect region)
+    {
+        try
+        {
+            // Clamp region to flow bounds
+            var x = Math.Max(0, Math.Min(region.X, flow.Width - 1));
+            var y = Math.Max(0, Math.Min(region.Y, flow.Height - 1));
+            var w = Math.Min(region.Width, flow.Width - x);
+            var h = Math.Min(region.Height, flow.Height - y);
+
+            if (w <= 0 || h <= 0) return null;
+
+            using var roi = new Mat(flow, new Rect(x, y, w, h));
+
+            double sumDx = 0, sumDy = 0;
+            int count = 0;
+
+            unsafe
+            {
+                for (int py = 0; py < roi.Height; py += 2)
+                {
+                    var ptr = (float*)roi.Ptr(py);
+                    for (int px = 0; px < roi.Width; px += 2)
+                    {
+                        sumDx += ptr[px * 2];
+                        sumDy += ptr[px * 2 + 1];
+                        count++;
+                    }
+                }
+            }
+
+            if (count == 0) return null;
+
+            var avgDx = sumDx / count;
+            var avgDy = sumDy / count;
+            var avgMag = Math.Sqrt(avgDx * avgDx + avgDy * avgDy);
+
+            return (avgDx, avgDy, avgMag);
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    private string AngleToDirection(double angle)
+    {
+        // Normalize to 0-360
+        while (angle < 0) angle += 360;
+        while (angle >= 360) angle -= 360;
+
+        return angle switch
+        {
+            >= 337.5 or < 22.5 => "right",
+            >= 22.5 and < 67.5 => "down-right",
+            >= 67.5 and < 112.5 => "down",
+            >= 112.5 and < 157.5 => "down-left",
+            >= 157.5 and < 202.5 => "left",
+            >= 202.5 and < 247.5 => "up-left",
+            >= 247.5 and < 292.5 => "up",
+            _ => "up-right"
+        };
+    }
+
+    private void DetectMotionRelationships(List<TrackedObject> objects)
+    {
+        for (int i = 0; i < objects.Count; i++)
+        {
+            for (int j = i + 1; j < objects.Count; j++)
+            {
+                var obj1 = objects[i];
+                var obj2 = objects[j];
+
+                // Calculate angle between objects
+                var dx = obj2.CenterX - obj1.CenterX;
+                var dy = obj2.CenterY - obj1.CenterY;
+                var lineAngle = Math.Atan2(dy, dx) * 180 / Math.PI;
+
+                // Calculate relative motion
+                var relVelX = obj2.VelocityX - obj1.VelocityX;
+                var relVelY = obj2.VelocityY - obj1.VelocityY;
+                var relAngle = Math.Atan2(relVelY, relVelX) * 180 / Math.PI;
+
+                // Determine relationship
+                var angleDiff = Math.Abs(obj1.DirectionAngle - obj2.DirectionAngle);
+                if (angleDiff > 180) angleDiff = 360 - angleDiff;
+
+                string relationship;
+                if (angleDiff < 30)
+                {
+                    relationship = "parallel_same_direction";
+                }
+                else if (angleDiff > 150)
+                {
+                    // Moving in opposite directions - check if converging or diverging
+                    var motionTowardsLine = Math.Abs(relAngle - lineAngle);
+                    if (motionTowardsLine > 180) motionTowardsLine = 360 - motionTowardsLine;
+
+                    relationship = motionTowardsLine < 90 ? "converging" : "diverging";
+                }
+                else if (angleDiff > 60 && angleDiff < 120)
+                {
+                    relationship = "perpendicular";
+                }
+                else
+                {
+                    relationship = "divergent";
+                }
+
+                obj1.Relationships.Add(new ObjectRelationship
+                {
+                    OtherObjectId = obj2.Id,
+                    RelationType = relationship,
+                    Distance = Math.Sqrt(dx * dx + dy * dy),
+                    AngleDifference = angleDiff
+                });
+
+                obj2.Relationships.Add(new ObjectRelationship
+                {
+                    OtherObjectId = obj1.Id,
+                    RelationType = relationship,
+                    Distance = Math.Sqrt(dx * dx + dy * dy),
+                    AngleDifference = angleDiff
+                });
+            }
+        }
+    }
+}
+
+/// <summary>
+/// A tracked moving object with its motion vector.
+/// </summary>
+public class TrackedObject
+{
+    public int Id { get; set; }
+    public Rect BoundingBox { get; set; }
+    public int CenterX { get; set; }
+    public int CenterY { get; set; }
+    public double Area { get; set; }
+    public double DirectionAngle { get; set; }
+    public string DirectionName { get; set; } = "";
+    public double Velocity { get; set; }
+    public double VelocityX { get; set; }
+    public double VelocityY { get; set; }
+    public List<ObjectRelationship> Relationships { get; set; } = new();
+}
+
+/// <summary>
+/// Relationship between two tracked objects.
+/// </summary>
+public class ObjectRelationship
+{
+    public int OtherObjectId { get; set; }
+    /// <summary>
+    /// Type: converging, diverging, parallel_same_direction, perpendicular, divergent
+    /// </summary>
+    public string RelationType { get; set; } = "";
+    public double Distance { get; set; }
+    public double AngleDifference { get; set; }
 }
 
 /// <summary>

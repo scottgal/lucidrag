@@ -9,7 +9,7 @@ namespace Mostlylucid.DocSummarizer.Images.Services.Analysis.Waves;
 /// <summary>
 /// Motion Analysis Wave - Detects motion patterns in animated GIFs using optical flow.
 /// Uses Farneback dense optical flow algorithm for comprehensive motion detection.
-/// Priority: 40 (runs after VisionLLM to correlate motion with detected entities)
+/// Priority: 55 (runs BEFORE VisionLLM to provide motion context for captions)
 /// </summary>
 public class MotionWave : IAnalysisWave
 {
@@ -19,7 +19,7 @@ public class MotionWave : IAnalysisWave
     private readonly HttpClient _httpClient;
 
     public string Name => "MotionWave";
-    public int Priority => 48; // Just below VisionLLM (50), runs after to correlate with entities
+    public int Priority => 55; // Above VisionLLM (50), runs first to provide motion context for captions
     public IReadOnlyList<string> Tags => new[] { SignalTags.Content, SignalTags.Visual, "motion", "animation" };
 
     public MotionWave(

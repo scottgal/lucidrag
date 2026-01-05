@@ -1,3 +1,4 @@
+using System.Linq;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Mostlylucid.DocSummarizer.Images.Config;
@@ -28,6 +29,16 @@ public class VisionLlmWave : IAnalysisWave
     public string Name => "VisionLlmWave";
     public int Priority => 50; // After basic analysis, before synthesis
     public IReadOnlyList<string> Tags => new[] { SignalTags.Content, "vision", "llm", "ml" };
+
+    /// <summary>
+    /// Check if VisionLLM should run - this is expensive (LLM call).
+    /// Only runs if enabled in config.
+    /// </summary>
+    public bool ShouldRun(string imagePath, AnalysisContext context)
+    {
+        // Skip if disabled in config
+        return Config.EnableVisionLlm;
+    }
 
     public VisionLlmWave(
         IOptions<ImageConfig> config,
@@ -65,8 +76,8 @@ public class VisionLlmWave : IAnalysisWave
             // Convert image to base64 for Ollama
             var imageBase64 = await ConvertImageToBase64(imagePath, ct);
 
-            // Generate primary caption
-            var caption = await GenerateCaptionAsync(imageBase64, ct);
+            // Generate primary caption (with motion context if available)
+            var caption = await GenerateCaptionAsync(imageBase64, context, ct);
             if (!string.IsNullOrEmpty(caption))
             {
                 signals.Add(new Signal
@@ -210,10 +221,10 @@ public class VisionLlmWave : IAnalysisWave
                 });
             }
 
-            // Detailed description (for complex images)
+            // Detailed description (for complex images or animations)
             if (Config.VisionLlmGenerateDetailedDescription)
             {
-                var description = await GenerateDetailedDescriptionAsync(imageBase64, ct);
+                var description = await GenerateDetailedDescriptionAsync(imageBase64, context, ct);
                 if (!string.IsNullOrEmpty(description))
                 {
                     signals.Add(new Signal
@@ -256,14 +267,307 @@ public class VisionLlmWave : IAnalysisWave
 
     private async Task<string> ConvertImageToBase64(string imagePath, CancellationToken ct)
     {
-        var bytes = await File.ReadAllBytesAsync(imagePath, ct);
-        return Convert.ToBase64String(bytes);
+        // Adaptive image sizing based on model context
+        // Most vision models work best with images under 1024x1024
+        // This significantly reduces base64 size and leaves more context for prompts
+        var maxDimension = GetMaxImageDimension();
+
+        using var image = await SixLabors.ImageSharp.Image.LoadAsync(imagePath, ct);
+        var originalWidth = image.Width;
+        var originalHeight = image.Height;
+
+        // Check if resizing needed
+        if (image.Width > maxDimension || image.Height > maxDimension)
+        {
+            var scale = Math.Min(maxDimension / (double)image.Width, maxDimension / (double)image.Height);
+            var newWidth = (int)(image.Width * scale);
+            var newHeight = (int)(image.Height * scale);
+
+            image.Mutate(x => x.Resize(newWidth, newHeight));
+            _logger?.LogDebug("Resized image from {OldW}x{OldH} to {NewW}x{NewH} for LLM",
+                originalWidth, originalHeight, newWidth, newHeight);
+        }
+
+        // Encode as JPEG for smaller base64 (PNG can be huge)
+        using var ms = new MemoryStream();
+        await image.SaveAsJpegAsync(ms, new SixLabors.ImageSharp.Formats.Jpeg.JpegEncoder { Quality = 85 }, ct);
+        return Convert.ToBase64String(ms.ToArray());
     }
 
-    private async Task<string?> GenerateCaptionAsync(string imageBase64, CancellationToken ct)
+    // Cache for model context sizes
+    private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, int> _modelContextCache = new();
+
+    /// <summary>
+    /// Get maximum image dimension based on model context size.
+    /// Queries Ollama for context window size to adapt image sizing.
+    /// </summary>
+    private int GetMaxImageDimension()
     {
-        var prompt = "Describe this image in one concise sentence (10-15 words). Focus on the main subject and action.";
-        return await QueryVisionLlmAsync(imageBase64, prompt, ct);
+        var model = Config.VisionLlmModel ?? "";
+        var cacheKey = $"{Config.OllamaBaseUrl}:{model}";
+
+        // Try cached value
+        if (_modelContextCache.TryGetValue(cacheKey, out var cachedDim))
+            return cachedDim;
+
+        // Try to fetch from Ollama
+        var contextSize = FetchContextSizeFromOllama(model);
+        if (contextSize > 0)
+        {
+            var dim = ContextSizeToImageDimension(contextSize);
+            _modelContextCache[cacheKey] = dim;
+            return dim;
+        }
+
+        // Fallback to heuristic based on model name
+        var modelLower = model.ToLowerInvariant();
+        var fallbackDim = modelLower switch
+        {
+            var m when m.Contains("tiny") || m.Contains("phi") || m.Contains("moondream") => 512,
+            var m when m.Contains("7b") || m.Contains("llava:7") || m.Contains("minicpm") => 768,
+            var m when m.Contains("13b") || m.Contains("bakllava") => 1024,
+            var m when m.Contains("34b") || m.Contains("opus") || m.Contains("gpt-4") => 1536,
+            _ => 768
+        };
+
+        _modelContextCache[cacheKey] = fallbackDim;
+        return fallbackDim;
+    }
+
+    /// <summary>
+    /// Convert context window size to appropriate image dimension.
+    /// Larger context = can handle larger images with more prompt space.
+    /// </summary>
+    private static int ContextSizeToImageDimension(int contextSize)
+    {
+        // Rule of thumb: base64 image takes ~1.33x the raw bytes in tokens
+        // A 768x768 JPEG at 85% quality is ~50-100KB (~65-130K chars base64)
+        // Most models tokenize ~4 chars per token = ~16-32K tokens for image alone
+        // We want to leave ~50% of context for prompts and response
+        return contextSize switch
+        {
+            < 4096 => 384,    // Very limited - tiny image
+            < 8192 => 512,    // Small context
+            < 16384 => 768,   // Standard context
+            < 32768 => 1024,  // Large context
+            < 65536 => 1280,  // Very large context
+            _ => 1536         // Massive context (GPT-4V, Claude, etc.)
+        };
+    }
+
+    /// <summary>
+    /// Fetch context window size from Ollama API.
+    /// </summary>
+    private int FetchContextSizeFromOllama(string model)
+    {
+        try
+        {
+            using var client = new System.Net.Http.HttpClient { Timeout = TimeSpan.FromSeconds(3) };
+            var url = $"{Config.OllamaBaseUrl}/api/show";
+            var content = new System.Net.Http.StringContent(
+                System.Text.Json.JsonSerializer.Serialize(new { name = model }),
+                System.Text.Encoding.UTF8,
+                "application/json");
+
+            var response = client.PostAsync(url, content).GetAwaiter().GetResult();
+            if (response.IsSuccessStatusCode)
+            {
+                var json = response.Content.ReadAsStringAsync().GetAwaiter().GetResult();
+                var doc = System.Text.Json.JsonDocument.Parse(json);
+
+                // Try to get context length from model info
+                if (doc.RootElement.TryGetProperty("model_info", out var modelInfo))
+                {
+                    // Look for context length in various places
+                    foreach (var prop in modelInfo.EnumerateObject())
+                    {
+                        var name = prop.Name.ToLowerInvariant();
+                        if (name.Contains("context") && prop.Value.ValueKind == System.Text.Json.JsonValueKind.Number)
+                        {
+                            return prop.Value.GetInt32();
+                        }
+                    }
+                }
+
+                // Try parameters
+                if (doc.RootElement.TryGetProperty("parameters", out var parameters))
+                {
+                    var paramText = parameters.GetString() ?? "";
+                    var match = System.Text.RegularExpressions.Regex.Match(paramText, @"num_ctx\s+(\d+)");
+                    if (match.Success && int.TryParse(match.Groups[1].Value, out var ctx))
+                    {
+                        return ctx;
+                    }
+                }
+
+                _logger?.LogDebug("Ollama model {Model} info retrieved but no context size found", model);
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger?.LogDebug("Failed to fetch Ollama model info for {Model}: {Error}", model, ex.Message);
+        }
+
+        return 0; // Fall back to heuristics
+    }
+
+    private async Task<string?> GenerateCaptionAsync(string imageBase64, AnalysisContext context, CancellationToken ct)
+    {
+        // Check for motion context from MotionWave
+        var isAnimated = context.GetValue<bool>("motion.is_animated");
+        var motionSummary = context.GetValue<string>("motion.summary");
+        var frameCount = context.GetValue<int>("motion.frame_count");
+
+        // Minimal prompts - just state the purpose, let the model do its thing
+        // Less instruction text = less room for the model to echo instructions back
+        string prompt;
+        if (isAnimated && frameCount > 1)
+        {
+            prompt = "Alt text for animated image:";
+        }
+        else
+        {
+            prompt = "Alt text:";
+        }
+
+        var response = await QueryVisionLlmAsync(imageBase64, prompt, ct);
+
+        // Clean and extract caption
+        return CleanCaptionResponse(response);
+    }
+
+    /// <summary>
+    /// Clean LLM response, removing prompt leakage and extracting actual caption.
+    /// </summary>
+    private string? CleanCaptionResponse(string? response)
+    {
+        if (string.IsNullOrWhiteSpace(response))
+            return null;
+
+        var cleaned = response.Trim();
+
+        // Try to extract from JSON format: {"caption": "..."}
+        try
+        {
+            var jsonStart = cleaned.IndexOf('{');
+            var jsonEnd = cleaned.LastIndexOf('}');
+            if (jsonStart >= 0 && jsonEnd > jsonStart)
+            {
+                var json = cleaned.Substring(jsonStart, jsonEnd - jsonStart + 1);
+                var doc = System.Text.Json.JsonDocument.Parse(json);
+                if (doc.RootElement.TryGetProperty("caption", out var captionProp))
+                {
+                    var caption = captionProp.GetString();
+                    if (!string.IsNullOrWhiteSpace(caption))
+                        return SanitizeCaption(caption);
+                }
+                // Also check for "description", "scene" etc
+                foreach (var propName in new[] { "description", "scene", "summary" })
+                {
+                    if (doc.RootElement.TryGetProperty(propName, out var prop))
+                    {
+                        var val = prop.GetString();
+                        if (!string.IsNullOrWhiteSpace(val))
+                            return SanitizeCaption(val);
+                    }
+                }
+            }
+        }
+        catch
+        {
+            // JSON parsing failed
+        }
+
+        // Regex fallback for partial JSON
+        var match = System.Text.RegularExpressions.Regex.Match(cleaned, @"""(?:caption|description)""\s*:\s*""([^""]+)""");
+        if (match.Success && match.Groups.Count > 1)
+        {
+            return SanitizeCaption(match.Groups[1].Value);
+        }
+
+        // Plain text - sanitize it
+        return SanitizeCaption(cleaned);
+    }
+
+    /// <summary>
+    /// Remove prompt leakage and instruction text from captions.
+    /// </summary>
+    private string SanitizeCaption(string caption)
+    {
+        if (string.IsNullOrWhiteSpace(caption))
+            return "";
+
+        var result = caption.Trim();
+
+        // Common prompt leakage patterns to strip (order matters - longer patterns first)
+        var leakagePatterns = new[]
+        {
+            // Long verbose patterns (check first - more specific)
+            @"^Based on (?:the )?(?:provided |given )?(?:visual )?(?:information|image|analysis).*?(?:here's|here is).*?(?:description|caption|summary).*?[:,]\s*",
+            @"^(?:Here is|Here's) (?:a |the )?(?:structured )?(?:output|description|caption|summary).*?(?:in )?(?:JSON )?(?:format)?.*?[:,]\s*",
+            @"^.*?(?:in JSON format|JSON format that|structured description|structured output).*?[:,]\s*",
+            @"^.*?captures the key.*?[:,]\s*",
+
+            // "The provided/given image" patterns
+            @"^(?:The |This )?(?:provided |given )?image (?:appears|seems) to (?:be |show |depict |display |feature |contain )?",
+            @"^(?:The |This )?(?:provided |given )?image (?:shows|depicts|displays|features|contains|presents)\s*",
+
+            // Standard patterns
+            @"^Based on (?:the |this )?(provided |given )?image.*?[:,]\s*",
+            @"^According to the (?:image|guidelines|analysis).*?[:,]\s*",
+            @"^(?:The |This )?image (?:shows|depicts|displays|features|contains|presents)\s*",
+            @"^In (?:the |this )?image,?\s*",
+            @"^(?:Here is|Here's) (?:a|the) (?:caption|description).*?:\s*",
+            @"^(?:Here is|Here's) (?:a |the )?(?:structured )?.*?[:,]\s*",
+            @"^For accessibility[:,]\s*",
+            @"^(?:Caption|Description|Summary):\s*",
+            @"^\{[^}]*\}\s*", // Leading JSON
+            @"^""[^""]*"":\s*""?", // Partial JSON key
+            @"\s*\{[^}]*$", // Trailing incomplete JSON
+            @"^```(?:json)?\s*", // Code block start
+            @"\s*```$", // Code block end
+            @"^I (?:can )?see\s+",
+            @"^(?:Looking at (?:the|this) image,?\s*)?",
+            @"^(?:From|Given) (?:the|this) (?:image|visual).*?[:,]\s*",
+            @"^(?:Visual|Image) analysis (?:shows|indicates|reveals)[:,]?\s*",
+            @"^Using (?:the )?(?:provided |given )?image.*?[:,]\s*",
+            @"\*\*(?:Caption|Description|Summary)\*\*:?\s*",  // Markdown bold headers
+            @"^(?:\*\*)?(?:Caption|Description|Summary)(?:\*\*)?:?\s*",  // With or without markdown
+            @"^(?:The )?image (?:provided|given|shown) (?:seems|appears) to (?:be |show |depict )?",
+            @"^.*?(?:does not|doesn't) provide (?:clear |enough )?(?:visual )?(?:information|details).*",
+            @"^I (?:observed|noticed|can observe|can see) (?:several |some |many )?(?:notable |key |important )?(?:features|elements|things).*?[.:]\s*",
+            @"^In this (?:outdoor |indoor )?(?:setting|scene|image).*?(?:featuring|showing|with)?\s*",
+        };
+
+        foreach (var pattern in leakagePatterns)
+        {
+            result = System.Text.RegularExpressions.Regex.Replace(
+                result, pattern, "", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+        }
+
+        // Clean up quotes
+        result = result.Trim('"', '\'', ' ');
+
+        // Ensure first letter is capitalized
+        if (result.Length > 0 && char.IsLower(result[0]))
+        {
+            result = char.ToUpper(result[0]) + result[1..];
+        }
+
+        // Truncate if too long (WCAG: ~125 chars)
+        if (result.Length > 150)
+        {
+            var lastPeriod = result.LastIndexOf('.', 147);
+            if (lastPeriod > 50)
+                result = result[..(lastPeriod + 1)];
+            else
+            {
+                var lastSpace = result.LastIndexOf(' ', 147);
+                result = lastSpace > 50 ? result[..lastSpace] + "..." : result[..147] + "...";
+            }
+        }
+
+        return result;
     }
 
     private async Task<List<EntityDetection>?> ExtractEntitiesAsync(string imageBase64, CancellationToken ct)
@@ -340,14 +644,15 @@ Be comprehensive but concise.";
         return null;
     }
 
-    private async Task<string?> GenerateDetailedDescriptionAsync(string imageBase64, CancellationToken ct)
+    private async Task<string?> GenerateDetailedDescriptionAsync(string imageBase64, AnalysisContext context, CancellationToken ct)
     {
-        var prompt = @"Provide a detailed description of this image including:
+        // Simplified prompt - let the LLM describe what it sees without forcing "animated" language
+        var prompt = @"Provide a factual description of this image including:
 1. Main subjects and their actions
 2. Setting/location
-3. Notable details
-4. Mood/atmosphere
-Keep it under 100 words.";
+3. Any visible text
+4. Notable details
+Be factual - only describe what you can see. Keep it under 100 words.";
 
         return await QueryVisionLlmAsync(imageBase64, prompt, ct);
     }

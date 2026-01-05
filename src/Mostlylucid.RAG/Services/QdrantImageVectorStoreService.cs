@@ -184,6 +184,42 @@ public class QdrantImageVectorStoreService : IImageVectorStoreService
                 payload["llm_caption"] = document.LlmCaption;
             }
 
+            // Salience summary (confidence-weighted RRF fusion)
+            if (!string.IsNullOrEmpty(document.SalienceSummary))
+            {
+                payload["salience_summary"] = document.SalienceSummary;
+            }
+
+            // Structured salient signals for filtering
+            if (document.SalientSignals?.Any() == true)
+            {
+                // Flatten signals for Qdrant payload (nested objects need special handling)
+                foreach (var (key, value) in document.SalientSignals)
+                {
+                    if (value != null)
+                    {
+                        var payloadKey = $"signal_{key.Replace(".", "_")}";
+                        if (value is string strVal)
+                            payload[payloadKey] = strVal;
+                        else if (value is int intVal)
+                            payload[payloadKey] = intVal;
+                        else if (value is double dblVal)
+                            payload[payloadKey] = dblVal;
+                        else if (value is bool boolVal)
+                            payload[payloadKey] = boolVal;
+                        else if (value is IEnumerable<string> strList)
+                            payload[payloadKey] = new Value { ListValue = new ListValue { Values = { strList.Select(s => new Value { StringValue = s }) } } };
+                        else
+                            payload[payloadKey] = value.ToString();
+                    }
+                }
+            }
+
+            if (!string.IsNullOrEmpty(document.SourceUrl))
+            {
+                payload["source_url"] = document.SourceUrl;
+            }
+
             if (document.DominantColors?.Any() == true)
             {
                 payload["dominant_colors"] = new Value
@@ -551,6 +587,25 @@ public class QdrantImageVectorStoreService : IImageVectorStoreService
             // Reconstruct ImageDocument from payload
             var payload = point.Payload;
 
+            // Extract salient signals from flattened payload
+            var salientSignals = new Dictionary<string, object?>();
+            foreach (var (key, value) in payload)
+            {
+                if (key.StartsWith("signal_"))
+                {
+                    var signalKey = key.Substring(7).Replace("_", ".");
+                    salientSignals[signalKey] = value.KindCase switch
+                    {
+                        Value.KindOneofCase.StringValue => value.StringValue,
+                        Value.KindOneofCase.IntegerValue => value.IntegerValue,
+                        Value.KindOneofCase.DoubleValue => value.DoubleValue,
+                        Value.KindOneofCase.BoolValue => value.BoolValue,
+                        Value.KindOneofCase.ListValue => value.ListValue.Values.Select(v => v.StringValue).ToList(),
+                        _ => value.ToString()
+                    };
+                }
+            }
+
             return new ImageDocument
             {
                 Id = payload["id"].StringValue,
@@ -562,6 +617,9 @@ public class QdrantImageVectorStoreService : IImageVectorStoreService
                 TypeConfidence = payload.TryGetValue("type_confidence", out var tc) ? tc.DoubleValue : 0,
                 ExtractedText = payload.TryGetValue("extracted_text", out var et) ? et.StringValue : null,
                 LlmCaption = payload.TryGetValue("llm_caption", out var lc) ? lc.StringValue : null,
+                SalienceSummary = payload.TryGetValue("salience_summary", out var ss) ? ss.StringValue : null,
+                SalientSignals = salientSignals.Count > 0 ? salientSignals : null,
+                SourceUrl = payload.TryGetValue("source_url", out var su) ? su.StringValue : null,
                 MotionDirection = payload.TryGetValue("motion_direction", out var md) ? md.StringValue : null,
                 AnimationType = payload.TryGetValue("animation_type", out var at) ? at.StringValue : null
             };

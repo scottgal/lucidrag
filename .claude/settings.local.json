@@ -80,7 +80,15 @@
       "Bash(npm init:*)",
       "Bash(npm install:*)",
       "Bash(node:*)",
-      "Bash(Select-Object -Last 30)"
+      "Bash(Select-Object -Last 30)",
+      "Bash(timeout 5 dotnet run:*)",
+      "Bash(timeout 10 dotnet run:*)",
+      "Bash(for img in \"arse_biscuits.gif\" \"cat_wag.gif\" \"anchorman-not-even-mad.gif\" \"StyloAndBella.jpg\")",
+      "Bash(for:*)",
+      "Bash(timeout 90 dotnet run:*)",
+      "Bash(dotnet restore:*)",
+      "Bash(timeout 120 dotnet run:*)",
+      "Bash(do echo \"=== $img ===\")"
     ]
   }
 }

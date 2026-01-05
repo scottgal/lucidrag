@@ -419,6 +419,115 @@
           "tags": ["motion", "animation"]
         }
       ]
+    },
+    {
+      "name": "socialmediaalt",
+      "displayName": "Social Media Alt Text (WCAG)",
+      "description": "Comprehensive WCAG-compliant alt text for social media - includes motion, OCR, vision analysis, and detailed descriptions",
+      "category": "accessibility",
+      "estimatedDurationSeconds": 8.0,
+      "isDefault": false,
+      "tags": ["accessibility", "wcag", "social-media", "comprehensive", "alttext"],
+      "globalSettings": {
+        "maxTotalDurationMs": 30000,
+        "enableParallelization": true,
+        "forceEscalation": true,
+        "emitPerformanceSignals": true
+      },
+      "phases": [
+        {
+          "id": "identity",
+          "name": "Image Identity",
+          "description": "Extract format, dimensions, and file hash",
+          "enabled": true,
+          "priority": 100,
+          "waveType": "IdentityWave",
+          "tags": ["metadata", "identity"]
+        },
+        {
+          "id": "color-analysis",
+          "name": "Color Analysis",
+          "description": "Analyze color palette, dominant colors, brightness, and contrast",
+          "enabled": true,
+          "priority": 99,
+          "waveType": "ColorWave",
+          "tags": ["color", "visual"]
+        },
+        {
+          "id": "motion-analysis",
+          "name": "Motion Analysis",
+          "description": "Detect animation type, direction, magnitude, and moving elements",
+          "enabled": true,
+          "priority": 95,
+          "waveType": "MotionWave",
+          "tags": ["motion", "animation", "wcag"]
+        },
+        {
+          "id": "face-detection",
+          "name": "Face Detection",
+          "description": "Detect faces for people descriptions (no PII extraction)",
+          "enabled": true,
+          "priority": 90,
+          "waveType": "FaceDetectionWave",
+          "tags": ["faces", "people"]
+        },
+        {
+          "id": "advanced-ocr",
+          "name": "Advanced Multi-Frame OCR",
+          "description": "Extract all text including subtitles, captions, and embedded text",
+          "enabled": true,
+          "priority": 60,
+          "waveType": "AdvancedOcrWave",
+          "parameters": {
+            "maxFrames": 50,
+            "ssimThreshold": 0.90,
+            "enableStabilization": true,
+            "enableTemporalMedian": true,
+            "enableVoting": true,
+            "votingConfidenceThreshold": 0.25,
+            "votingMinFrames": 3
+          },
+          "tags": ["ocr", "text", "subtitles"]
+        },
+        {
+          "id": "ocr-quality",
+          "name": "OCR Quality Check",
+          "description": "Validate OCR output quality and correct garbled text",
+          "enabled": true,
+          "priority": 58,
+          "waveType": "OcrQualityWave",
+          "dependsOn": ["advanced-ocr"],
+          "parameters": {
+            "language": "en_US",
+            "garbledThreshold": 0.4,
+            "enableDetailedAnalysis": true
+          },
+          "tags": ["quality", "validation"]
+        },
+        {
+          "id": "vision-llm",
+          "name": "Vision LLM Analysis",
+          "description": "Generate detailed scene description, identify objects, actions, and context",
+          "enabled": true,
+          "priority": 50,
+          "waveType": "VisionLlmWave",
+          "parameters": {
+            "detailLevel": "comprehensive",
+            "includeEmotions": true,
+            "includeContext": true
+          },
+          "tags": ["llm", "caption", "description", "wcag"]
+        },
+        {
+          "id": "contradiction-check",
+          "name": "Signal Validation",
+          "description": "Cross-validate signals and resolve conflicts for accurate alt text",
+          "enabled": true,
+          "priority": 10,
+          "waveType": "ContradictionWave",
+          "tags": ["validation", "quality"]
+        }
+      ]
     }
   ]
 }

@@ -25,6 +25,16 @@ public interface IAnalysisWave
     IReadOnlyList<string> Tags { get; }
 
     /// <summary>
+    /// Check if this wave should run based on cheap preconditions.
+    /// Expensive waves can override this to skip processing when preconditions aren't met.
+    /// Default implementation always returns true.
+    /// </summary>
+    /// <param name="imagePath">Path to the image file</param>
+    /// <param name="context">Shared context with results from previously executed waves</param>
+    /// <returns>True if the wave should execute, false to skip</returns>
+    bool ShouldRun(string imagePath, AnalysisContext context) => true;
+
+    /// <summary>
     /// Analyze an image and produce signals.
     /// </summary>
     /// <param name="imagePath">Path to the image file</param>

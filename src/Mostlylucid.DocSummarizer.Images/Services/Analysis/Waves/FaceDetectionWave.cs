@@ -20,6 +20,33 @@ public class FaceDetectionWave : IAnalysisWave
     public int Priority => 75; // After color/identity, before OCR
     public IReadOnlyList<string> Tags => new[] { SignalTags.Visual, "faces", "objects" };
 
+    /// <summary>
+    /// Check cheap preconditions before running expensive face detection.
+    /// Skips face detection for documents, diagrams, and text-heavy images.
+    /// </summary>
+    public bool ShouldRun(string imagePath, AnalysisContext context)
+    {
+        // Skip if this looks like a document (high text-likeliness)
+        var textLikeliness = context.GetValue<double>("content.text_likeliness");
+        if (textLikeliness > 0.7)
+            return false;
+
+        // Skip if high-frequency score indicates text/diagrams
+        // (faces have smooth gradients, not sharp edges)
+        var isGrayscale = context.GetValue<bool>("color.is_grayscale");
+        var dominantColors = context.GetValue<List<object>>("color.dominant_colors");
+
+        // Skip pure grayscale images that look like documents
+        if (isGrayscale && textLikeliness > 0.4)
+            return false;
+
+        // Skip if image appears to be a diagram or chart (very few colors + text)
+        if (dominantColors != null && dominantColors.Count <= 3 && textLikeliness > 0.3)
+            return false;
+
+        return true;
+    }
+
     private static readonly Lazy<CascadeClassifier?> _faceCascade = new(() =>
     {
         try
@@ -223,7 +250,7 @@ public class FaceDetectionWave : IAnalysisWave
     }
 
     /// <summary>
-    /// Detect faces using Haar Cascade classifier.
+    /// Detect faces using Haar Cascade classifier with strict filtering.
     /// Fallback to empty if cascade not available.
     /// </summary>
     private static Rect[] DetectFaces(Mat image)
@@ -239,16 +266,82 @@ public class FaceDetectionWave : IAnalysisWave
         Cv2.CvtColor(image, gray, ColorConversionCodes.BGR2GRAY);
         Cv2.EqualizeHist(gray, gray);
 
-        // Detect faces
-        var faces = cascade.DetectMultiScale(
+        // Minimum face size based on image dimensions (at least 5% of smallest dimension)
+        var minDim = Math.Min(image.Width, image.Height);
+        var minFaceSize = Math.Max(60, minDim / 20); // At least 60px or 5% of image
+
+        // Detect faces with strict parameters to reduce false positives
+        var candidates = cascade.DetectMultiScale(
             gray,
             scaleFactor: 1.1,
-            minNeighbors: 3,
+            minNeighbors: 6, // Increased from 3 - requires more confident detections
             flags: HaarDetectionTypes.ScaleImage,
-            minSize: new Size(30, 30)
+            minSize: new Size(minFaceSize, minFaceSize)
         );
 
-        return faces;
+        // Post-filter candidates to remove obvious false positives
+        var validFaces = new List<Rect>();
+        foreach (var face in candidates)
+        {
+            // Check aspect ratio - human faces are roughly square (0.7 to 1.4)
+            var aspectRatio = (double)face.Width / face.Height;
+            if (aspectRatio < 0.7 || aspectRatio > 1.4)
+                continue;
+
+            // Check minimum area (reject tiny detections)
+            var area = face.Width * face.Height;
+            if (area < 3600) // 60x60 minimum
+                continue;
+
+            // Check face isn't too large (shouldn't cover more than 80% of image)
+            var imageArea = image.Width * image.Height;
+            if (area > imageArea * 0.8)
+                continue;
+
+            // Check for skin-like tones in the detected region (rough heuristic)
+            if (HasSkinLikeTones(image, face))
+            {
+                validFaces.Add(face);
+            }
+        }
+
+        return validFaces.ToArray();
+    }
+
+    /// <summary>
+    /// Check if detected region has skin-like color tones.
+    /// Uses HSV color space to detect typical skin colors.
+    /// </summary>
+    private static bool HasSkinLikeTones(Mat image, Rect faceRect)
+    {
+        try
+        {
+            // Extract face region
+            using var faceRoi = new Mat(image, faceRect);
+            using var hsv = new Mat();
+            Cv2.CvtColor(faceRoi, hsv, ColorConversionCodes.BGR2HSV);
+
+            // Skin tone ranges in HSV (covers various skin tones)
+            // Hue: 0-50 (red-orange-yellow range)
+            // Saturation: 20-255 (not too gray)
+            // Value: 50-255 (not too dark)
+            using var skinMask = new Mat();
+            Cv2.InRange(hsv, new Scalar(0, 20, 50), new Scalar(50, 255, 255), skinMask);
+
+            // Calculate percentage of skin-like pixels
+            var skinPixels = Cv2.CountNonZero(skinMask);
+            var totalPixels = faceRect.Width * faceRect.Height;
+            var skinRatio = (double)skinPixels / totalPixels;
+
+            // Require at least 15% skin-like pixels (allows for varied lighting/makeup)
+            // This helps filter out animal faces, which typically don't have human skin tones
+            return skinRatio >= 0.15;
+        }
+        catch
+        {
+            // If skin detection fails, be conservative and reject
+            return false;
+        }
     }
 
     /// <summary>

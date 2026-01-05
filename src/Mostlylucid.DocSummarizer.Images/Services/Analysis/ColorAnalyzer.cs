@@ -1,6 +1,7 @@
 using Microsoft.Extensions.Options;
 using Mostlylucid.DocSummarizer.Images.Config;
 using Mostlylucid.DocSummarizer.Images.Models;
+using OpenCvSharp;
 using SixLabors.ImageSharp;
 using SixLabors.ImageSharp.Advanced;
 using SixLabors.ImageSharp.PixelFormats;
@@ -312,12 +313,170 @@ public class ColorAnalyzer
     }
 
     /// <summary>
-    /// Determine if image is mostly grayscale
+    /// Determine if image is truly grayscale (virtually no color saturation).
+    /// Uses strict threshold - any noticeable color means NOT grayscale.
     /// </summary>
-    public bool IsMostlyGrayscale(Image<Rgba32> image, double threshold = 0.1)
+    public bool IsMostlyGrayscale(Image<Rgba32> image, double threshold = 0.02)
     {
         var saturation = CalculateMeanSaturation(image);
         return saturation < threshold;
+    }
+
+    /// <summary>
+    /// Detect if image is tinted grayscale (sepia, blue tint, aged photo, etc.).
+    /// Returns the tint color name if detected, null otherwise.
+    /// </summary>
+    public string? DetectTintedGrayscale(Image<Rgba32> image)
+    {
+        // Tinted grayscale has:
+        // 1. Low-moderate saturation (0.02 - 0.15)
+        // 2. Very consistent hue across the image (low hue variance)
+        // 3. High RGB channel correlation
+
+        var saturation = CalculateMeanSaturation(image);
+
+        // If pure grayscale or too colorful, not tinted
+        if (saturation < 0.02 || saturation > 0.20) return null;
+
+        // Sample pixels to analyze hue consistency
+        var hues = new List<double>();
+        var tintR = 0.0;
+        var tintG = 0.0;
+        var tintB = 0.0;
+        var sampleCount = 0;
+
+        var sampleStep = Math.Max(1, Math.Min(image.Width, image.Height) / 50);
+
+        for (var y = 0; y < image.Height; y += sampleStep)
+        {
+            var row = image.DangerousGetPixelRowMemory(y).Span;
+            for (var x = 0; x < image.Width; x += sampleStep)
+            {
+                var pixel = row[x];
+                var (h, s, _) = RgbToHsl(pixel.R, pixel.G, pixel.B);
+
+                // Only consider pixels with some saturation
+                if (s > 0.01)
+                {
+                    hues.Add(h);
+                    tintR += pixel.R;
+                    tintG += pixel.G;
+                    tintB += pixel.B;
+                    sampleCount++;
+                }
+            }
+        }
+
+        if (hues.Count < 10) return null;
+
+        // Calculate hue variance (using circular statistics for hue)
+        var sinSum = hues.Sum(h => Math.Sin(h * 2 * Math.PI));
+        var cosSum = hues.Sum(h => Math.Cos(h * 2 * Math.PI));
+        var meanHue = Math.Atan2(sinSum, cosSum) / (2 * Math.PI);
+        if (meanHue < 0) meanHue += 1;
+
+        var hueVariance = hues.Average(h =>
+        {
+            var diff = Math.Abs(h - meanHue);
+            return Math.Min(diff, 1 - diff); // Handle circular wraparound
+        });
+
+        // If hue variance is low, it's a tinted grayscale
+        if (hueVariance < 0.08)
+        {
+            // Determine tint color from average RGB of saturated pixels
+            var avgR = (byte)(tintR / sampleCount);
+            var avgG = (byte)(tintG / sampleCount);
+            var avgB = (byte)(tintB / sampleCount);
+
+            // Map to tint names
+            var (h, _, _) = RgbToHsl(avgR, avgG, avgB);
+            return h switch
+            {
+                >= 0.02 and < 0.12 => "Sepia",      // Orange-brown
+                >= 0.12 and < 0.20 => "Warm",       // Yellow-ish
+                >= 0.55 and < 0.70 => "Cool Blue",  // Blue tint
+                >= 0.70 and < 0.85 => "Purple",     // Purple/violet
+                >= 0.85 or < 0.02 => "Warm Red",    // Reddish
+                _ => "Tinted"
+            };
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    /// Detect tinted grayscale using OpenCV LAB color space analysis.
+    /// LAB separates luminance (L) from color (A=green-red, B=blue-yellow).
+    /// Tinted grayscale has low A/B variance but consistent bias.
+    /// </summary>
+    public (bool IsTinted, string? TintType, double ColorCast) DetectColorCastOpenCv(string imagePath)
+    {
+        try
+        {
+            using var mat = Cv2.ImRead(imagePath, ImreadModes.Color);
+            if (mat.Empty()) return (false, null, 0);
+
+            // Convert to LAB color space
+            using var lab = new Mat();
+            Cv2.CvtColor(mat, lab, ColorConversionCodes.BGR2Lab);
+
+            // Split into L, A, B channels
+            var channels = Cv2.Split(lab);
+            var aChannel = channels[1];
+            var bChannel = channels[2];
+
+            // Calculate mean and stddev of A and B channels
+            Cv2.MeanStdDev(aChannel, out var aMean, out var aStdDev);
+            Cv2.MeanStdDev(bChannel, out var bMean, out var bStdDev);
+
+            // A channel: negative = green, positive = red (centered at 128)
+            // B channel: negative = blue, positive = yellow (centered at 128)
+            var aOffset = aMean.Val0 - 128; // Deviation from neutral
+            var bOffset = bMean.Val0 - 128;
+
+            // Calculate color cast magnitude
+            var colorCast = Math.Sqrt(aOffset * aOffset + bOffset * bOffset);
+
+            // Low stddev = consistent color across image (tint)
+            // High stddev = varied colors (not tinted grayscale)
+            var isLowVariance = aStdDev.Val0 < 15 && bStdDev.Val0 < 15;
+
+            // Dispose channels
+            foreach (var ch in channels) ch.Dispose();
+
+            // Tinted if: moderate color cast + low variance
+            if (isLowVariance && colorCast > 5 && colorCast < 40)
+            {
+                // Determine tint type based on A/B offsets
+                var tintType = (aOffset, bOffset) switch
+                {
+                    ( > 5, > 5) => "Sepia",           // Red + Yellow = Sepia/warm
+                    ( > 5, < -5) => "Magenta",        // Red + Blue = Magenta
+                    ( < -5, > 5) => "Yellow-Green",   // Green + Yellow
+                    ( < -5, < -5) => "Cyan",          // Green + Blue = Cyan/cool
+                    (_, > 10) => "Warm Yellow",       // Strong yellow
+                    (_, < -10) => "Cool Blue",        // Strong blue
+                    ( > 10, _) => "Warm Red",         // Strong red
+                    ( < -10, _) => "Cool Green",      // Strong green
+                    _ => "Tinted"
+                };
+
+                return (true, tintType, colorCast);
+            }
+
+            // Pure grayscale has very low color cast
+            if (colorCast < 5 && isLowVariance)
+            {
+                return (false, "Grayscale", colorCast);
+            }
+
+            return (false, null, colorCast);
+        }
+        catch
+        {
+            return (false, null, 0);
+        }
     }
 
     /// <summary>

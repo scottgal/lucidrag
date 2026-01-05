@@ -52,6 +52,23 @@ public record ImageDocument
     public string? LlmCaption { get; init; }
 
     /// <summary>
+    /// Confidence-weighted salience summary (RRF-fused signals).
+    /// Purpose-optimized for semantic search.
+    /// </summary>
+    public string? SalienceSummary { get; init; }
+
+    /// <summary>
+    /// Structured salient signals for filtering/faceted search.
+    /// Keys are signal categories, values are the synthesized values.
+    /// </summary>
+    public Dictionary<string, object?>? SalientSignals { get; init; }
+
+    /// <summary>
+    /// Source URL for the image (if from web)
+    /// </summary>
+    public string? SourceUrl { get; init; }
+
+    /// <summary>
     /// Dominant colors (hex codes)
     /// </summary>
     public string[]? DominantColors { get; init; }

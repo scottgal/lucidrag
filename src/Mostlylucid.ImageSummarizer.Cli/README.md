@@ -34,7 +34,7 @@ Vision LLMs enhance analysis but are never the sole source of truth.
 
 ```bash
 $ imagesummarizer demo-images/cat_wag.gif --pipeline caption --output text
-Caption: A cat is sitting on a white couch.
+Caption: A cat lounges on a piece of furniture, appearing relaxed.
 Scene: indoor
 Motion: MODERATE object_motion motion (partial coverage)
 ```
@@ -799,3 +799,123 @@ This approach correctly extracts movie subtitles like:
 "You keep using that word."
 "I do not think it means what you think it means."
 ```
+
+## OCR Text Summarization
+
+When images contain long OCR text (documents, screenshots, infographics), ImageSummarizer can automatically summarize it using [DocSummarizer](https://github.com/scottgal/lucidrag/tree/main/src/Mostlylucid.DocSummarizer.Core) for WCAG-compliant alt text.
+
+### How It Works
+
+1. **Text Extraction**: OCR extracts text from the image
+2. **Length Check**: If text exceeds threshold (default: 200 chars), summarization kicks in
+3. **DocSummarizer**: Uses BERT extractive summarization (no LLM required) or configured mode
+4. **Alt Text**: Summary is used in accessibility output, preserving key information
+
+### Configuration
+
+Add to `appsettings.json`:
+
+```json
+{
+  "Images": {
+    "OcrSummarization": {
+      "Enabled": true,
+      "MinTextLengthForSummary": 200
+    }
+  },
+  "DocSummarizer": {
+    "Mode": "BertRag",
+    "Bert": {
+      "MaxSentences": 3,
+      "DiversityWeight": 0.3
+    }
+  }
+}
+```
+
+### Summarization Modes
+
+| Mode | Speed | LLM Required | Best For |
+|------|-------|--------------|----------|
+| `Bert` | Fast | No | Short documents, key sentence extraction |
+| `BertRag` | Medium | No | Longer text, semantic chunking + retrieval |
+| `MapReduce` | Slow | Yes | Very long documents, comprehensive summaries |
+| `Hierarchical` | Slow | Yes | Multi-topic documents |
+
+### Example: Document Screenshot
+
+```bash
+# Without summarization - full OCR text (may be very long)
+$ imagesummarizer document-screenshot.png --output alttext
+Image showing document. Text: "Lorem ipsum dolor sit amet, consectetur adipiscing elit.
+Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim
+veniam, quis nostrud exercitation ullamco laboris..."
+
+# With summarization enabled - concise summary
+$ imagesummarizer document-screenshot.png --output alttext
+Image showing document. Text: "Document discusses work and exercise principles."
+```
+
+### Programmatic Usage
+
+```csharp
+// Inject IDocumentSummarizer from DI (configured via appsettings.json)
+public class ImageProcessor
+{
+    private readonly IDocumentSummarizer _summarizer;
+
+    public async Task<string> GetAltTextAsync(string imagePath)
+    {
+        var ledger = await AnalyzeImageAsync(imagePath);
+
+        // Summarize long OCR text using DocSummarizer
+        if (ledger.Text.ExtractedText.Length > 200)
+        {
+            await ledger.SummarizeOcrTextAsync(_summarizer);
+        }
+
+        // Alt text now uses the summary
+        return ledger.ToAltTextContext(maxLength: 125);
+    }
+}
+```
+
+### DocSummarizer Configuration Reference
+
+For full configuration options, see [DocSummarizer Documentation](https://github.com/scottgal/lucidrag/tree/main/src/Mostlylucid.DocSummarizer.Core).
+
+Key settings:
+
+```json
+{
+  "DocSummarizer": {
+    "Mode": "BertRag",
+
+    "Bert": {
+      "MaxSentences": 3,
+      "PositionWeight": 0.3,
+      "DiversityWeight": 0.3
+    },
+
+    "BertRag": {
+      "TopK": 5,
+      "ChunkSize": 512,
+      "VectorStore": "InMemory"
+    },
+
+    "Ollama": {
+      "BaseUrl": "http://localhost:11434",
+      "Model": "llama3.2:3b",
+      "Temperature": 0.3
+    }
+  }
+}
+```
+
+### Environment Variables
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `DOCSUMMARIZER_MODE` | `BertRag` | Summarization mode |
+| `BERT_MAX_SENTENCES` | `3` | Max sentences in extractive summary |
+| `OCR_SUMMARY_MIN_LENGTH` | `200` | Min text length to trigger summarization |

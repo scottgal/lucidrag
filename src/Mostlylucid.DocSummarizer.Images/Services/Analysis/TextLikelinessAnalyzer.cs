@@ -1,3 +1,4 @@
+using OpenCvSharp;
 using SixLabors.ImageSharp;
 using SixLabors.ImageSharp.Advanced;
 using SixLabors.ImageSharp.PixelFormats;
@@ -210,4 +211,247 @@ public class TextLikelinessAnalyzer
 
     private static int GetLuminance(Rgba32 p) =>
         (int)(0.299 * p.R + 0.587 * p.G + 0.114 * p.B);
+
+    /// <summary>
+    /// Detect text regions using OpenCV MSER (Maximally Stable Extremal Regions).
+    /// MSER is specifically designed for text detection - finds stable connected regions.
+    /// </summary>
+    public List<TextRegionResult> DetectTextRegionsMser(string imagePath)
+    {
+        var results = new List<TextRegionResult>();
+
+        try
+        {
+            using var mat = Cv2.ImRead(imagePath, ImreadModes.Color);
+            if (mat.Empty()) return results;
+
+            using var gray = new Mat();
+            Cv2.CvtColor(mat, gray, ColorConversionCodes.BGR2GRAY);
+
+            // MSER for dark text on light background
+            using var mser = MSER.Create(
+                delta: 5,           // Stability threshold
+                minArea: 60,        // Min region size (filter noise)
+                maxArea: 14400,     // Max region size (filter large blobs)
+                maxVariation: 0.25, // Max area variation between levels
+                minDiversity: 0.2); // Min diversity of regions
+
+            mser.DetectRegions(gray, out var regions, out var bboxes);
+
+            // Filter and group regions into text-like candidates
+            var candidates = new List<(Rect bbox, double score)>();
+
+            foreach (var bbox in bboxes)
+            {
+                // Calculate aspect ratio (text chars are typically taller than wide or square)
+                var aspectRatio = bbox.Width / (double)Math.Max(1, bbox.Height);
+
+                // Text-like aspect ratios: between 0.2 (tall) and 3.0 (wide like "m" or "w")
+                if (aspectRatio < 0.1 || aspectRatio > 4.0) continue;
+
+                // Calculate fill ratio (how much of bounding box is filled)
+                // Text characters typically have moderate fill ratio
+                var area = bbox.Width * bbox.Height;
+                if (area < 20 || area > 50000) continue;
+
+                // Score based on aspect ratio (prefer square-ish characters)
+                var aspectScore = 1.0 - Math.Abs(aspectRatio - 0.7) / 3.0;
+                candidates.Add((bbox, Math.Max(0, aspectScore)));
+            }
+
+            // Group nearby regions into text lines
+            var grouped = GroupIntoLines(candidates);
+
+            foreach (var line in grouped)
+            {
+                results.Add(new TextRegionResult
+                {
+                    BoundingBox = line.bbox,
+                    Confidence = line.confidence,
+                    CharacterCount = line.charCount,
+                    IsHorizontal = line.bbox.Width > line.bbox.Height,
+                    RegionType = line.charCount > 3 ? "text_line" : "text_fragment"
+                });
+            }
+        }
+        catch
+        {
+            // MSER detection failed, return empty
+        }
+
+        return results;
+    }
+
+    /// <summary>
+    /// Group MSER regions into text lines based on proximity and alignment.
+    /// </summary>
+    private List<(Rect bbox, double confidence, int charCount)> GroupIntoLines(
+        List<(Rect bbox, double score)> candidates)
+    {
+        var lines = new List<(Rect bbox, double confidence, int charCount)>();
+        if (candidates.Count == 0) return lines;
+
+        // Sort by Y position (top to bottom), then X (left to right)
+        var sorted = candidates.OrderBy(c => c.bbox.Y).ThenBy(c => c.bbox.X).ToList();
+        var used = new bool[sorted.Count];
+
+        for (int i = 0; i < sorted.Count; i++)
+        {
+            if (used[i]) continue;
+
+            var lineBoxes = new List<(Rect bbox, double score)> { sorted[i] };
+            used[i] = true;
+
+            var baseY = sorted[i].bbox.Y;
+            var baseHeight = sorted[i].bbox.Height;
+
+            // Find horizontally adjacent regions at similar Y
+            for (int j = i + 1; j < sorted.Count; j++)
+            {
+                if (used[j]) continue;
+
+                var candidate = sorted[j];
+
+                // Check vertical alignment (within 50% of height)
+                var yDiff = Math.Abs(candidate.bbox.Y - baseY);
+                if (yDiff > baseHeight * 0.5) continue;
+
+                // Check horizontal proximity (within 3x character width)
+                var lastBox = lineBoxes.Last().bbox;
+                var xGap = candidate.bbox.X - (lastBox.X + lastBox.Width);
+                if (xGap < 0 || xGap > lastBox.Width * 3) continue;
+
+                lineBoxes.Add(candidate);
+                used[j] = true;
+            }
+
+            // Create merged bounding box for the line
+            if (lineBoxes.Count >= 1)
+            {
+                var minX = lineBoxes.Min(b => b.bbox.X);
+                var minY = lineBoxes.Min(b => b.bbox.Y);
+                var maxX = lineBoxes.Max(b => b.bbox.X + b.bbox.Width);
+                var maxY = lineBoxes.Max(b => b.bbox.Y + b.bbox.Height);
+
+                var avgScore = lineBoxes.Average(b => b.score);
+                // Boost confidence for longer lines (more likely to be real text)
+                var lengthBoost = Math.Min(1.0, lineBoxes.Count / 5.0);
+
+                lines.Add((
+                    new Rect(minX, minY, maxX - minX, maxY - minY),
+                    Math.Min(1.0, avgScore + lengthBoost * 0.3),
+                    lineBoxes.Count
+                ));
+            }
+        }
+
+        return lines.Where(l => l.charCount >= 2).ToList(); // Filter single-char "lines"
+    }
+
+    /// <summary>
+    /// Detect if image has structured text layout (document, screenshot, etc.)
+    /// using OpenCV contour analysis and stroke width transform approximation.
+    /// </summary>
+    public (bool IsDocument, double DocumentScore, List<Rect> TextBlocks) DetectDocumentLayout(string imagePath)
+    {
+        var textBlocks = new List<Rect>();
+
+        try
+        {
+            using var mat = Cv2.ImRead(imagePath, ImreadModes.Color);
+            if (mat.Empty()) return (false, 0, textBlocks);
+
+            using var gray = new Mat();
+            using var binary = new Mat();
+            using var morphed = new Mat();
+
+            Cv2.CvtColor(mat, gray, ColorConversionCodes.BGR2GRAY);
+
+            // Adaptive threshold for varying lighting
+            Cv2.AdaptiveThreshold(gray, binary, 255,
+                AdaptiveThresholdTypes.GaussianC,
+                ThresholdTypes.BinaryInv, 11, 2);
+
+            // Dilate to connect text characters into blocks
+            using var horizontalKernel = Cv2.GetStructuringElement(
+                MorphShapes.Rect, new OpenCvSharp.Size(15, 1));
+            using var verticalKernel = Cv2.GetStructuringElement(
+                MorphShapes.Rect, new OpenCvSharp.Size(1, 3));
+
+            Cv2.Dilate(binary, morphed, horizontalKernel);
+            Cv2.Dilate(morphed, morphed, verticalKernel);
+
+            // Find contours (text blocks)
+            Cv2.FindContours(morphed, out var contours, out _,
+                RetrievalModes.External, ContourApproximationModes.ApproxSimple);
+
+            var imageArea = mat.Width * mat.Height;
+            var validBlocks = 0;
+
+            foreach (var contour in contours)
+            {
+                var rect = Cv2.BoundingRect(contour);
+                var blockArea = rect.Width * rect.Height;
+
+                // Filter by size (not too small, not covering whole image)
+                if (blockArea < 200 || blockArea > imageArea * 0.8) continue;
+
+                // Filter by aspect ratio (text blocks are typically wider than tall)
+                var aspectRatio = rect.Width / (double)Math.Max(1, rect.Height);
+                if (aspectRatio < 0.3 || aspectRatio > 20) continue;
+
+                textBlocks.Add(rect);
+                validBlocks++;
+            }
+
+            // Calculate document score based on:
+            // 1. Number of text blocks
+            // 2. Vertical alignment (document layout)
+            // 3. Coverage
+            var blockScore = Math.Min(1.0, validBlocks / 10.0);
+            var coverageScore = textBlocks.Sum(b => b.Width * b.Height) / (double)imageArea;
+            var alignmentScore = CalculateVerticalAlignment(textBlocks);
+
+            var documentScore = blockScore * 0.4 + coverageScore * 0.3 + alignmentScore * 0.3;
+            var isDocument = documentScore > 0.4 && validBlocks >= 3;
+
+            return (isDocument, documentScore, textBlocks);
+        }
+        catch
+        {
+            return (false, 0, textBlocks);
+        }
+    }
+
+    private double CalculateVerticalAlignment(List<Rect> blocks)
+    {
+        if (blocks.Count < 2) return 0;
+
+        // Check if blocks share common left edges (document-like alignment)
+        var leftEdges = blocks.Select(b => b.X).OrderBy(x => x).ToList();
+        var edgeClusters = new Dictionary<int, int>();
+
+        foreach (var edge in leftEdges)
+        {
+            // Round to nearest 10px for clustering
+            var cluster = (edge / 10) * 10;
+            edgeClusters[cluster] = edgeClusters.GetValueOrDefault(cluster) + 1;
+        }
+
+        // Score based on how many blocks share common alignment
+        var maxCluster = edgeClusters.Values.Max();
+        return (double)maxCluster / blocks.Count;
+    }
+}
+
+/// <summary>
+/// Result of text region detection.
+/// </summary>
+public class TextRegionResult
+{
+    public Rect BoundingBox { get; set; }
+    public double Confidence { get; set; }
+    public int CharacterCount { get; set; }
+    public bool IsHorizontal { get; set; }
+    public string RegionType { get; set; } = "unknown";
 }

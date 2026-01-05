@@ -7,6 +7,7 @@ using Microsoft.Extensions.Logging;
 using ModelContextProtocol.Server;
 using Mostlylucid.DocSummarizer.Images.Config;
 using Mostlylucid.DocSummarizer.Images.Extensions;
+using Mostlylucid.DocSummarizer.Images.Services;
 using Mostlylucid.DocSummarizer.Images.Services.Analysis;
 using Mostlylucid.DocSummarizer.Images.Models.Dynamic;
 using Mostlylucid.DocSummarizer.Images.Services.Pipelines;
@@ -41,7 +42,7 @@ class Program
         var pipelineOpt = new Option<string>(
             "--pipeline",
             getDefaultValue: () => "caption",
-            description: "Pipeline: caption (default), vision (no OCR), motion (fast), advancedocr, simpleocr, quality, stats, alttext");
+            description: "Pipeline: socialmediaalt (WCAG full), caption (default), vision (no OCR), motion (fast), advancedocr, simpleocr, quality, stats, alttext");
 
         var outputOpt = new Option<string>(
             "--output",
@@ -73,6 +74,11 @@ class Program
             "--ollama",
             getDefaultValue: () => null,
             description: "Ollama base URL (default: http://localhost:11434, or $OLLAMA_BASE_URL)");
+
+        var signalsOpt = new Option<string?>(
+            "--signals",
+            getDefaultValue: () => null,
+            description: "Glob patterns to select signals for JSON output (e.g., 'motion.*,color.dominant*' or '@motion' for predefined collections)");
 
         var saveDebugOpt = new Option<string?>(
             "--save-debug",
@@ -111,11 +117,22 @@ class Program
         rootCommand.AddOption(llmOpt);
         rootCommand.AddOption(modelOpt);
         rootCommand.AddOption(ollamaOpt);
+        rootCommand.AddOption(signalsOpt);
         rootCommand.AddCommand(listCmd);
         rootCommand.AddCommand(exportStripCmd);
 
-        rootCommand.SetHandler(async (string? inputPath, string pipeline, string output, string language, bool verbose, bool? llm, string? model, string? ollama) =>
+        rootCommand.SetHandler(async (context) =>
         {
+            var inputPath = context.ParseResult.GetValueForArgument(imageArg);
+            var pipeline = context.ParseResult.GetValueForOption(pipelineOpt)!;
+            var output = context.ParseResult.GetValueForOption(outputOpt)!;
+            var language = context.ParseResult.GetValueForOption(languageOpt)!;
+            var verbose = context.ParseResult.GetValueForOption(verboseOpt);
+            var llm = context.ParseResult.GetValueForOption(llmOpt);
+            var model = context.ParseResult.GetValueForOption(modelOpt);
+            var ollama = context.ParseResult.GetValueForOption(ollamaOpt);
+            var signals = context.ParseResult.GetValueForOption(signalsOpt);
+
             // If no path provided, enter interactive mode with the configured options
             if (string.IsNullOrWhiteSpace(inputPath))
             {
@@ -124,13 +141,13 @@ class Program
             else if (Directory.Exists(inputPath))
             {
                 // Process all images in directory
-                await ProcessDirectory(inputPath, pipeline, output, language, verbose, llm, model, ollama);
+                await ProcessDirectory(inputPath, pipeline, output, language, verbose, llm, model, ollama, signals);
             }
             else
             {
-                await ProcessImage(inputPath, pipeline, output, language, verbose, llm, model, ollama);
+                await ProcessImage(inputPath, pipeline, output, language, verbose, llm, model, ollama, signals);
             }
-        }, imageArg, pipelineOpt, outputOpt, languageOpt, verboseOpt, llmOpt, modelOpt, ollamaOpt);
+        });
 
         return await rootCommand.InvokeAsync(args);
     }
@@ -548,7 +565,8 @@ class Program
         bool verbose,
         bool? llmParam = null,
         string? modelParam = null,
-        string? ollamaParam = null)
+        string? ollamaParam = null,
+        string? signalGlobs = null)
     {
         if (!File.Exists(imagePath))
         {
@@ -611,8 +629,8 @@ class Program
                 var escalationService = provider.GetService<Mostlylucid.DocSummarizer.Images.Services.EscalationService>();
                 if (escalationService != null)
                 {
-                    // Force escalation for caption/alttext, auto-escalate for others
-                    var forceEscalate = pipeline is "caption" or "alttext";
+                    // Force escalation for caption/alttext/socialmediaalt, auto-escalate for others
+                    var forceEscalate = pipeline is "caption" or "alttext" or "socialmediaalt" or "vision";
                     var result = await escalationService.AnalyzeWithEscalationAsync(
                         imagePath,
                         forceEscalate: forceEscalate,
@@ -621,15 +639,15 @@ class Program
                 }
             }
 
-            // Output results
+            // Output results (pass signalGlobs for filtered output)
             switch (resolvedOutput)
             {
                 case "json":
-                    OutputJson(profile, llmCaption);
+                    OutputJson(profile, llmCaption, signalGlobs);
                     break;
 
                 case "signals":
-                    OutputSignals(profile);
+                    OutputSignals(profile, signalGlobs);
                     break;
 
                 case "metrics":
@@ -689,7 +707,8 @@ class Program
         bool verbose,
         bool? llmParam = null,
         string? modelParam = null,
-        string? ollamaParam = null)
+        string? ollamaParam = null,
+        string? signalGlobs = null)
     {
         // Find all image files in directory
         var imageFiles = Directory.GetFiles(directoryPath, "*.*", SearchOption.TopDirectoryOnly)
@@ -716,7 +735,7 @@ class Program
                 var fileName = Path.GetFileName(imagePath);
                 Spectre.Console.AnsiConsole.MarkupLine($"[dim][[{processed + 1}/{imageFiles.Count}]][/] {Spectre.Console.Markup.Escape(fileName)}");
 
-                await ProcessImage(imagePath, pipeline, outputFormat, language, verbose, llmParam, modelParam, ollamaParam);
+                await ProcessImage(imagePath, pipeline, outputFormat, language, verbose, llmParam, modelParam, ollamaParam, signalGlobs);
                 processed++;
                 Spectre.Console.AnsiConsole.WriteLine();
             }
@@ -776,10 +795,35 @@ class Program
         }
     }
 
-    static void OutputJson(DynamicImageProfile profile, string? llmCaption = null)
+    static void OutputJson(DynamicImageProfile profile, string? llmCaption = null, string? signalGlobs = null)
     {
         var ledger = profile.GetLedger();
 
+        // If specific signals requested via globs, output filtered signal map
+        if (!string.IsNullOrWhiteSpace(signalGlobs))
+        {
+            var filteredSignals = SignalGlobMatcher.FilterSignals(profile, signalGlobs)
+                .ToDictionary(s => s.Key, s => new { value = s.Value, confidence = s.Confidence });
+
+            var filteredResult = new
+            {
+                image = Path.GetFileName(profile.ImagePath),
+                globs = signalGlobs,
+                signal_count = filteredSignals.Count,
+                signals = filteredSignals
+            };
+
+            var filteredOptions = new JsonSerializerOptions
+            {
+                WriteIndented = true,
+                DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
+            };
+
+            Console.WriteLine(JsonSerializer.Serialize(filteredResult, filteredOptions));
+            return;
+        }
+
+        // Default: full JSON output
         var result = new
         {
             image = profile.ImagePath,
@@ -819,30 +863,18 @@ class Program
     {
         if (!string.IsNullOrWhiteSpace(llmCaption))
         {
-            // Try to parse as JSON and extract caption field
-            try
+            // Extract and sanitize caption
+            var cleanCaption = ExtractCaptionFromLlmResponse(llmCaption);
+            if (!string.IsNullOrWhiteSpace(cleanCaption))
             {
-                var doc = JsonDocument.Parse(llmCaption);
-                if (doc.RootElement.TryGetProperty("caption", out var captionProp))
-                {
-                    Console.WriteLine(captionProp.GetString());
-                    return;
-                }
+                Console.WriteLine(cleanCaption);
+                return;
             }
-            catch (JsonException)
-            {
-                // Not JSON, use as-is
-            }
+        }
 
-            // Use as-is if not JSON or no caption field
-            Console.WriteLine(llmCaption);
-        }
-        else
-        {
-            // Fallback to ledger summary if no LLM caption
-            var ledger = profile.GetLedger();
-            Console.WriteLine(ledger.ToLlmSummary());
-        }
+        // Fallback to ledger summary if no LLM caption
+        var ledger = profile.GetLedger();
+        Console.WriteLine(ledger.ToLlmSummary());
     }
 
     static void OutputAltText(DynamicImageProfile profile, string? llmCaption)
@@ -856,21 +888,19 @@ class Program
         // Start with LLM caption if available, or ledger summary
         if (!string.IsNullOrWhiteSpace(llmCaption))
         {
-            // Try to parse JSON caption
-            string captionText = llmCaption;
-            try
-            {
-                var doc = JsonDocument.Parse(llmCaption);
-                if (doc.RootElement.TryGetProperty("caption", out var captionProp))
-                {
-                    captionText = captionProp.GetString() ?? llmCaption;
-                }
-            }
-            catch (JsonException) { }
+            // Extract caption from JSON or use as plain text
+            string captionText = ExtractCaptionFromLlmResponse(llmCaption);
 
-            // Extract first sentence for concise alt text
-            var firstSentence = captionText.Split(new[] { '.', '!', '?' }, 2)[0].Trim();
-            parts.Add(firstSentence);
+            // Use full caption for alt text (not just first sentence) for better accessibility
+            // Remove any trailing incomplete sentences
+            captionText = captionText.Trim();
+            if (captionText.EndsWith(",") || captionText.EndsWith(" and") || captionText.EndsWith(" with"))
+            {
+                var lastPeriod = captionText.LastIndexOf('.');
+                if (lastPeriod > 0)
+                    captionText = captionText[..(lastPeriod + 1)];
+            }
+            parts.Add(captionText);
         }
         else
         {
@@ -951,9 +981,13 @@ class Program
         // Caption
         if (!string.IsNullOrWhiteSpace(llmCaption))
         {
-            Console.WriteLine("## Description");
-            Console.WriteLine(llmCaption);
-            Console.WriteLine();
+            var cleanCaption = ExtractCaptionFromLlmResponse(llmCaption);
+            if (!string.IsNullOrWhiteSpace(cleanCaption))
+            {
+                Console.WriteLine("## Description");
+                Console.WriteLine(cleanCaption);
+                Console.WriteLine();
+            }
         }
 
         // OCR text
@@ -1050,19 +1084,11 @@ class Program
             Spectre.Console.AnsiConsole.WriteLine();
         }
 
-        // Caption (LLM or fallback)
-        string? captionText = llmCaption;
+        // Caption (LLM or fallback) - sanitize to remove prompt leakage
+        string? captionText = null;
         if (!string.IsNullOrWhiteSpace(llmCaption))
         {
-            try
-            {
-                var doc = JsonDocument.Parse(llmCaption);
-                if (doc.RootElement.TryGetProperty("caption", out var captionProp))
-                {
-                    captionText = captionProp.GetString();
-                }
-            }
-            catch (JsonException) { }
+            captionText = ExtractCaptionFromLlmResponse(llmCaption);
         }
 
         if (!string.IsNullOrWhiteSpace(captionText))
@@ -1170,50 +1196,107 @@ class Program
     {
         if (value == null) return "[null]";
 
+        var type = value.GetType();
+
+        // Primitive types - display directly
+        if (type.IsPrimitive || value is string || value is decimal)
+        {
+            var str = value.ToString() ?? "";
+            if (str.Length > 80)
+                return str.Substring(0, 77) + "...";
+            return str;
+        }
+
+        // DateTime
+        if (value is DateTime dt)
+            return dt.ToString("O");
+
         // Handle arrays (like embeddings, color lists)
         if (value is float[] floatArray)
         {
             if (floatArray.Length <= 5)
                 return $"[{string.Join(", ", floatArray.Select(f => f.ToString("F3")))}]";
-            return $"[{floatArray.Length}D vector: {floatArray[0]:F3}, {floatArray[1]:F3}...{floatArray[^1]:F3}]";
+            return $"float[{floatArray.Length}]";
         }
 
         if (value is double[] doubleArray)
         {
             if (doubleArray.Length <= 5)
                 return $"[{string.Join(", ", doubleArray.Select(d => d.ToString("F3")))}]";
-            return $"[{doubleArray.Length}D vector]";
+            return $"double[{doubleArray.Length}]";
         }
 
-        if (value is IEnumerable<object> enumerable && value is not string)
+        // Check if it's a collection (but not string)
+        if (value is System.Collections.IEnumerable enumerable && value is not string)
         {
-            var list = enumerable.ToList();
-            if (list.Count <= 3)
-                return $"[{string.Join(", ", list.Select(o => o?.ToString() ?? "null"))}]";
-            return $"[{list.Count} items]";
+            var items = enumerable.Cast<object>().ToList();
+            if (items.Count == 0)
+                return "[]";
+
+            // For small collections, try to serialize to JSON
+            if (items.Count <= 5)
+            {
+                try
+                {
+                    var json = JsonSerializer.Serialize(value,
+                        new JsonSerializerOptions { WriteIndented = false });
+                    if (json.Length <= 200)
+                        return json;
+                    return json.Substring(0, 197) + "...";
+                }
+                catch
+                {
+                    return $"[{items.Count} items]";
+                }
+            }
+
+            return $"[{items.Count} items]";
         }
 
-        // Truncate long strings
-        var str = value.ToString() ?? "";
-        if (str.Length > 80)
-            return str.Substring(0, 77) + "...";
-
-        return str;
+        // Complex objects - try JSON serialization
+        try
+        {
+            var json = JsonSerializer.Serialize(value,
+                new JsonSerializerOptions { WriteIndented = false });
+            // Truncate very long JSON
+            if (json.Length > 200)
+                return json.Substring(0, 197) + "...";
+            return json;
+        }
+        catch
+        {
+            // Fallback to ToString
+            var str = value.ToString() ?? type.Name;
+            if (str.Length > 80)
+                return str.Substring(0, 77) + "...";
+            return str;
+        }
     }
 
-    static void OutputSignals(DynamicImageProfile profile)
+    static void OutputSignals(DynamicImageProfile profile, string? signalGlobs = null)
     {
-        var signals = profile.GetAllSignals()
-            .Select(s => new
-            {
-                source = s.Source,
-                key = s.Key,
-                value = s.Value?.ToString(),
-                confidence = s.Confidence
-            });
+        IEnumerable<Signal> signals;
+
+        // Filter by globs if provided
+        if (!string.IsNullOrWhiteSpace(signalGlobs))
+        {
+            signals = SignalGlobMatcher.FilterSignals(profile, signalGlobs);
+        }
+        else
+        {
+            signals = profile.GetAllSignals();
+        }
+
+        var output = signals.Select(s => new
+        {
+            source = s.Source,
+            key = s.Key,
+            value = FormatSignalValue(s.Value),
+            confidence = s.Confidence
+        });
 
         var options = new JsonSerializerOptions { WriteIndented = true };
-        Console.WriteLine(JsonSerializer.Serialize(signals, options));
+        Console.WriteLine(JsonSerializer.Serialize(output, options));
     }
 
     static void OutputMetrics(DynamicImageProfile profile)
@@ -1301,6 +1384,161 @@ class Program
             DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
         };
         Console.WriteLine(JsonSerializer.Serialize(metrics, options));
+    }
+
+    /// <summary>
+    /// Extract caption text from LLM response, handling JSON or plain text formats.
+    /// Sanitizes output to remove prompt leakage.
+    /// </summary>
+    static string ExtractCaptionFromLlmResponse(string llmResponse)
+    {
+        if (string.IsNullOrWhiteSpace(llmResponse))
+            return "";
+
+        string? rawCaption = null;
+
+        // First, try to parse as valid JSON
+        try
+        {
+            var doc = JsonDocument.Parse(llmResponse);
+            // Check multiple property names
+            foreach (var propName in new[] { "caption", "description", "scene", "summary" })
+            {
+                if (doc.RootElement.TryGetProperty(propName, out var prop))
+                {
+                    var val = prop.GetString();
+                    if (!string.IsNullOrWhiteSpace(val))
+                    {
+                        rawCaption = val;
+                        break;
+                    }
+                }
+            }
+        }
+        catch (JsonException)
+        {
+            // JSON parsing failed, try regex extraction
+        }
+
+        // Fallback: Try to extract caption from malformed JSON using regex
+        if (rawCaption == null)
+        {
+            var captionMatch = System.Text.RegularExpressions.Regex.Match(
+                llmResponse,
+                @"""(?:caption|description)""\s*:\s*""([^""]+)""",
+                System.Text.RegularExpressions.RegexOptions.Singleline);
+
+            if (captionMatch.Success && captionMatch.Groups.Count > 1)
+            {
+                rawCaption = captionMatch.Groups[1].Value;
+            }
+        }
+
+        // If no JSON structure found, check if it's plain text
+        if (rawCaption == null && !llmResponse.TrimStart().StartsWith("{"))
+        {
+            rawCaption = llmResponse.Trim();
+        }
+
+        // Last resort: Try to find any quoted string that looks like a caption
+        if (rawCaption == null)
+        {
+            var anyQuotedMatch = System.Text.RegularExpressions.Regex.Match(
+                llmResponse,
+                @"""([A-Z][^""]{10,200})""");
+
+            if (anyQuotedMatch.Success && anyQuotedMatch.Groups.Count > 1)
+            {
+                rawCaption = anyQuotedMatch.Groups[1].Value;
+            }
+        }
+
+        // Sanitize and return
+        return SanitizeCaption(rawCaption ?? "");
+    }
+
+    /// <summary>
+    /// Remove prompt leakage and instruction text from captions.
+    /// </summary>
+    static string SanitizeCaption(string caption, int maxLength = 200)
+    {
+        if (string.IsNullOrWhiteSpace(caption))
+            return "";
+
+        var result = caption.Trim();
+
+        // Common prompt leakage patterns to strip (comprehensive list)
+        var leakagePatterns = new[]
+        {
+            // Long verbose patterns (check first - more specific)
+            @"^Based on (?:the )?(?:provided |given )?(?:visual )?(?:information|image|analysis).*?(?:here's|here is).*?(?:description|caption|summary).*?[:,]\s*",
+            @"^(?:Here is|Here's) (?:a |the )?(?:structured )?(?:output|description|caption|summary).*?(?:in )?(?:JSON )?(?:format)?.*?[:,]\s*",
+            @"^.*?(?:in JSON format|JSON format that|structured description|structured output).*?[:,]\s*",
+            @"^.*?captures the key.*?[:,]\s*",
+
+            // "The provided/given image" patterns
+            @"^(?:The |This )?(?:provided |given )?image (?:appears|seems) to (?:be |show |depict |display |feature |contain )?",
+            @"^(?:The |This )?(?:provided |given )?image (?:shows|depicts|displays|features|contains|presents)\s*",
+            @"^(?:The |This )?(?:provided |given )?image (?:is |appears to be )(?:a |an )?",
+
+            // Standard patterns
+            @"^Based on (?:the |this )?(provided |given )?image.*?[:,]\s*",
+            @"^According to (?:the )?(?:provided |given )?(?:image|guidelines|analysis).*?[:,]\s*",
+            @"^(?:The |This )?image (?:shows|depicts|displays|features|contains|presents)\s*",
+            @"^In (?:the |this )?image,?\s*",
+            @"^(?:Here is|Here's) (?:a|the) (?:caption|description).*?:\s*",
+            @"^(?:Here is|Here's) (?:a |the )?(?:structured )?.*?[:,]\s*",
+            @"^For accessibility[:,]\s*",
+            @"^(?:Caption|Description|Summary):\s*",
+            @"^\{[^}]*\}\s*", // Leading JSON
+            @"^""[^""]*"":\s*""?", // Partial JSON key
+            @"\s*\{[^}]*$", // Trailing incomplete JSON
+            @"^```(?:json)?\s*", // Code block start
+            @"\s*```$", // Code block end
+            @"^I (?:can )?see\s+",
+            @"^(?:Looking at (?:the|this) image,?\s*)?",
+            @"^(?:Sure|Certainly|Of course)[!,.]?\s*",
+            @"^(?:From|Given) (?:the|this) (?:image|visual|provided).*?[:,]\s*",
+            @"^Using (?:the )?(?:provided |given )?image.*?[:,]\s*",
+            @"\*\*(?:Caption|Description|Summary)\*\*:?\s*",  // Markdown bold headers
+            @"^(?:\*\*)?(?:Caption|Description|Summary)(?:\*\*)?:?\s*",  // With or without markdown
+            @"^(?:The )?(?:JSON )?output (?:generated|produced|created).*?(?:includes|contains|describes).*?[:,]\s*",
+            @"^(?:The )?(?:generated |produced )?(?:JSON |structured )?(?:output|response|result).*?[:,]\s*",
+            @"^(?:The )?image (?:provided|given|shown) (?:seems|appears) to (?:be |show |depict )?",
+            @"^.*?(?:does not|doesn't) provide (?:clear |enough )?(?:visual )?(?:information|details).*?(?:that|to|for).*",
+            @"^I (?:observed|noticed|can observe|can see) (?:several |some |many )?(?:notable |key |important )?(?:features|elements|things).*?[.:]\s*",
+            @"^In this (?:outdoor |indoor )?(?:setting|scene|image).*?(?:featuring|showing|with)?\s*",
+        };
+
+        foreach (var pattern in leakagePatterns)
+        {
+            result = System.Text.RegularExpressions.Regex.Replace(
+                result, pattern, "", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+        }
+
+        // Clean up quotes and whitespace
+        result = result.Trim('"', '\'', ' ');
+
+        // Capitalize first letter
+        if (result.Length > 0 && char.IsLower(result[0]))
+        {
+            result = char.ToUpper(result[0]) + result[1..];
+        }
+
+        // Truncate if too long
+        if (result.Length > maxLength)
+        {
+            var lastPeriod = result.LastIndexOf('.', maxLength - 1);
+            if (lastPeriod > maxLength / 2)
+                result = result[..(lastPeriod + 1)];
+            else
+            {
+                var lastSpace = result.LastIndexOf(' ', maxLength - 1);
+                result = lastSpace > maxLength / 2 ? result[..lastSpace] + "..." : result[..(maxLength - 3)] + "...";
+            }
+        }
+
+        return result;
     }
 
     static string? GetExtractedText(DynamicImageProfile profile)
