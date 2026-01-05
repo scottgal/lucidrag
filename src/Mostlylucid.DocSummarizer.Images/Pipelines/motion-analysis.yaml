@@ -1,0 +1,20 @@
+# Motion Analysis Pipeline
+# Analyzes animated images for motion patterns
+# Great for GIF classification and animation understanding
+
+name: motion-analysis
+description: Analyze motion patterns in animated images
+version: 1
+
+signals:
+  - identity.*          # Basic metadata
+  - motion.*            # All motion signals
+  - complexity.*        # Scene complexity
+
+output:
+  format: json
+  include_metadata: true
+  include_confidence: true
+
+llm:
+  enabled: false        # Motion analysis is fully local

@@ -1,0 +1,31 @@
+# Florence-2 + LLM Hybrid Pipeline
+# Fast Florence-2 first, escalates to LLM for complex images
+# Best for: Balanced speed/quality, animated GIFs
+
+name: florence2+llm
+description: Hybrid pipeline - Florence-2 first, LLM escalation for complex images
+version: 1
+
+signals:
+  - identity.*
+  - color.dominant*
+  - motion.*
+  - florence2.*
+  - vision.llm.*
+
+output:
+  format: caption
+  include_metadata: true
+  include_confidence: true
+
+llm:
+  enabled: true
+  model: minicpm-v:8b
+  fast_mode: false
+  context: true
+
+escalation:
+  gif_to_llm: true        # GIFs need LLM (Florence-2 is weak)
+  complexity_threshold: 0.4
+  on_no_caption: true
+  min_caption_length: 20

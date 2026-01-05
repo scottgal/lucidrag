@@ -1,0 +1,29 @@
+# Social Media Alt Text Pipeline
+# Generates WCAG-compliant alt text for accessibility
+# Uses Florence-2 first, escalates to Vision LLM for complex images
+
+name: social-alttext
+description: Generate accessible alt text for social media
+version: 1
+
+signals:
+  - "@alttext"          # Collection: vision.llm.caption, content.text*, motion.summary
+  - color.dominant*     # Color context for rich descriptions
+  - motion.*            # Animation details for GIFs
+
+output:
+  format: alttext       # Clean alt text output
+  include_metadata: false
+  include_confidence: false
+
+llm:
+  enabled: true
+  model: minicpm-v:8b
+  fast_mode: false      # Use heuristics first (Florence-2)
+  context: true         # Include analysis signals in prompt
+
+escalation:
+  gif_to_llm: true      # GIFs need LLM for good descriptions
+  complexity_threshold: 0.4
+  on_no_caption: true   # Escalate if Florence-2 fails
+  min_caption_length: 20

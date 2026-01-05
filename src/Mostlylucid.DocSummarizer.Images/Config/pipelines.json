@@ -421,6 +421,109 @@
       ]
     },
     {
+      "name": "florence2",
+      "displayName": "Florence-2 (Fast Local)",
+      "description": "Fast local captioning and OCR using Florence-2 ONNX model - no external services required. Uses ColorWave to compensate for Florence-2's weak color detection.",
+      "category": "speed",
+      "estimatedDurationSeconds": 0.8,
+      "isDefault": false,
+      "tags": ["fast", "local", "onnx", "florence2", "no-ollama"],
+      "globalSettings": {
+        "maxTotalDurationMs": 3000,
+        "enableParallelization": true,
+        "disableOcr": true
+      },
+      "phases": [
+        {
+          "id": "color-analysis",
+          "name": "Color Analysis",
+          "description": "Accurate color extraction to enhance Florence-2 captions",
+          "enabled": true,
+          "priority": 100,
+          "waveType": "ColorWave",
+          "tags": ["color", "enhancement"]
+        },
+        {
+          "id": "florence2-caption",
+          "name": "Florence-2 Caption & OCR",
+          "description": "Fast local captioning and text extraction using Florence-2 ONNX model with color enhancement",
+          "enabled": true,
+          "priority": 50,
+          "waveType": "Florence2Wave",
+          "parameters": {
+            "detailed": true,
+            "enhanceWithColors": true,
+            "extractOcr": true
+          },
+          "tags": ["caption", "ocr", "local", "onnx"]
+        }
+      ]
+    },
+    {
+      "name": "florence2+llm",
+      "displayName": "Florence-2 + LLM Escalation",
+      "description": "Two-stage pipeline: Fast Florence-2 first, escalate to Vision LLM for complex images. Best balance of speed and quality.",
+      "category": "balanced",
+      "estimatedDurationSeconds": 2.5,
+      "isDefault": false,
+      "tags": ["balanced", "two-stage", "florence2", "llm", "escalation"],
+      "globalSettings": {
+        "maxTotalDurationMs": 15000,
+        "enableParallelization": true,
+        "enableEscalation": true
+      },
+      "phases": [
+        {
+          "id": "color-analysis",
+          "name": "Color Analysis",
+          "description": "Color extraction for Florence-2 enhancement and escalation decision",
+          "enabled": true,
+          "priority": 100,
+          "waveType": "ColorWave",
+          "tags": ["color", "preprocessing"]
+        },
+        {
+          "id": "motion-analysis",
+          "name": "Motion Analysis",
+          "description": "Detect motion for animated images",
+          "enabled": true,
+          "priority": 95,
+          "waveType": "MotionWave",
+          "tags": ["motion", "animation"]
+        },
+        {
+          "id": "florence2-caption",
+          "name": "Florence-2 First Pass",
+          "description": "Fast local caption - may be sufficient for simple images",
+          "enabled": true,
+          "priority": 60,
+          "waveType": "Florence2Wave",
+          "parameters": {
+            "detailed": true,
+            "enhanceWithColors": true,
+            "extractOcr": true
+          },
+          "earlyExitThreshold": 0.85,
+          "tags": ["caption", "first-pass", "fast"]
+        },
+        {
+          "id": "vision-llm",
+          "name": "Vision LLM Escalation",
+          "description": "Full Vision LLM for complex images where Florence-2 is insufficient",
+          "enabled": true,
+          "priority": 50,
+          "waveType": "VisionLlmWave",
+          "dependsOn": ["florence2-caption"],
+          "conditionalTrigger": {
+            "type": "confidence_threshold",
+            "threshold": 0.85,
+            "triggerWhenBelow": true
+          },
+          "tags": ["llm", "escalation", "quality"]
+        }
+      ]
+    },
+    {
       "name": "socialmediaalt",
       "displayName": "Social Media Alt Text (WCAG)",
       "description": "Comprehensive WCAG-compliant alt text for social media - includes motion, OCR, vision analysis, and detailed descriptions",

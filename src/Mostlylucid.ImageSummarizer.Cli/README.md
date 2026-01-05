@@ -34,7 +34,7 @@ Vision LLMs enhance analysis but are never the sole source of truth.
 
 ```bash
 $ imagesummarizer demo-images/cat_wag.gif --pipeline caption --output text
-Caption: A cat lounges on a piece of furniture, appearing relaxed.
+Caption: A black and white photo of a tabby cat resting on the armrests of a couch.
 Scene: indoor
 Motion: MODERATE object_motion motion (partial coverage)
 ```
@@ -44,9 +44,9 @@ Motion: MODERATE object_motion motion (partial coverage)
 
 ```bash
 $ imagesummarizer demo-images/anchorman-not-even-mad.gif --pipeline caption --output text
-"I'm not even mad."
+"I'm not even I mad."
 "That's amazing."
-Caption: A person wearing grey turtleneck sweater showing an emotionless expression
+Caption: This screenshot features a person with facial hair and wearing a turtleneck sweater...
 Scene: meme
 Motion: SUBTLE general motion (localized coverage)
 ```
@@ -58,7 +58,7 @@ Subtitle-aware frame deduplication detects text changes in the bottom 25% of fra
 
 ```bash
 $ imagesummarizer demo-images/StyloAndBella.jpg --pipeline vision --output text
-Caption: Two dogs, a brown dog with black patches sitting down while another is jumping over its head.
+Caption: A beagle and a chocolate Labrador play on an outdoor wooden deck.
 Scene: outdoor
 ```
 
@@ -231,27 +231,27 @@ I do not think it means what you think it means.
 
 ### JSON Output (for scripts/tools)
 ```bash
-imagesummarizer image.gif --output json
+imagesummarizer cat_wag.gif --pipeline caption --output json
 ```
 
-Output:
+Output (truncated):
 ```json
 {
-  "image": "image.gif",
-  "duration_ms": 1838,
-  "waves": ["ColorWave", "OcrWave", "AdvancedOcrWave", "VisionLlmWave"],
-  "text": "You keep using that word.\nI do not think it means what you think it means.",
-  "confidence": 0.95,
-  "caption": "Three men stand together in a rocky landscape...",
+  "image": "cat_wag.gif",
+  "duration_ms": 9210,
+  "waves": ["IdentityWave", "ColorWave", "MotionWave", "Florence2Wave", "VisionLlmWave", "..."],
+  "text": "",
+  "confidence": 0,
+  "caption": "A striped tabby cat lying on a white piece of furniture in black and white imagery.",
   "quality": {
-    "spell_check_score": 0.82,
+    "spell_check_score": 0,
     "is_garbled": false,
-    "text_likeliness": 0.45
+    "text_likeliness": 0
   },
   "metadata": {
-    "frames_processed": 4,
-    "stabilization_quality": 0.89,
-    "frame_agreement": 1.0
+    "frames_processed": 1,
+    "stabilization_quality": 0,
+    "frame_agreement": 0
   }
 }
 ```
@@ -755,7 +755,13 @@ imagesummarizer
 
 ## Architecture
 
-The tool uses a wave-based signal architecture where each wave analyzes a specific aspect of the image:
+The tool uses a wave-based signal architecture where each wave analyzes a specific aspect of the image.
+
+**Key Design Documents:**
+- [SIGNAL-ARCHITECTURE.md](../Mostlylucid.DocSummarizer.Images/SIGNAL-ARCHITECTURE.md) - Why signals are for RAG/AI (not for improving captions)
+- [Images Library README](../Mostlylucid.DocSummarizer.Images/README.md) - Full wave architecture
+
+**Shared Implementation:** All clients (CLI, Desktop, MCP) use the same `FastCaptionService` from the shared library for consistent prompts and GIF frame strip generation.
 
 ### Visual Analysis Waves (No Dependencies)
 | Wave | Priority | Function |

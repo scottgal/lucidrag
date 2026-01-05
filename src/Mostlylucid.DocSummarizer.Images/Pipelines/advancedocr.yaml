@@ -1,0 +1,20 @@
+# Advanced OCR Pipeline
+# Multi-frame OCR with voting and stabilization
+# Best for: Animated GIFs with text, subtitles, captions
+
+name: advancedocr
+description: Multi-frame OCR with voting for animated images
+version: 1
+
+signals:
+  - identity.*
+  - ocr.*
+  - content.extracted_text
+
+output:
+  format: text
+  include_metadata: true
+  include_confidence: true
+
+llm:
+  enabled: false  # Pure OCR, no LLM

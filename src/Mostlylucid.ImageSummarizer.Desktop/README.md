@@ -64,26 +64,70 @@ Hover over indicators for detailed status.
 ### GUI
 
 1. **Browse** or drag-drop an image
-2. Select **Pipeline** (what analysis to run):
-   - `caption` - Full Vision LLM caption (default)
-   - `alttext` - Optimized for alt text
-   - `vision` - Vision LLM only (no OCR)
-   - `motion` - GIF motion analysis
-   - `advancedocr` - Multi-frame OCR with voting
-   - `simpleocr` - Basic Tesseract OCR
-   - `quality` - Image quality metrics
-   - `stats` - Basic statistics only
+2. Select **Pipeline** (what analysis to run) - see [Pipeline Details](#pipeline-details) below
+3. Select **Output** format - see [Output Formats](#output-formats) below
+4. Configure **Speed options** (checkboxes)
+5. Click **Analyze** (or it auto-analyzes on load)
+6. Click **Copy** to copy result to clipboard
 
-3. Select **Output** format:
-   - `alttext` - Concise alt text (default)
-   - `caption` - Full description
-   - `text` - Extracted text only
-   - `json` - Structured JSON
-   - `markdown` - Markdown document
-   - `signals` - All analysis signals
+### Pipeline Details
 
-4. Click **Analyze** (or it auto-analyzes on load)
-5. Click **Copy** to copy result to clipboard
+Different pipelines produce different results because they use different analysis approaches:
+
+| Pipeline | What It Does | Best For | Speed |
+|----------|--------------|----------|-------|
+| **caption** | Full wave pipeline + Vision LLM | Complete analysis with description | ~5s |
+| **vision** | Direct Vision LLM only, skips heuristics | Quick captions without OCR | ~3s |
+| **alttext** | Optimized for accessibility descriptions | WCAG-compliant alt text | ~4s |
+| **motion** | Optical flow analysis for animations | Understanding GIF movement | ~1s |
+| **advancedocr** | Multi-frame OCR with temporal voting | Document/screenshot text | ~3s |
+| **simpleocr** | Basic Tesseract OCR on first frame | Quick text extraction | <1s |
+| **quality** | Image quality metrics only | Filtering/sorting by quality | <1s |
+| **stats** | Basic dimensions, colors, format | Quick metadata only | <1s |
+
+**Why do different pipelines give different results?**
+
+- **caption** runs the full wave pipeline (color, motion, OCR, then LLM) - the LLM receives analysis context
+- **vision** sends the image directly to the Vision LLM with a minimal prompt - no context from heuristics
+- **alttext** is optimized for brevity and screen reader compatibility
+- **motion** focuses only on animation analysis (optical flow, frame deduplication)
+
+For most images, `caption` and `vision` produce similar results. The difference is visible when:
+- The image has complex motion (caption includes motion context)
+- The image has text (caption includes OCR results)
+- You need speed (vision is faster by skipping analysis)
+
+### Output Formats
+
+| Format | Description | Use Case |
+|--------|-------------|----------|
+| **alttext** | Concise single-line description | Accessibility, HTML alt attributes |
+| **caption** | Full natural language description | Documentation, image galleries |
+| **text** | Only extracted text (OCR or LLM-read) | When you just need the text |
+| **json** | Structured data with all signals | Programmatic use, APIs |
+| **markdown** | Formatted markdown document | Documentation generation |
+| **signals** | Raw signal dump from all waves | Debugging, development |
+
+### Speed Options (Checkboxes)
+
+| Option | Effect | When to Use |
+|--------|--------|-------------|
+| **Fast** | Skips all heuristic waves, direct LLM call | Quick captions, high volume |
+| **No Ctx** | Uses minimal prompt without analysis context | Simpler output, less prompt influence |
+
+**Combinations:**
+- `Fast + No Ctx` = Fastest possible caption (simple prompt, no waves)
+- `Fast` only = Fast caption with detailed prompt
+- `No Ctx` only = Full pipeline but minimal LLM prompt
+- Neither = Full pipeline with context-enriched prompt
+
+### Understanding the Results
+
+The desktop app uses a **shared FastCaptionService** that ensures consistent prompts across all clients (CLI, Desktop, MCP). For GIFs, it automatically creates a frame strip for the Vision LLM to understand motion and read subtitles.
+
+For detailed architecture information, see:
+- [SIGNAL-ARCHITECTURE.md](../Mostlylucid.DocSummarizer.Images/SIGNAL-ARCHITECTURE.md) - Signals vs Captions design
+- [Images Library README](../Mostlylucid.DocSummarizer.Images/README.md) - Full wave architecture
 
 ### Command Line
 

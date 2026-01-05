@@ -15,6 +15,23 @@ using Mostlylucid.DocSummarizer.Images.Services.Analysis;
 
 namespace Mostlylucid.ImageSummarizer.Desktop.ViewModels;
 
+/// <summary>
+/// Entry in the live signal log
+/// </summary>
+public class SignalLogEntry
+{
+    public DateTime Timestamp { get; set; } = DateTime.Now;
+    public string Message { get; set; } = "";
+    public double? Confidence { get; set; }
+    public bool HasConfidence => Confidence.HasValue;
+    public string ConfidenceColor => Confidence switch
+    {
+        >= 0.8 => "#22C55E", // Green
+        >= 0.5 => "#FBBF24", // Yellow
+        _ => "#EF4444"       // Red
+    };
+}
+
 public partial class MainViewModel : ObservableObject
 {
     private readonly IServiceProvider _serviceProvider;
@@ -54,6 +71,12 @@ public partial class MainViewModel : ObservableObject
     private bool _enableVisionLlm = true;
 
     [ObservableProperty]
+    private bool _fastMode;  // Skip heuristics, direct LLM only
+
+    [ObservableProperty]
+    private bool _disableContext;  // Don't send analysis context to LLM
+
+    [ObservableProperty]
     private string _ollamaUrl = "http://localhost:11434";
 
     [ObservableProperty]
@@ -73,6 +96,9 @@ public partial class MainViewModel : ObservableObject
     private bool _openCvAvailable = true; // OpenCVSharp is bundled
 
     [ObservableProperty]
+    private bool _florence2Available = true; // Florence-2 ONNX is bundled
+
+    [ObservableProperty]
     private string _ocrStatus = "Tesseract (local)";
 
     [ObservableProperty]
@@ -82,16 +108,27 @@ public partial class MainViewModel : ObservableObject
     private string _openCvStatus = "OpenCV (local)";
 
     [ObservableProperty]
+    private string _florence2Status = "Florence-2 (local)";
+
+    [ObservableProperty]
     private string _fallbackMode = "Full analysis";
+
+    // Signal log for live updates
+    public ObservableCollection<SignalLogEntry> SignalLog { get; } = new();
+
+    [ObservableProperty]
+    private int _signalLogCount;
 
     // Color properties for status indicators (green=#22C55E, red=#EF4444, yellow=#FBBF24)
     public string OcrStatusColor => OcrAvailable ? "#22C55E" : "#EF4444";
     public string OpenCvStatusColor => OpenCvAvailable ? "#22C55E" : "#EF4444";
     public string OllamaStatusColor => OllamaAvailable ? "#22C55E" : "#EF4444";
+    public string Florence2StatusColor => Florence2Available ? "#22C55E" : "#EF4444";
 
     partial void OnOcrAvailableChanged(bool value) => OnPropertyChanged(nameof(OcrStatusColor));
     partial void OnOpenCvAvailableChanged(bool value) => OnPropertyChanged(nameof(OpenCvStatusColor));
     partial void OnOllamaAvailableChanged(bool value) => OnPropertyChanged(nameof(OllamaStatusColor));
+    partial void OnFlorence2AvailableChanged(bool value) => OnPropertyChanged(nameof(Florence2StatusColor));
 
     public ObservableCollection<string> Pipelines { get; } = new()
     {
@@ -99,6 +136,8 @@ public partial class MainViewModel : ObservableObject
         "alttext",
         "socialmediaalt",
         "vision",
+        "florence2",      // Fast local ONNX captioning
+        "florence2+llm",  // Florence-2 first pass + LLM escalation
         "motion",
         "advancedocr",
         "simpleocr",
@@ -237,9 +276,13 @@ public partial class MainViewModel : ObservableObject
     /// </summary>
     private void UpdateFallbackMode()
     {
-        if (OllamaAvailable && OcrAvailable && OpenCvAvailable)
+        if (OllamaAvailable && OcrAvailable && OpenCvAvailable && Florence2Available)
         {
-            FallbackMode = "Full analysis (Vision LLM + OCR + OpenCV)";
+            FallbackMode = "Full analysis (Vision LLM + Florence-2 + OCR + OpenCV)";
+        }
+        else if (Florence2Available && OcrAvailable && OpenCvAvailable)
+        {
+            FallbackMode = "Local mode (Florence-2 + OCR + OpenCV, no cloud LLM)";
         }
         else if (OcrAvailable && OpenCvAvailable)
         {
@@ -301,6 +344,23 @@ public partial class MainViewModel : ObservableObject
         await AnalyzeAsync();
     }
 
+    /// <summary>
+    /// Add a log entry to the signal log on the UI thread
+    /// </summary>
+    private void AddLogEntry(string message, double? confidence = null)
+    {
+        Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+        {
+            SignalLog.Add(new SignalLogEntry
+            {
+                Timestamp = DateTime.Now,
+                Message = message,
+                Confidence = confidence
+            });
+            SignalLogCount = SignalLog.Count;
+        });
+    }
+
     [RelayCommand]
     private async Task AnalyzeAsync()
     {
@@ -314,10 +374,19 @@ public partial class MainViewModel : ObservableObject
         StatusText = "Starting analysis...";
         ResultText = "";
 
+        // Clear signal log
+        Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+        {
+            SignalLog.Clear();
+            SignalLogCount = 0;
+        });
+        AddLogEntry("▶ Starting analysis...");
+
         try
         {
-            // Rebuild services with current settings
+            // Build services with current settings (needed for both fast and full mode)
             StatusText = "Initializing services...";
+            AddLogEntry("⚙ Initializing services...");
             var services = new ServiceCollection();
             services.AddLogging(builder => builder.AddDebug().SetMinimumLevel(LogLevel.Warning));
             services.AddDocSummarizerImages(opt =>
@@ -330,16 +399,39 @@ public partial class MainViewModel : ObservableObject
             });
 
             var provider = services.BuildServiceProvider();
+
+            // Fast mode: skip heuristics, direct LLM call only (but still uses shared service)
+            if (FastMode && EnableVisionLlm)
+            {
+                StatusText = $"Fast mode: calling {VisionModel}...";
+                AddLogEntry($"⚡ Fast mode: calling {VisionModel}...");
+                var llmResult = await DirectVisionLlmCallAsync(ImagePath, provider);
+                ResultText = llmResult ?? "No response from LLM";
+                AddLogEntry("✓ LLM caption received", 0.9);
+                StatusText = "Done (fast mode)";
+                AddLogEntry("✓ Done (fast mode)");
+                return;
+            }
+
             _orchestrator = provider.GetRequiredService<WaveOrchestrator>();
 
             StatusText = "Running wave analysis...";
+            AddLogEntry($"🌊 Running {SelectedPipeline} pipeline...");
             var profile = await _orchestrator.AnalyzeAsync(ImagePath);
+
+            // Log all signals from the analysis
+            foreach (var signal in profile.GetAllSignals().OrderBy(s => s.Key))
+            {
+                var valueStr = FormatSignalValueCompact(signal.Value);
+                AddLogEntry($"📊 {signal.Key}: {valueStr}", signal.Confidence);
+            }
 
             // Get escalation service for LLM caption
             string? llmCaption = null;
             if (EnableVisionLlm && SelectedPipeline is "caption" or "alttext" or "socialmediaalt" or "vision")
             {
                 StatusText = $"Calling Vision LLM ({VisionModel})...";
+                AddLogEntry($"🤖 Calling Vision LLM ({VisionModel})...");
                 var escalationService = provider.GetService<Mostlylucid.DocSummarizer.Images.Services.EscalationService>();
                 if (escalationService != null)
                 {
@@ -348,22 +440,68 @@ public partial class MainViewModel : ObservableObject
                         forceEscalate: true,
                         enableOcr: SelectedPipeline != "vision");
                     llmCaption = result.LlmCaption;
+                    if (!string.IsNullOrWhiteSpace(llmCaption))
+                    {
+                        var truncated = llmCaption.Length > 60 ? llmCaption[..57] + "..." : llmCaption;
+                        AddLogEntry($"🎯 LLM: {truncated}", 0.85);
+                    }
                 }
             }
 
             // Format output based on selected format
             StatusText = "Formatting output...";
             ResultText = FormatOutput(profile, llmCaption);
+            AddLogEntry($"✓ Done in {profile.AnalysisDurationMs}ms");
             StatusText = $"Done in {profile.AnalysisDurationMs}ms - {profile.GetAllSignals().Count()} signals";
         }
         catch (Exception ex)
         {
             ResultText = $"Error: {ex.Message}";
             StatusText = "Analysis failed";
+            AddLogEntry($"❌ Error: {ex.Message}");
         }
         finally
         {
             IsProcessing = false;
+        }
+    }
+
+    /// <summary>
+    /// Fast mode: uses shared FastCaptionService for consistent prompts across all clients.
+    /// </summary>
+    private async Task<string?> DirectVisionLlmCallAsync(string imagePath, IServiceProvider provider)
+    {
+        try
+        {
+            var fastCaptionService = provider.GetService<Mostlylucid.DocSummarizer.Images.Services.Vision.FastCaptionService>();
+            if (fastCaptionService == null)
+            {
+                return "Fast caption service not available";
+            }
+
+            StatusText = "Fast mode: analyzing...";
+            var result = await fastCaptionService.GetCaptionAsync(
+                imagePath,
+                detailed: !DisableContext,
+                model: VisionModel);
+
+            if (result.FrameCount > 1)
+            {
+                StatusText = $"Fast mode: analyzed {result.FrameCount} frames";
+            }
+
+            if (result.Success)
+            {
+                return SanitizeCaption(result.Caption);
+            }
+            else
+            {
+                return $"Fast mode error: {result.Error}";
+            }
+        }
+        catch (Exception ex)
+        {
+            return $"Fast mode error: {ex.Message}";
         }
     }
 
@@ -705,6 +843,28 @@ public partial class MainViewModel : ObservableObject
         {
             return value.ToString() ?? type.Name;
         }
+    }
+
+    /// <summary>
+    /// Format signal values compactly for the log (max 40 chars)
+    /// </summary>
+    private static string FormatSignalValueCompact(object? value)
+    {
+        if (value == null)
+            return "null";
+
+        var str = value switch
+        {
+            bool b => b ? "true" : "false",
+            string s => s.Length > 35 ? s[..32] + "..." : s,
+            float[] fa => $"[{fa.Length} floats]",
+            double[] da => $"[{da.Length} doubles]",
+            int[] ia => $"[{ia.Length} ints]",
+            System.Collections.IEnumerable e when e is not string => $"[{e.Cast<object>().Count()} items]",
+            _ => value.ToString() ?? "?"
+        };
+
+        return str.Length > 40 ? str[..37] + "..." : str;
     }
 
     /// <summary>

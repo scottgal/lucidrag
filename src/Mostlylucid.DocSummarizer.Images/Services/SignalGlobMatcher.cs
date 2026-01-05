@@ -86,52 +86,67 @@ public static class SignalGlobMatcher
 
     /// <summary>
     /// Get the wave tags that would produce signals matching the globs.
-    /// Used to determine which waves to skip.
+    /// Uses WaveRegistry to trace dependencies (e.g., motion.* needs identity.is_animated).
     /// </summary>
     public static HashSet<string> GetRequiredWaveTags(string? globString)
     {
         var patterns = ParseGlobs(globString);
+
+        // Check for match-all
+        if (patterns.Contains("*"))
+            return new HashSet<string> { "*" };
+
+        // Use WaveRegistry to find required waves with dependency tracing
+        var requiredWaves = Analysis.WaveRegistry.GetRequiredWaves(patterns);
         var tags = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
-        foreach (var pattern in patterns)
+        foreach (var wave in requiredWaves)
         {
-            // Map signal prefixes to wave tags
-            var prefix = pattern.Split('.')[0].TrimEnd('*');
-
-            switch (prefix.ToLowerInvariant())
+            foreach (var tag in wave.Tags)
             {
-                case "motion":
-                case "complexity":
-                    tags.Add("motion");
-                    break;
-                case "color":
-                    tags.Add("color");
-                    break;
-                case "ocr":
-                case "content":
-                    tags.Add("ocr");
-                    tags.Add("content");
-                    break;
-                case "quality":
-                    tags.Add("quality");
-                    break;
-                case "identity":
-                    tags.Add("identity");
-                    break;
-                case "vision":
-                    tags.Add("vision");
-                    tags.Add("llm");
-                    break;
-                case "face":
-                    tags.Add("face");
-                    break;
-                case "clip":
-                    tags.Add("clip");
-                    tags.Add("embedding");
-                    break;
-                case "*":
-                    // Match all - need all waves
-                    return new HashSet<string> { "*" };
+                tags.Add(tag);
+            }
+        }
+
+        // Fallback: if WaveRegistry didn't find anything, use prefix mapping
+        if (tags.Count == 0)
+        {
+            foreach (var pattern in patterns)
+            {
+                var prefix = pattern.Split('.')[0].TrimEnd('*');
+                switch (prefix.ToLowerInvariant())
+                {
+                    case "motion":
+                    case "complexity":
+                        tags.Add("motion");
+                        tags.Add("identity"); // MotionWave requires identity.is_animated
+                        break;
+                    case "color":
+                        tags.Add("color");
+                        break;
+                    case "ocr":
+                    case "content":
+                        tags.Add("ocr");
+                        tags.Add("content");
+                        break;
+                    case "quality":
+                        tags.Add("quality");
+                        break;
+                    case "identity":
+                        tags.Add("identity");
+                        break;
+                    case "vision":
+                        tags.Add("vision");
+                        tags.Add("llm");
+                        break;
+                    case "face":
+                        tags.Add("face");
+                        break;
+                    case "clip":
+                        tags.Add("clip");
+                        tags.Add("embedding");
+                        break;
+                }
             }
         }
 

@@ -42,7 +42,7 @@ class Program
         var pipelineOpt = new Option<string>(
             "--pipeline",
             getDefaultValue: () => "caption",
-            description: "Pipeline: socialmediaalt (WCAG full), caption (default), vision (no OCR), motion (fast), advancedocr, simpleocr, quality, stats, alttext");
+            description: "Pipeline: socialmediaalt (WCAG full), caption (default), vision (no OCR), motion (fast), advancedocr, simpleocr, quality, stats, alttext, florence2 (fast local ONNX), florence2+llm (hybrid)");
 
         var outputOpt = new Option<string>(
             "--output",
@@ -80,6 +80,16 @@ class Program
             getDefaultValue: () => null,
             description: "Glob patterns to select signals for JSON output (e.g., 'motion.*,color.dominant*' or '@motion' for predefined collections)");
 
+        var allComputedOpt = new Option<bool>(
+            "--all-computed",
+            getDefaultValue: () => false,
+            description: "Include all computed signals in output (not just those matching --signals pattern). Useful for debugging and learning.");
+
+        var pipelineFileOpt = new Option<string?>(
+            "--pipeline-file",
+            getDefaultValue: () => null,
+            description: "YAML file defining a dynamic pipeline (use '-' for stdin). See 'imagesummarizer sample-pipeline' for format.");
+
         var saveDebugOpt = new Option<string?>(
             "--save-debug",
             getDefaultValue: () => null,
@@ -90,6 +100,20 @@ class Program
         listCmd.SetHandler(async () =>
         {
             await ListPipelines();
+        });
+
+        // Add list-signals command
+        var listSignalsCmd = new Command("list-signals", "List all available signals and collections for --signals filtering");
+        listSignalsCmd.SetHandler(() =>
+        {
+            ListSignals();
+        });
+
+        // Add sample-pipeline command to output example YAML
+        var samplePipelineCmd = new Command("sample-pipeline", "Output a sample YAML pipeline definition");
+        samplePipelineCmd.SetHandler(() =>
+        {
+            Console.WriteLine(DynamicPipelineLoader.GetSampleYaml());
         });
 
         // Add export-strip command for generating frame strips
@@ -118,7 +142,11 @@ class Program
         rootCommand.AddOption(modelOpt);
         rootCommand.AddOption(ollamaOpt);
         rootCommand.AddOption(signalsOpt);
+        rootCommand.AddOption(allComputedOpt);
+        rootCommand.AddOption(pipelineFileOpt);
         rootCommand.AddCommand(listCmd);
+        rootCommand.AddCommand(listSignalsCmd);
+        rootCommand.AddCommand(samplePipelineCmd);
         rootCommand.AddCommand(exportStripCmd);
 
         rootCommand.SetHandler(async (context) =>
@@ -132,6 +160,51 @@ class Program
             var model = context.ParseResult.GetValueForOption(modelOpt);
             var ollama = context.ParseResult.GetValueForOption(ollamaOpt);
             var signals = context.ParseResult.GetValueForOption(signalsOpt);
+            var allComputed = context.ParseResult.GetValueForOption(allComputedOpt);
+            var pipelineFile = context.ParseResult.GetValueForOption(pipelineFileOpt);
+
+            // Load dynamic pipeline if specified
+            DynamicPipeline? dynamicPipeline = null;
+            if (!string.IsNullOrWhiteSpace(pipelineFile))
+            {
+                try
+                {
+                    dynamicPipeline = pipelineFile == "-"
+                        ? DynamicPipelineLoader.LoadFromStream(Console.OpenStandardInput())
+                        : DynamicPipelineLoader.LoadFromFile(pipelineFile);
+
+                    // Validate pipeline
+                    var (isValid, errors) = DynamicPipelineLoader.Validate(dynamicPipeline);
+                    if (!isValid)
+                    {
+                        Console.Error.WriteLine($"Invalid pipeline definition:");
+                        foreach (var error in errors)
+                            Console.Error.WriteLine($"  - {error}");
+                        Environment.Exit(1);
+                    }
+
+                    // Override settings from pipeline file
+                    if (!string.IsNullOrWhiteSpace(dynamicPipeline.Output.Format))
+                        output = dynamicPipeline.Output.Format;
+                    if (dynamicPipeline.Llm.Model != null)
+                        model = dynamicPipeline.Llm.Model;
+                    if (dynamicPipeline.Llm.OllamaUrl != null)
+                        ollama = dynamicPipeline.Llm.OllamaUrl;
+                    llm = dynamicPipeline.Llm.Enabled;
+
+                    // Use signals from pipeline if not overridden by --signals
+                    if (string.IsNullOrWhiteSpace(signals) && dynamicPipeline.UsesSignalSelection)
+                        signals = dynamicPipeline.GetSignalPattern();
+
+                    if (verbose)
+                        Console.Error.WriteLine($"Loaded pipeline: {dynamicPipeline.Name} ({dynamicPipeline.Description ?? "no description"})");
+                }
+                catch (Exception ex)
+                {
+                    Console.Error.WriteLine($"Failed to load pipeline file: {ex.Message}");
+                    Environment.Exit(1);
+                }
+            }
 
             // If no path provided, enter interactive mode with the configured options
             if (string.IsNullOrWhiteSpace(inputPath))
@@ -141,11 +214,11 @@ class Program
             else if (Directory.Exists(inputPath))
             {
                 // Process all images in directory
-                await ProcessDirectory(inputPath, pipeline, output, language, verbose, llm, model, ollama, signals);
+                await ProcessDirectory(inputPath, pipeline, output, language, verbose, llm, model, ollama, signals, dynamicPipeline, allComputed);
             }
             else
             {
-                await ProcessImage(inputPath, pipeline, output, language, verbose, llm, model, ollama, signals);
+                await ProcessImage(inputPath, pipeline, output, language, verbose, llm, model, ollama, signals, dynamicPipeline, allComputed);
             }
         });
 
@@ -566,7 +639,9 @@ class Program
         bool? llmParam = null,
         string? modelParam = null,
         string? ollamaParam = null,
-        string? signalGlobs = null)
+        string? signalGlobs = null,
+        DynamicPipeline? dynamicPipeline = null,
+        bool allComputed = false)
     {
         if (!File.Exists(imagePath))
         {
@@ -618,8 +693,31 @@ class Program
 
         try
         {
-            // Analyze image
-            var profile = await orchestrator.AnalyzeAsync(imagePath);
+            DynamicImageProfile profile;
+
+            // Signal-driven execution: only run waves that emit requested signals
+            // This is the key ephemeral pattern - waves listen for signals they need
+            if (!string.IsNullOrWhiteSpace(signalGlobs) || dynamicPipeline?.UsesSignalSelection == true)
+            {
+                var signalPattern = signalGlobs ?? dynamicPipeline?.GetSignalPattern() ?? "*";
+                var requiredTags = SignalGlobMatcher.GetRequiredWaveTags(signalPattern);
+
+                if (requiredTags.Contains("*"))
+                {
+                    // Full pipeline requested
+                    profile = await orchestrator.AnalyzeAsync(imagePath);
+                }
+                else
+                {
+                    // Selective wave execution based on signal dependencies
+                    profile = await orchestrator.AnalyzeByTagsAsync(imagePath, requiredTags);
+                }
+            }
+            else
+            {
+                // Standard full analysis
+                profile = await orchestrator.AnalyzeAsync(imagePath);
+            }
 
             // For caption/alttext pipelines, always escalate to LLM
             // For others, escalate if auto-escalation conditions are met
@@ -643,7 +741,7 @@ class Program
             switch (resolvedOutput)
             {
                 case "json":
-                    OutputJson(profile, llmCaption, signalGlobs);
+                    OutputJson(profile, llmCaption, signalGlobs, allComputed);
                     break;
 
                 case "signals":
@@ -708,7 +806,9 @@ class Program
         bool? llmParam = null,
         string? modelParam = null,
         string? ollamaParam = null,
-        string? signalGlobs = null)
+        string? signalGlobs = null,
+        DynamicPipeline? dynamicPipeline = null,
+        bool allComputed = false)
     {
         // Find all image files in directory
         var imageFiles = Directory.GetFiles(directoryPath, "*.*", SearchOption.TopDirectoryOnly)
@@ -735,7 +835,7 @@ class Program
                 var fileName = Path.GetFileName(imagePath);
                 Spectre.Console.AnsiConsole.MarkupLine($"[dim][[{processed + 1}/{imageFiles.Count}]][/] {Spectre.Console.Markup.Escape(fileName)}");
 
-                await ProcessImage(imagePath, pipeline, outputFormat, language, verbose, llmParam, modelParam, ollamaParam, signalGlobs);
+                await ProcessImage(imagePath, pipeline, outputFormat, language, verbose, llmParam, modelParam, ollamaParam, signalGlobs, dynamicPipeline, allComputed);
                 processed++;
                 Spectre.Console.AnsiConsole.WriteLine();
             }
@@ -795,22 +895,32 @@ class Program
         }
     }
 
-    static void OutputJson(DynamicImageProfile profile, string? llmCaption = null, string? signalGlobs = null)
+    static void OutputJson(DynamicImageProfile profile, string? llmCaption = null, string? signalGlobs = null, bool allComputed = false)
     {
         var ledger = profile.GetLedger();
 
-        // If specific signals requested via globs, output filtered signal map
+        // If specific signals requested via globs, output filtered or all computed
         if (!string.IsNullOrWhiteSpace(signalGlobs))
         {
-            var filteredSignals = SignalGlobMatcher.FilterSignals(profile, signalGlobs)
+            var allSignals = profile.GetAllSignals()
                 .ToDictionary(s => s.Key, s => new { value = s.Value, confidence = s.Confidence });
+
+            // When allComputed=true, show all computed signals with requested pattern noted
+            // When false, filter to only matching signals
+            var outputSignals = allComputed
+                ? allSignals
+                : SignalGlobMatcher.FilterSignals(profile, signalGlobs)
+                    .ToDictionary(s => s.Key, s => new { value = s.Value, confidence = s.Confidence });
 
             var filteredResult = new
             {
                 image = Path.GetFileName(profile.ImagePath),
                 globs = signalGlobs,
-                signal_count = filteredSignals.Count,
-                signals = filteredSignals
+                all_computed = allComputed,
+                requested_count = SignalGlobMatcher.FilterSignals(profile, signalGlobs).Count(),
+                signal_count = outputSignals.Count,
+                waves_executed = profile.ContributingWaves,
+                signals = outputSignals
             };
 
             var filteredOptions = new JsonSerializerOptions
@@ -1938,6 +2048,101 @@ class Program
             Console.ResetColor();
             Environment.Exit(1);
         }
+    }
+
+    static void ListSignals()
+    {
+        Console.ForegroundColor = ConsoleColor.Cyan;
+        Console.WriteLine("\n╔═══════════════════════════════════════════════════════════╗");
+        Console.WriteLine("║          Available Signals & Collections                  ║");
+        Console.WriteLine("╚═══════════════════════════════════════════════════════════╝\n");
+        Console.ResetColor();
+
+        // Show predefined collections from SignalGlobMatcher
+        Console.ForegroundColor = ConsoleColor.Yellow;
+        Console.WriteLine("  📦 Predefined Collections (use @name):");
+        Console.ResetColor();
+
+        var collections = SignalGlobMatcher.GetCollections();
+        foreach (var collection in collections.OrderBy(c => c.Key))
+        {
+            Console.ForegroundColor = ConsoleColor.Green;
+            Console.Write($"    @{collection.Key,-12}");
+            Console.ResetColor();
+            Console.ForegroundColor = ConsoleColor.Gray;
+            Console.WriteLine($" → {string.Join(", ", collection.Value)}");
+            Console.ResetColor();
+        }
+
+        Console.WriteLine();
+
+        // Show signals by wave (from WaveRegistry)
+        Console.ForegroundColor = ConsoleColor.Yellow;
+        Console.WriteLine("  🌊 Signals by Wave (emits → requires/optional):");
+        Console.ResetColor();
+
+        // Use WaveRegistry for accurate manifest data
+        foreach (var manifest in WaveRegistry.Manifests.OrderBy(m => m.Priority))
+        {
+            Console.ForegroundColor = ConsoleColor.White;
+            Console.Write($"    {manifest.WaveName,-22}");
+            Console.ResetColor();
+
+            Console.ForegroundColor = ConsoleColor.DarkGray;
+            Console.WriteLine($" P{manifest.Priority} tags: [{string.Join(", ", manifest.Tags)}]");
+            Console.ResetColor();
+
+            Console.ForegroundColor = ConsoleColor.Green;
+            Console.WriteLine($"      ↳ emits:   {string.Join(", ", manifest.Emits.Take(4))}{(manifest.Emits.Count > 4 ? "..." : "")}");
+            Console.ResetColor();
+
+            if (manifest.Requires.Count > 0)
+            {
+                Console.ForegroundColor = ConsoleColor.Red;
+                Console.WriteLine($"      ↳ requires: {string.Join(", ", manifest.Requires)}");
+                Console.ResetColor();
+            }
+
+            if (manifest.Optional.Count > 0)
+            {
+                Console.ForegroundColor = ConsoleColor.DarkYellow;
+                Console.WriteLine($"      ↳ optional: {string.Join(", ", manifest.Optional.Take(3))}{(manifest.Optional.Count > 3 ? "..." : "")}");
+                Console.ResetColor();
+            }
+        }
+
+        Console.WriteLine();
+
+        // Show glob pattern examples
+        Console.ForegroundColor = ConsoleColor.Yellow;
+        Console.WriteLine("  📝 Glob Pattern Examples:");
+        Console.ResetColor();
+
+        var examples = new[]
+        {
+            ("motion.*", "All motion signals"),
+            ("color.dominant*", "Prefix match: dominant colors"),
+            ("vision.llm.caption", "Exact match: LLM caption only"),
+            ("@motion,color.*", "Collection + pattern: motion and all colors"),
+            ("@alttext", "Collection: signals for alt text generation"),
+            ("*", "All signals (runs full pipeline)")
+        };
+
+        foreach (var (pattern, desc) in examples)
+        {
+            Console.ForegroundColor = ConsoleColor.Cyan;
+            Console.Write($"    --signals \"{pattern}\"");
+            Console.ResetColor();
+            Console.ForegroundColor = ConsoleColor.Gray;
+            Console.WriteLine($"  # {desc}");
+            Console.ResetColor();
+        }
+
+        Console.WriteLine();
+        Console.ForegroundColor = ConsoleColor.DarkGray;
+        Console.WriteLine("  Usage: imagesummarizer image.gif --signals \"motion.*,color.dominant*\" --output json");
+        Console.WriteLine("  Tip: Use @tool collection for MCP/automation tool calls");
+        Console.ResetColor();
     }
 
     static void ShowSignalBreakdown(DynamicImageProfile profile)

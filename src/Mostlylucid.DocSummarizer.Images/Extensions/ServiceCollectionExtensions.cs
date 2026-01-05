@@ -260,6 +260,54 @@ public static class ServiceCollectionExtensions
         // Image stream processor for memory-efficient large image handling
         services.TryAddSingleton<ImageStreamProcessor>();
 
+        // Unified Vision Service (supports multiple providers: Ollama, Anthropic, OpenAI)
+        services.TryAddSingleton<UnifiedVisionService>(sp =>
+        {
+            var config = sp.GetService<IConfiguration>();
+            var imageConfig = sp.GetRequiredService<IOptions<ImageConfig>>().Value;
+            var loggerFactory = sp.GetRequiredService<Microsoft.Extensions.Logging.ILoggerFactory>();
+
+            // Create in-memory config if IConfiguration not available
+            if (config == null)
+            {
+                var configData = new Dictionary<string, string?>
+                {
+                    ["Ollama:BaseUrl"] = imageConfig.OllamaBaseUrl ?? "http://localhost:11434",
+                    ["Ollama:VisionModel"] = imageConfig.VisionLlmModel ?? "minicpm-v:8b"
+                };
+                config = new ConfigurationBuilder()
+                    .AddInMemoryCollection(configData)
+                    .Build();
+            }
+            return new UnifiedVisionService(config, loggerFactory);
+        });
+
+        // Fast caption service (uses UnifiedVisionService for consistent prompts across all clients)
+        services.TryAddSingleton<FastCaptionService>(sp =>
+        {
+            var unifiedVision = sp.GetRequiredService<UnifiedVisionService>();
+            var logger = sp.GetService<Microsoft.Extensions.Logging.ILogger<FastCaptionService>>();
+            return new FastCaptionService(unifiedVision, logger);
+        });
+
+        // Florence-2 caption service (fast local ONNX-based captioning with color enhancement)
+        services.TryAddSingleton<Florence2CaptionService>(sp =>
+        {
+            var config = sp.GetRequiredService<IOptions<ImageConfig>>();
+            var colorAnalyzer = sp.GetRequiredService<ColorAnalyzer>();
+            var logger = sp.GetService<Microsoft.Extensions.Logging.ILogger<Florence2CaptionService>>();
+            return new Florence2CaptionService(config, colorAnalyzer, logger);
+        });
+
+        // Florence-2 Wave (fast local captioning/OCR using ONNX, uses OpenCV for complexity assessment)
+        services.AddSingleton<IAnalysisWave>(sp =>
+        {
+            var florence2Service = sp.GetRequiredService<Florence2CaptionService>();
+            var imageConfig = sp.GetRequiredService<IOptions<ImageConfig>>();
+            var logger = sp.GetService<Microsoft.Extensions.Logging.ILogger<Florence2Wave>>();
+            return new Florence2Wave(florence2Service, imageConfig, logger);
+        });
+
         // Vision LLM services for caption/description generation
         services.TryAddSingleton<VisionLlmService>(sp =>
         {

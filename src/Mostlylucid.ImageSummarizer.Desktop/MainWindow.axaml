@@ -4,6 +4,7 @@
         x:Class="Mostlylucid.ImageSummarizer.Desktop.MainWindow"
         x:DataType="vm:MainViewModel"
         Title="Image Summarizer"
+        Icon="avares://ImageSummarizer/icon.png"
         Width="900" Height="700"
         MinWidth="600" MinHeight="500"
         WindowStartupLocation="CenterScreen"
@@ -28,11 +29,12 @@
     <Grid RowDefinitions="Auto,*,Auto" Margin="16">
         <!-- Header with controls and status indicators -->
         <Grid Grid.Row="0" ColumnDefinitions="*,Auto" Margin="0,0,0,12">
-            <!-- Left: Controls -->
-            <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="12">
+            <!-- Left: Controls - WrapPanel allows wrapping to multiple rows -->
+            <WrapPanel Grid.Column="0" Orientation="Horizontal">
                 <Button Command="{Binding BrowseCommand}"
                         CommandParameter="{Binding $parent[Window].StorageProvider}"
-                        Classes="primary">
+                        Classes="primary"
+                        Margin="0,0,8,8">
                     <StackPanel Orientation="Horizontal" Spacing="6">
                         <PathIcon Data="M19,20H4C2.89,20 2,19.1 2,18V6C2,4.89 2.89,4 4,4H10L12,6H19A2,2 0 0,1 21,8H21L4,8V18L6.14,10H23.21L20.93,18.5C20.7,19.37 19.92,20 19,20Z"
                                   Width="14" Height="14"/>
@@ -42,28 +44,47 @@
 
                 <ComboBox ItemsSource="{Binding Pipelines}"
                           SelectedItem="{Binding SelectedPipeline}"
-                          ToolTip.Tip="Analysis pipeline"/>
+                          ToolTip.Tip="Analysis pipeline"
+                          Margin="0,0,8,8"/>
 
                 <ComboBox ItemsSource="{Binding OutputFormats}"
                           SelectedItem="{Binding SelectedOutput}"
-                          ToolTip.Tip="Output format"/>
+                          ToolTip.Tip="Output format"
+                          Margin="0,0,8,8"/>
 
                 <CheckBox Content="LLM"
                           IsChecked="{Binding EnableVisionLlm}"
                           VerticalAlignment="Center"
-                          ToolTip.Tip="Enable Vision LLM for captions"/>
+                          ToolTip.Tip="Enable Vision LLM for captions"
+                          Margin="0,0,8,8"/>
 
                 <ComboBox ItemsSource="{Binding AvailableModels}"
                           SelectedItem="{Binding VisionModel}"
                           IsVisible="{Binding EnableVisionLlm}"
-                          ToolTip.Tip="Vision model"/>
+                          ToolTip.Tip="Vision model"
+                          Margin="0,0,8,8"/>
+
+                <CheckBox Content="Fast"
+                          IsChecked="{Binding FastMode}"
+                          IsVisible="{Binding EnableVisionLlm}"
+                          VerticalAlignment="Center"
+                          ToolTip.Tip="Fast mode: Direct LLM call, skips all heuristics"
+                          Margin="0,0,8,8"/>
+
+                <CheckBox Content="No Ctx"
+                          IsChecked="{Binding DisableContext}"
+                          IsVisible="{Binding EnableVisionLlm}"
+                          VerticalAlignment="Center"
+                          ToolTip.Tip="Disable context: Don't send analysis signals to LLM"
+                          Margin="0,0,8,8"/>
 
                 <Button Command="{Binding AnalyzeCommand}"
                         IsEnabled="{Binding !IsProcessing}"
-                        Classes="primary">
+                        Classes="primary"
+                        Margin="0,0,8,8">
                     <TextBlock Text="Analyze"/>
                 </Button>
-            </StackPanel>
+            </WrapPanel>
 
             <!-- Right: Status indicators (compact) -->
             <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
@@ -118,7 +139,7 @@
             </Border>
 
             <!-- Right: Results -->
-            <Grid Grid.Column="2" RowDefinitions="Auto,*,Auto">
+            <Grid Grid.Column="2" RowDefinitions="Auto,2*,Auto,*,Auto">
                 <TextBlock Grid.Row="0" Text="Result" Classes="header"/>
 
                 <TextBox Grid.Row="1"
@@ -131,7 +152,50 @@
                          Padding="12"
                          CornerRadius="8"/>
 
-                <Button Grid.Row="2"
+                <!-- Signal Log Header -->
+                <StackPanel Grid.Row="2" Orientation="Horizontal" Spacing="8" Margin="0,12,0,4">
+                    <TextBlock Text="Signal Log" Classes="header" Margin="0"/>
+                    <TextBlock Text="{Binding SignalLogCount, StringFormat='({0})'}"
+                               FontSize="11"
+                               Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}"
+                               VerticalAlignment="Center"/>
+                </StackPanel>
+
+                <!-- Live Signal Log -->
+                <Border Grid.Row="3"
+                        Background="{DynamicResource SystemControlBackgroundAltMediumLowBrush}"
+                        BorderBrush="{DynamicResource SystemControlForegroundBaseMediumLowBrush}"
+                        BorderThickness="1"
+                        CornerRadius="4">
+                    <ListBox ItemsSource="{Binding SignalLog}"
+                             Background="Transparent"
+                             BorderThickness="0"
+                             ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                             FontFamily="Cascadia Code, Consolas, monospace"
+                             FontSize="11">
+                        <ListBox.ItemTemplate>
+                            <DataTemplate>
+                                <Grid ColumnDefinitions="Auto,*,Auto">
+                                    <TextBlock Grid.Column="0"
+                                               Text="{Binding Timestamp, StringFormat='{}{0:HH:mm:ss.ff}'}"
+                                               Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}"
+                                               Margin="0,0,8,0"/>
+                                    <TextBlock Grid.Column="1"
+                                               Text="{Binding Message}"
+                                               TextTrimming="CharacterEllipsis"
+                                               ToolTip.Tip="{Binding Message}"/>
+                                    <TextBlock Grid.Column="2"
+                                               Text="{Binding Confidence, StringFormat='{}{0:P0}'}"
+                                               Foreground="{Binding ConfidenceColor}"
+                                               Margin="8,0,0,0"
+                                               IsVisible="{Binding HasConfidence}"/>
+                                </Grid>
+                            </DataTemplate>
+                        </ListBox.ItemTemplate>
+                    </ListBox>
+                </Border>
+
+                <Button Grid.Row="4"
                         Command="{Binding CopyToClipboardCommand}"
                         CommandParameter="{Binding $parent[Window].Clipboard}"
                         HorizontalAlignment="Right"

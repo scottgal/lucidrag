@@ -19,7 +19,8 @@ Core profiling is deterministic and offline; LLM/OCR/CLIP are optional stages co
 
 ### Core Analysis Pipeline
 
-![Meme Text Extraction](demo-images/anchorman-not-even-mad.gif)
+![Meme Text Extraction](demo-images/anchorman-not-even-mad.gif) 
+
 *OCR: "I'm not even mad." + "That's amazing." • Caption: "man with mustache wearing grey sweater" • Scene: meme*
 
 - **Deterministic profiling (fast path)** - no ML required
@@ -110,6 +111,7 @@ Console.WriteLine($"Hash: {hash}");
 The library uses a **Wave-based analysis architecture** where specialized analyzers (Waves) each contribute signals to a unified profile:
 
 ![Alan Shrug](demo-images/alanshrug_opt.gif)
+
 *Wave pipeline: ColorWave → MotionWave → VisionLlmWave • Each contributes signals to unified profile*
 
 ### Wave Architecture
@@ -121,9 +123,123 @@ The library uses a **Wave-based analysis architecture** where specialized analyz
 | **ForensicsWave** | 30 | Edges, sharpness, blur detection | `visual.*`, `quality.*` |
 | **MotionWave** | 40 | GIF frame analysis, optical flow | `motion.*` |
 | **AdvancedOcrWave** | 50 | Multi-frame OCR with voting | `ocr.*` |
+| **Florence2Wave** | 55 | Fast local ONNX captioning + OCR | `florence2.*`, `vision.llm.caption` |
 | **VisionLlmWave** | 80 | Vision LLM captions, scene classification | `vision.llm.*` |
 | **ClipEmbeddingWave** | 90 | CLIP vector embeddings | `vision.clip.*` |
 | **ContradictionWave** | 100 | Cross-wave validation | `validation.*` |
+
+### Technology Stack
+
+```mermaid
+graph TB
+    subgraph Input["📥 Input"]
+        IMG[Image/GIF]
+    end
+
+    subgraph Core["🔧 Core Processing (ImageSharp)"]
+        LOAD[Load & Decode]
+        FRAME[Frame Extraction]
+    end
+
+    subgraph OpenCV["🎯 OpenCV Analysis"]
+        MOTION[Optical Flow<br/>Farneback Dense]
+        EDGE[Edge Detection<br/>Sobel + Canny]
+        FACE[Face Detection<br/>DNN Classifier]
+        COLOR[Color Analysis<br/>K-means Clustering]
+    end
+
+    subgraph ONNX["🧠 ONNX Models"]
+        FLOR[Florence-2<br/>230M VL Model]
+        CLIP[CLIP<br/>Embeddings]
+    end
+
+    subgraph LLM["☁️ Vision LLM (Optional)"]
+        OLLAMA[Ollama/OpenAI/Anthropic]
+    end
+
+    subgraph Output["📤 Output"]
+        SIGNALS[Signals Database]
+    end
+
+    IMG --> LOAD
+    LOAD --> FRAME
+    FRAME --> MOTION
+    FRAME --> EDGE
+    FRAME --> FACE
+    FRAME --> COLOR
+    FRAME --> FLOR
+    FRAME --> CLIP
+
+    MOTION --> SIGNALS
+    EDGE --> SIGNALS
+    FACE --> SIGNALS
+    COLOR --> SIGNALS
+    FLOR --> SIGNALS
+    CLIP --> SIGNALS
+
+    SIGNALS -->|Escalation| OLLAMA
+    OLLAMA --> SIGNALS
+
+    style OpenCV fill:#e1f5fe
+    style ONNX fill:#fff3e0
+    style LLM fill:#fce4ec
+```
+
+**Key Technologies:**
+| Component | Technology | Purpose |
+|-----------|------------|---------|
+| **Image Processing** | SixLabors.ImageSharp | Decode, resize, frame extraction |
+| **Motion Detection** | OpenCvSharp4 (Farneback) | Dense optical flow for GIF motion |
+| **Edge Analysis** | OpenCvSharp4 (Sobel) | Complexity, sharpness detection |
+| **Face Detection** | OpenCvSharp4 (DNN) | Face count and regions |
+| **Fast Caption** | Florence-2 (ONNX) | Sub-second local captioning |
+| **Embeddings** | CLIP (ONNX) | Semantic similarity search |
+| **Vision LLM** | Ollama/OpenAI/Anthropic | Rich captions, scene understanding |
+
+### Florence-2: Fast Local Captioning
+
+**Florence-2** is Microsoft's 230M parameter vision-language model that runs locally via ONNX. It provides sub-second captioning and OCR without external services.
+
+**When to Use Florence-2:**
+- ✅ **Static images** - Excellent for photos, screenshots, diagrams
+- ✅ **First-pass screening** - Quick triage before full analysis
+- ⚠️ **GIFs** - Limited; produces generic descriptions like "animated image with general motion"
+- 📌 **Recommendation**: Use `florence2+llm` pipeline for animated content
+
+**Why ColorWave Compensation?**
+Florence-2 has weak color detection - it often describes images without mentioning colors. The library solves this by:
+1. Running ColorWave **before** Florence2Wave (priority 20 vs 55)
+2. Florence2CaptionService reads ColorWave signals from the context
+3. Enhances Florence-2's caption by prepending accurate color descriptions
+
+**Example:**
+- Florence-2 raw: "A dog playing on a deck with another puppy"
+- With ColorWave: "A **brown beagle** dog with a **red collar** playing on a **wooden** deck with another **tan** puppy"
+
+**Two-Stage Pipeline (florence2+llm):**
+For best results with animations, use the hybrid pipeline that uses Florence-2 for quick screening and escalates to Vision LLM for complex content:
+```
+ColorWave → MotionWave → Florence2Wave → [conditional] VisionLlmWave
+                              ↓
+                    OpenCV Complexity Check
+                              ↓
+                    Escalate if edge_density > 0.3 OR GIF with motion
+```
+
+**Pipeline Selection Guide:**
+| Content Type | Recommended Pipeline | Why |
+|-------------|---------------------|-----|
+| Static photo | `florence2` | Fast, accurate for static content |
+| Screenshot | `florence2` | Good at reading UI elements |
+| Animated GIF | `florence2+llm` or `caption` | Florence-2 limited for animations |
+| GIF with subtitles | `caption` | Vision LLM reads text from frame strips |
+| Diagram/chart | `florence2+llm` | May need LLM for complex visuals |
+
+Florence-2 signals include:
+- `florence2.caption` - Enhanced caption with color context
+- `florence2.ocr_text` - OCR text (less accurate than Tesseract)
+- `florence2.should_escalate` - Whether to escalate to Vision LLM
+- `florence2.duration_ms` - Inference time
 
 ```mermaid
 graph TD
@@ -211,12 +327,22 @@ If text likeliness > threshold (default 0.4):
 2. **Store as Signal**: `content.extracted_text` with confidence 0.9
 3. **Cache**: Store in SignalDatabase for reuse
 
-### Stage 5: GIF Motion Analysis
+### Stage 5: GIF Motion Analysis (OpenCV)
 
 ![Shrug GIF](demo-images/alanshrug_opt.gif)
 *MotionWave detects shoulder movement • 31 frames analyzed • Motion: SUBTLE general motion*
 
-For animated GIFs using the MotionWave analyzer:
+For animated GIFs, the MotionWave analyzer uses **OpenCV's Farneback dense optical flow**:
+
+**OpenCV Integration:**
+- **Library**: OpenCvSharp4 (C# bindings for OpenCV 4.11)
+- **Algorithm**: Farneback dense optical flow (computes motion vectors for every pixel)
+- **Multi-scale**: Pyramid analysis for robustness to large motions
+- **No external install**: Native libraries bundled with NuGet package
+
+For detailed technical documentation, see **[GIF-MOTION.md](GIF-MOTION.md)**.
+
+**Motion Analysis Pipeline:**
 
 1. **Frame Extraction**: Extract all frames or keyframes using subtitle-aware deduplication
 2. **Optical Flow**: Compute motion vectors between consecutive frames
@@ -236,6 +362,7 @@ For animated GIFs using the MotionWave analyzer:
 - This ensures text changes are captured even when main image is static
 
 ![Arse Biscuits](demo-images/arse_biscuits.gif)
+
 *OCR extracts "ARSE BISCUITS" • Vision LLM: "elderly man dressed as bishop...text reading arse biscuits"*
 
 **Example motion signals** (from cat_wag.gif):
@@ -277,13 +404,12 @@ All results are cached in SQLite SignalDatabase:
 
 ## Detailed Component Documentation
 
-For in-depth technical documentation on each analyzer:
-- **[ANALYZERS.md](ANALYZERS.md)** - Detailed analyzer algorithms, metrics, and usage
-  - ColorAnalyzer (quantization, color grids, Lanczos3 resampling)
-  - EdgeAnalyzer (Sobel operators, entropy, straight edge detection)
-  - BlurAnalyzer (Laplacian variance, sharpness categories)
-  - TextLikelinessAnalyzer (multi-factor heuristic scoring)
-  - TypeDetector (decision tree rules and confidence factors)
+For in-depth technical documentation:
+- **[SIGNALS.md](SIGNALS.md)** - Signal architecture, catalog, dynamic pipelines, caching
+- **[GIF-MOTION.md](GIF-MOTION.md)** - OpenCV optical flow, motion detection algorithms
+- **[SIGNAL-ARCHITECTURE.md](SIGNAL-ARCHITECTURE.md)** - Design philosophy: Signals vs Captions
+- **[ANALYZERS.md](ANALYZERS.md)** - Analyzer algorithms (Color, Edge, Blur, TextLikeliness)
+- **[Pipelines/PIPELINES.md](Pipelines/PIPELINES.md)** - YAML pipeline configurations
 
 ## API Reference
 
@@ -493,295 +619,44 @@ else
 
 ### Signal-Based Architecture
 
-The library uses a **signal-based storage pattern** where analysis results are stored as discrete observations (signals) with metadata:
+The library uses a **signal-based storage pattern** where analysis results are stored as discrete observations with metadata (key, value, confidence, source, tags).
+
+**Key Features:**
+- Signal catalog with 50+ signals across identity, color, motion, quality, vision
+- Dynamic pipeline selection - request signals, only required waves run
+- Contradiction detection for cross-wave validation
+- SQLite caching with dual-hash strategy (xxhash64 + SHA256)
+
+📖 **Full documentation: [SIGNALS.md](SIGNALS.md)**
+
+### Quick Signal Example
 
 ```csharp
-public class Signal
-{
-    public string Key { get; set; }           // "content.llm_caption"
-    public object? Value { get; set; }        // Actual value
-    public double Confidence { get; set; }    // 0.0-1.0 confidence score
-    public string Source { get; set; }        // "ImageAnalyzer", "VisionLLM", "OCR"
-    public DateTime Timestamp { get; set; }   // When signal was emitted
-    public List<string>? Tags { get; set; }   // Categorization tags
-    public Dictionary<string, object>? Metadata { get; set; }  // Additional context
-}
+// Request specific signals - only required waves run
+var signals = await orchestrator.AnalyzeBySignalsAsync(imagePath, "motion.*,color.dominant*");
+
+// Or use predefined collections
+var altTextSignals = await orchestrator.AnalyzeBySignalsAsync(imagePath, "@alttext");
 ```
 
-**Benefits:**
-- **Flexibility**: Add new analysis types without schema changes
-- **Versioning**: Multiple sources can provide competing signals
-- **Aggregation**: Combine signals using strategies (highest confidence, average)
-- **Queryable**: Filter by tags, source, confidence
-
-### DynamicImageProfile
-
-Flexible profile that aggregates signals from multiple sources:
-
-```csharp
-var dynamicProfile = new DynamicImageProfile
-{
-    ImagePath = "photo.jpg"
-};
-
-// Add signals from deterministic analysis
-dynamicProfile.AddSignal(new Signal
-{
-    Key = "quality.sharpness",
-    Value = 2856.97,
-    Confidence = 0.8,
-    Source = "ImageAnalyzer",
-    Tags = new List<string> { "quality", "sharpness" }
-});
-
-// Add signals from vision LLM
-dynamicProfile.AddSignal(new Signal
-{
-    Key = "content.llm_caption",
-    Value = "A serene landscape with mountains...",
-    Confidence = 0.85,
-    Source = "VisionLLM",
-    Tags = new List<string> { "caption", "description", "llm" }
-});
-
-// Query signals
-var sharpness = dynamicProfile.GetValue<double>("quality.sharpness");
-var caption = dynamicProfile.GetValue<string>("content.llm_caption");
-var bestSignal = dynamicProfile.GetBestSignal("quality.sharpness");
-```
-
-### Signal Catalog
-
-#### Identity Signals (confidence: 1.0)
-- `identity.sha256` - SHA256 content hash
-- `identity.format` - Image format (PNG, JPEG, GIF, WEBP)
-- `identity.width`, `identity.height` - Dimensions
-- `identity.aspect_ratio` - Width/height ratio
-
-#### Content Signals
-- `content.type` - Detected type (Photo, Diagram, Chart, etc.)
-- `content.type_confidence` - Type detection confidence (0.0-1.0)
-- `content.text_likeliness` - Probability of containing text (0.0-1.0)
-- `content.llm_caption` - Vision LLM description (confidence: 0.85, source: VisionLLM)
-- `content.extracted_text` - OCR results (confidence: 0.9, source: OCR)
-
-#### Quality Signals
-- `quality.sharpness` - Laplacian variance (confidence: 0.8)
-- `quality.edge_density` - Percentage of edge pixels (confidence: 0.9)
-- `quality.luminance_entropy` - Information content (confidence: 0.9)
-
-#### Color Signals
-- `color.dominant_color_names` - List of color names (confidence: 0.9)
-- `color.dominant_color_hexes` - List of hex codes (confidence: 0.9)
-- `color.dominant_color_percentages` - List of percentages (confidence: 0.9)
-- `color.mean_luminance` - Average brightness 0-255 (confidence: 1.0)
-- `color.mean_saturation` - Average color intensity 0-1 (confidence: 1.0)
-- `color.is_mostly_grayscale` - Boolean flag (confidence: 1.0)
-
-#### Validation Signals
-- `validation.contradiction.count` - Number of contradictions detected (confidence: 1.0)
-- `validation.contradiction.status` - Overall status: "clean", "info", "warning", "error", "critical"
-- `validation.contradiction.<rule_id>` - Details of specific contradiction (when detected)
-
-### Contradiction Detection
-
-The library includes a **config-driven contradiction detection system** that validates signals from different analysis waves for consistency. This catches cases where different analyzers produce conflicting results.
-
-```mermaid
-graph TD
-    A[All Waves Complete] --> B[ContradictionWave]
-    B --> C{Check Rules}
-    C --> D[OCR vs Vision Text]
-    C --> E[Grayscale vs Colors]
-    C --> F[Type Classifications]
-    C --> G[Confidence Conflicts]
-    D --> H{Contradiction?}
-    E --> H
-    F --> H
-    G --> H
-    H -->|Yes| I[Emit Contradiction Signal]
-    H -->|No| J[Status: Clean]
-    I --> K[Apply Resolution Strategy]
-
-    style B stroke:#FFD700
-    style I stroke:#FF6B6B
-    style J stroke:#90EE90
-```
-
-**Built-in Contradiction Rules:**
-
-| Rule ID | Description | Severity |
-|---------|-------------|----------|
-| `ocr_vs_vision_text` | OCR found text but Vision LLM says no text | Warning |
-| `text_likeliness_vs_ocr` | High text score but OCR found nothing | Warning |
-| `grayscale_vs_colors` | Marked grayscale but has colorful dominants | Info |
-| `screenshot_vs_photo_noise` | Screenshot type but photo-like noise | Warning |
-| `llm_vs_heuristic_type` | Vision LLM type differs from heuristics | Info |
-| `face_vs_icon` | Faces detected in Icon/Diagram | Warning |
-| `exif_format_mismatch` | EXIF in format that doesn't support it | Warning |
-| `blur_vs_edges` | Low sharpness but high edge density | Info |
-
-**Resolution Strategies:**
-
-- `PreferHigherConfidence` - Keep signal with higher confidence
-- `PreferMostRecent` - Keep most recent signal
-- `MarkConflicting` - Keep both, flag for review
-- `RemoveBoth` - Neither signal trusted
-- `EscalateToLlm` - Escalate to Vision LLM for resolution
-- `ManualReview` - Flag for human review
-
-**Configuration:**
-
-```json
-{
-  "Images": {
-    "Contradiction": {
-      "Enabled": true,
-      "RejectOnCritical": false,
-      "MinConfidenceThreshold": 0.5,
-      "EnableLlmEscalation": true,
-      "CustomRules": [
-        {
-          "RuleId": "my_custom_rule",
-          "Description": "Custom validation rule",
-          "SignalKeyA": "content.type",
-          "SignalKeyB": "vision.detected_type",
-          "Type": "ValueConflict",
-          "Severity": "Warning",
-          "Resolution": "PreferHigherConfidence"
-        }
-      ]
-    }
-  }
-}
-```
-
-**Programmatic Usage:**
-
-```csharp
-// Get contradiction results from profile
-var contradictions = profile.GetSignals("validation.contradiction")
-    .Where(s => !s.Key.EndsWith(".count") && !s.Key.EndsWith(".status"));
-
-foreach (var signal in contradictions)
-{
-    var metadata = signal.Metadata;
-    Console.WriteLine($"Rule: {metadata["rule_id"]}");
-    Console.WriteLine($"Severity: {metadata["severity"]}");
-    Console.WriteLine($"Explanation: {signal.Value}");
-    Console.WriteLine($"Resolution: {metadata["resolution"]}");
-}
-
-// Check if image should be rejected
-var status = profile.GetValue<string>("validation.contradiction.status");
-if (status == "critical" && config.Contradiction.RejectOnCritical)
-{
-    // Handle rejected image
-}
-```
+**Predefined Collections:** `@identity`, `@motion`, `@color`, `@text`, `@alttext`, `@tool`, `@all`
 
 ### Auto-Escalation to Vision LLM
 
-Automatically escalates low-confidence images to vision LLM for semantic understanding:
+Automatically escalates low-confidence images to vision LLM:
 
-```mermaid
-graph TD
-    A[Deterministic Analysis] --> B{Should Escalate?}
-    B -->|Type confidence < 0.7| E[Vision LLM]
-    B -->|Sharpness < 300| E
-    B -->|Text likeliness > 0.4| E
-    B -->|Type = Diagram/Chart| E
-    B -->|No| F[Store Results]
-    E --> G[Generate Caption]
-    G --> H[Store Caption Signal]
-    H --> F
-
-    style E stroke:#FFB6C1
-    style H stroke:#90EE90
-```
-
-**Escalation conditions:**
-
-| Condition | Threshold | Reason |
+| Condition | Threshold | Action |
 |-----------|-----------|--------|
-| Type confidence | < 0.7 | Uncertain classification |
-| Sharpness (Laplacian) | < 300 | Blurry, needs context |
-| Text likeliness | > 0.4 | High text content |
-| Detected type | Diagram, Chart | Complex visualizations |
-
-**Usage with Ollama:**
+| Type confidence | < 0.7 | Escalate |
+| Sharpness | < 300 | Escalate |
+| Text likeliness | > 0.4 | Escalate |
+| Type = Diagram/Chart | Always | Escalate |
 
 ```csharp
-var escalationService = new EscalationService(
-    analyzer,
-    visionLlmClient,
-    signalDatabase,
-    logger,
-    new EscalationConfig
-    {
-        AutoEscalateEnabled = true,
-        ConfidenceThreshold = 0.7,
-        BlurThreshold = 300,
-        TextLikelinessThreshold = 0.4,
-        EnableCaching = true
-    });
-
 var result = await escalationService.AnalyzeWithEscalationAsync("image.jpg");
-
-Console.WriteLine($"Type: {result.Profile.DetectedType}");
-Console.WriteLine($"LLM Caption: {result.LlmCaption}");
 Console.WriteLine($"Was Escalated: {result.WasEscalated}");
 Console.WriteLine($"From Cache: {result.FromCache}");
 ```
-
-### SignalDatabase Caching
-
-SQLite-based persistent storage with content-based caching:
-
-```csharp
-var signalDatabase = new SignalDatabase("image-cache.db", logger);
-
-// Store profile with signals
-var dynamicProfile = ConvertToDynamicProfile(imageProfile);
-dynamicProfile.AddSignal(new Signal
-{
-    Key = "content.llm_caption",
-    Value = "A serene landscape...",
-    Confidence = 0.85,
-    Source = "VisionLLM"
-});
-
-await signalDatabase.StoreProfileAsync(
-    dynamicProfile,
-    sha256Hash,
-    filePath: "photo.jpg",
-    width: 1920,
-    height: 1080,
-    format: "JPEG");
-
-// Load from cache
-var cachedProfile = await signalDatabase.LoadProfileAsync(sha256Hash);
-if (cachedProfile != null)
-{
-    var caption = cachedProfile.GetValue<string>("content.llm_caption");
-    Console.WriteLine($"Cached caption: {caption}");
-}
-
-// Get statistics
-var stats = await signalDatabase.GetStatisticsAsync();
-Console.WriteLine($"Images: {stats.ImageCount}");
-Console.WriteLine($"Signals: {stats.SignalCount}");
-Console.WriteLine($"Unique sources: {stats.UniqueSourceCount}");
-```
-
-**Dual-hash strategy:**
-- **xxhash64**: Fast (10x+ faster than SHA256) for cache lookups
-- **SHA256**: Cryptographically secure primary key in database
-
-**Performance:**
-- **Cache hit**: ~3.2ms (231x faster than full analysis)
-- **Cache miss**: ~740ms (analysis) + 2.9ms (hashing)
-- **Thread-safe**: SemaphoreSlim + SQLite WAL mode
 
 ### Ollama Vision LLM Integration
 
@@ -893,9 +768,11 @@ imagesummarizer ./photos --output json
 
 ## Dependencies
 
-- **SixLabors.ImageSharp** - Core image processing
-- **Microsoft.ML.OnnxRuntime** (optional) - For CLIP models
-- **Tesseract** (optional) - For OCR capabilities
+- **SixLabors.ImageSharp** - Core image processing and GIF frame extraction
+- **OpenCvSharp4** - Motion detection, optical flow, edge analysis, face detection
+- **Microsoft.ML.OnnxRuntime** - CLIP embeddings and Florence-2 vision model
+- **Florence2** - Fast local captioning and OCR (ONNX model)
+- **Tesseract** (optional) - For advanced OCR capabilities
 
 ## License
 

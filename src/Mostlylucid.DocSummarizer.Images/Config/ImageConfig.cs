@@ -126,6 +126,19 @@ public class ImageConfig
     public bool EnableVisionLlm { get; set; } = true;
 
     /// <summary>
+    /// Enable Florence-2 for fast local captioning and OCR (ONNX-based, no external services required).
+    /// Florence-2 is faster but less accurate than Vision LLM. Good for first-pass analysis.
+    /// </summary>
+    public bool EnableFlorence2 { get; set; } = true;
+
+    /// <summary>
+    /// Florence-2 complexity threshold for escalation to Vision LLM.
+    /// Images with edge density above this threshold will escalate to Vision LLM.
+    /// Range: 0.0-1.0 (default: 0.3)
+    /// </summary>
+    public double Florence2ComplexityThreshold { get; set; } = 0.3;
+
+    /// <summary>
     /// Vision LLM model to use (e.g., "llava", "llava:13b", "minicpm-v", "bakllava")
     /// </summary>
     public string? VisionLlmModel { get; set; } = "minicpm-v:8b";

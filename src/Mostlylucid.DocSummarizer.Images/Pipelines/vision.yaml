@@ -1,0 +1,24 @@
+# Vision Pipeline
+# Vision LLM only (no OCR/Tesseract required)
+# Best for: Systems without Tesseract, visual-only analysis
+
+name: vision
+description: Vision LLM captioning only (no Tesseract OCR required)
+version: 1
+
+signals:
+  - identity.*
+  - color.dominant*
+  - motion.*
+  - vision.llm.*
+
+output:
+  format: visual
+  include_metadata: true
+  include_confidence: true
+
+llm:
+  enabled: true
+  model: minicpm-v:8b
+  fast_mode: false
+  context: true

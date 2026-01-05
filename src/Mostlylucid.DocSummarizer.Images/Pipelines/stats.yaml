@@ -1,0 +1,18 @@
+# Stats Pipeline
+# Fast metadata extraction only (no LLM, no OCR)
+# Best for: Bulk processing, file organization, quick triage
+
+name: stats
+description: Fast metadata extraction (identity, dimensions, hash)
+version: 1
+
+signals:
+  - identity.*
+
+output:
+  format: json
+  include_metadata: false
+  include_confidence: true
+
+llm:
+  enabled: false  # Pure metadata, no LLM
