@@ -36,6 +36,26 @@ public class MlOcrWave : IAnalysisWave
     // Minimum text length to consider "meaningful"
     private const int MinMeaningfulTextLength = 3;
 
+    /// <summary>
+    /// Check if this wave should run.
+    /// MlOcrWave runs on ALL routes (provides fast Florence-2 OCR for captions).
+    /// Only skip if OpenCV detection was already done in AutoRoutingWave.
+    /// </summary>
+    public bool ShouldRun(string imagePath, AnalysisContext context)
+    {
+        // MlOcrWave should always run - it's the FAST path for OCR
+        // It provides Florence-2 results even when Tesseract is skipped
+
+        // However, if AutoRoutingWave already did OpenCV detection, we can reuse those results
+        var existingRegions = context.GetCached<List<Dictionary<string, int>>>("ocr.opencv.text_regions");
+        if (existingRegions != null)
+        {
+            _logger?.LogDebug("MlOcrWave: Reusing OpenCV detection from AutoRoutingWave ({Count} regions)", existingRegions.Count);
+        }
+
+        return true;
+    }
+
     public MlOcrWave(
         Florence2CaptionService? florence2,
         IOptions<ImageConfig> config,
@@ -71,8 +91,36 @@ public class MlOcrWave : IAnalysisWave
             return signals;
         }
 
-        // STEP 1: Fast OpenCV MSER detection (~5-20ms)
-        var opencvResult = _opencvDetector.DetectTextRegions(imagePath);
+        // STEP 1: Fast OpenCV MSER detection
+        // OPTIMIZATION: Reuse cached results from AutoRoutingWave if available
+        OpenCvTextDetector.TextDetectionResult opencvResult;
+        var cachedRegions = context.GetCached<List<Dictionary<string, int>>>("ocr.opencv.text_regions");
+
+        if (cachedRegions != null)
+        {
+            // Reuse AutoRoutingWave detection - saves ~5-20ms
+            var textCoverage = context.GetValue<double>("route.text_detection.coverage");
+            opencvResult = new OpenCvTextDetector.TextDetectionResult
+            {
+                HasTextLikeRegions = cachedRegions.Count > 0,
+                TextRegionCount = cachedRegions.Count,
+                TextAreaRatio = textCoverage,
+                DetectionTimeMs = 0, // Already done
+                Confidence = 0.8,
+                TextBoundingBoxes = cachedRegions.Select(r => new OpenCvSharp.Rect(
+                    r.GetValueOrDefault("x", 0),
+                    r.GetValueOrDefault("y", 0),
+                    r.GetValueOrDefault("width", 0),
+                    r.GetValueOrDefault("height", 0)
+                )).ToList()
+            };
+            _logger?.LogDebug("MlOcrWave: Reused OpenCV detection from AutoRoutingWave ({Regions} regions)", cachedRegions.Count);
+        }
+        else
+        {
+            // Run fresh OpenCV detection (~5-20ms)
+            opencvResult = _opencvDetector.DetectTextRegions(imagePath);
+        }
 
         signals.Add(new Signal
         {
@@ -85,21 +133,26 @@ public class MlOcrWave : IAnalysisWave
             {
                 ["region_count"] = opencvResult.TextRegionCount,
                 ["text_area_ratio"] = opencvResult.TextAreaRatio,
-                ["detection_time_ms"] = opencvResult.DetectionTimeMs
+                ["detection_time_ms"] = opencvResult.DetectionTimeMs,
+                ["reused_from_routing"] = cachedRegions != null
             }
         });
 
         // Cache bounding boxes for downstream OCR waves (Tesseract, etc.)
         if (opencvResult.TextBoundingBoxes.Count > 0)
         {
-            var boxesData = opencvResult.TextBoundingBoxes.Select(b => new Dictionary<string, int>
+            var boxesData = cachedRegions ?? opencvResult.TextBoundingBoxes.Select(b => new Dictionary<string, int>
             {
                 ["x"] = b.X,
                 ["y"] = b.Y,
                 ["width"] = b.Width,
                 ["height"] = b.Height
             }).ToList();
-            context.SetCached("ocr.opencv.text_regions", boxesData);
+
+            if (cachedRegions == null)
+            {
+                context.SetCached("ocr.opencv.text_regions", boxesData);
+            }
 
             signals.Add(new Signal
             {

@@ -32,6 +32,32 @@ public class OcrWave : IAnalysisWave
     public int Priority => 60; // Medium priority - runs after forensics
     public IReadOnlyList<string> Tags => new[] { SignalTags.Content, "ocr", "text" };
 
+    /// <summary>
+    /// Check if this wave should run based on routing decisions.
+    /// FAST route with caption tier skips Tesseract OCR entirely.
+    /// </summary>
+    public bool ShouldRun(string imagePath, AnalysisContext context)
+    {
+        if (!_enabled)
+            return false;
+
+        // Skip if auto-routing says to skip this wave (FAST + caption tier)
+        if (context.IsWaveSkippedByRouting(Name))
+        {
+            _logger?.LogDebug("OcrWave skipped by routing (FAST route)");
+            return false;
+        }
+
+        // Skip if MlOcrWave explicitly said to skip Tesseract
+        if (context.GetValue<bool>("ocr.escalation.skip_tesseract"))
+        {
+            _logger?.LogDebug("OcrWave skipped: MlOcrWave detected no text regions");
+            return false;
+        }
+
+        return true;
+    }
+
     public OcrWave(
         ModelDownloader? modelDownloader = null,
         string? tesseractDataPath = null,
