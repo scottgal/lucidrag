@@ -66,6 +66,12 @@
                           ToolTip.Tip="Enable Vision LLM for enhanced captions (requires Ollama)"
                           Margin="0,0,8,8"/>
 
+                <CheckBox Content="OCR"
+                          IsChecked="{Binding EnableOcr}"
+                          VerticalAlignment="Center"
+                          ToolTip.Tip="Enable OCR text extraction (Florence-2 + Tesseract)"
+                          Margin="0,0,8,8"/>
+
                 <ComboBox ItemsSource="{Binding AvailableModels}"
                           SelectedItem="{Binding VisionModel}"
                           IsVisible="{Binding EnableVisionLlm}"

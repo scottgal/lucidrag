@@ -131,11 +131,28 @@ public class VisionLlmWave : IAnalysisWave
             var textLikeliness = context.GetValue<double>("content.text_likeliness");
             var ocrText = context.GetValue<string>("ocr.full_text") ?? context.GetValue<string>("ocr.voting.consensus_text");
 
-            // ALWAYS attempt text extraction for animated images - subtitles often appear in later frames
-            // that text detection (which only looks at first frame) misses
-            var shouldExtractText = textLikeliness > 0.3 || ocrGarbled || !string.IsNullOrEmpty(ocrText) || isAnimated;
+            // Also check MlOcrWave text (OpenCV+Florence2 fusion)
+            var mlOcrText = context.GetValue<string>("ocr.ml.fused_text");
+            var effectiveOcrText = !string.IsNullOrWhiteSpace(mlOcrText) ? mlOcrText : ocrText;
+            var hasGoodOcrText = !string.IsNullOrWhiteSpace(effectiveOcrText) && !ocrGarbled;
 
-            // If there's likely text, OCR is unreliable, or it's animated (may have subtitles)
+            // SKIP VisionLLM text extraction if OCR already succeeded!
+            // "Probability proposes, determinism persists" - if OCR nailed it, don't risk hallucination
+            // Only use VisionLLM for text when:
+            // 1. OCR is garbled (needs LLM to clean up)
+            // 2. No OCR text but text is likely (OCR failed, try LLM)
+            // 3. Animated with no text yet (subtitles may be in later frames not yet OCR'd)
+            var shouldExtractText = ocrGarbled ||
+                                    (textLikeliness > 0.3 && string.IsNullOrWhiteSpace(effectiveOcrText)) ||
+                                    (isAnimated && string.IsNullOrWhiteSpace(effectiveOcrText));
+
+            if (hasGoodOcrText)
+            {
+                _logger?.LogDebug("Skipping VisionLLM text extraction: OCR already succeeded with '{Text}'",
+                    effectiveOcrText?.Substring(0, Math.Min(50, effectiveOcrText?.Length ?? 0)));
+            }
+
+            // If OCR failed/garbled and text is likely, use VisionLLM
             if (shouldExtractText)
             {
                 // For animated images, create a mosaic of all unique frames so LLM can read all text
@@ -955,17 +972,28 @@ Be factual - only describe what you can see. Keep it under 100 words.";
         string prompt;
         if (frameCount > 1)
         {
-            prompt = $@"This is a filmstrip showing {frameCount} sequential frames from a movie or TV show.
-Look at each frame from left to right. There are yellow/white movie subtitles at the bottom of each frame.
-Read ALL the subtitle text you can see in order from left to right. These are important lines of dialogue.
-Return only the subtitle text, one line per frame. If a frame has no subtitle, skip it.";
+            // STRICT prompt to prevent hallucination - only extract what's VISIBLE
+            prompt = $@"TASK: Extract ONLY the text that is VISUALLY PRESENT in this filmstrip of {frameCount} frames.
+
+RULES:
+- Only transcribe text you can ACTUALLY SEE in the image
+- Do NOT invent, guess, or complete any text
+- Do NOT add dialogue that isn't visible
+- If text is unclear, write ONLY the parts you can read with certainty
+- If a frame has no visible text, skip it entirely
+
+OUTPUT: Return only the visible text, nothing else. If no text is visible, respond with 'NO_TEXT'.";
         }
         else
         {
-            prompt = @"Read the subtitle text at the bottom of this movie/TV frame.
-Focus on the yellow or white text overlay. Read each word carefully.
-Return ONLY the subtitle text, nothing else.
-If no subtitle text exists, respond with 'NO_TEXT'.";
+            prompt = @"TASK: Extract ONLY the text that is VISUALLY PRESENT in this image.
+
+RULES:
+- Only transcribe text you can ACTUALLY SEE
+- Do NOT guess, invent, or complete text
+- If text is partially visible, only write the readable parts
+
+OUTPUT: Return only the visible text. If no text exists, respond with 'NO_TEXT'.";
         }
 
         var response = await QueryVisionLlmAsync(imageBase64, prompt, ct);

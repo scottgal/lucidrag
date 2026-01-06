@@ -242,14 +242,27 @@ public class MlOcrWave : IAnalysisWave
                 // OPTIMIZATION: For animated GIFs, use filmstrip approach instead of per-frame OCR
                 // This is 10-15x faster: ~2-3s total vs ~27s for per-frame analysis
                 //
-                // Strategy:
+                // Strategy when VisionLLM is enabled:
                 // 1. Extract key frames (~100ms)
                 // 2. Detect text regions with OpenCV per frame (~5-20ms each)
                 // 3. Create text-only strip combining all unique text regions (~100ms)
                 // 4. Cache the strip for VisionLLM to read in one call (~1-2s)
                 // 5. Skip per-frame Florence-2 OCR entirely (VisionLLM is better for stylized text)
+                //
+                // When VisionLLM is DISABLED:
+                // - Use legacy per-frame Florence-2 OCR (slower but works standalone)
 
-                var result = await AnalyzeAnimatedTextFastAsync(imagePath, frameCount, context, ct);
+                AnimatedTextResult result;
+                if (_config.EnableVisionLlm)
+                {
+                    result = await AnalyzeAnimatedTextFastAsync(imagePath, frameCount, context, ct);
+                }
+                else
+                {
+                    // VisionLLM disabled - must extract text ourselves using Florence-2
+                    _logger?.LogDebug("VisionLLM disabled, using legacy per-frame Florence-2 OCR");
+                    result = await AnalyzeAnimatedTextWithOpenCvAsync(imagePath, frameCount, ct);
+                }
                 mlText = result.Text;
                 framesWithText = result.FramesWithText;
                 textChangedFrameIndices = result.TextChangedFrameIndices;
@@ -290,7 +303,8 @@ public class MlOcrWave : IAnalysisWave
                 }
 
                 // Signal that VisionLLM should handle OCR (it's better for stylized subtitle text)
-                if (hasSubtitles || result.FramesWithTextRegions > 0)
+                // BUT only if VisionLLM is actually enabled!
+                if (_config.EnableVisionLlm && (hasSubtitles || result.FramesWithTextRegions > 0))
                 {
                     signals.Add(new Signal
                     {
@@ -303,6 +317,23 @@ public class MlOcrWave : IAnalysisWave
                         {
                             ["reason"] = "filmstrip_mode",
                             ["has_subtitles"] = hasSubtitles
+                        }
+                    });
+                }
+
+                // Emit fused text signal if we extracted text (used by VisionLlmWave to skip)
+                if (!string.IsNullOrWhiteSpace(mlText))
+                {
+                    signals.Add(new Signal
+                    {
+                        Key = "ocr.ml.fused_text",
+                        Value = mlText,
+                        Confidence = 0.80,
+                        Source = Name,
+                        Tags = new List<string> { "ocr", "ml", "text", SignalTags.Content },
+                        Metadata = new Dictionary<string, object>
+                        {
+                            ["source"] = _config.EnableVisionLlm ? "filmstrip_deferred" : "florence2_per_frame"
                         }
                     });
                 }
@@ -320,6 +351,23 @@ public class MlOcrWave : IAnalysisWave
                     // Fallback to full image
                     var result = await _florence2.ExtractTextAsync(imagePath, ct);
                     mlText = result.Text;
+                }
+
+                // Emit fused text signal for static images too (used by VisionLlmWave to skip)
+                if (!string.IsNullOrWhiteSpace(mlText))
+                {
+                    signals.Add(new Signal
+                    {
+                        Key = "ocr.ml.fused_text",
+                        Value = mlText,
+                        Confidence = 0.80,
+                        Source = Name,
+                        Tags = new List<string> { "ocr", "ml", "text", SignalTags.Content },
+                        Metadata = new Dictionary<string, object>
+                        {
+                            ["source"] = "florence2_static"
+                        }
+                    });
                 }
             }
 

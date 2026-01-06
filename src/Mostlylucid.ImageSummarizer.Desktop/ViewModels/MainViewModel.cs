@@ -103,6 +103,9 @@ public partial class MainViewModel : ObservableObject
     private bool _enableVisionLlm = true;
 
     [ObservableProperty]
+    private bool _enableOcr = true;
+
+    [ObservableProperty]
     private string _ollamaUrl = "http://localhost:11434";
 
     [ObservableProperty]
@@ -591,7 +594,8 @@ public partial class MainViewModel : ObservableObject
             services.AddLogging(builder => builder.AddDebug().SetMinimumLevel(LogLevel.Warning));
             services.AddDocSummarizerImages(opt =>
             {
-                opt.EnableOcr = SelectedPipeline != "stats" && SelectedPipeline != "vision";
+                // Use EnableOcr checkbox + pipeline constraints
+                opt.EnableOcr = EnableOcr && SelectedPipeline != "stats" && SelectedPipeline != "vision";
                 opt.EnableVisionLlm = EnableVisionLlm;
                 opt.VisionLlmModel = VisionModel;
                 opt.OllamaBaseUrl = OllamaUrl;
