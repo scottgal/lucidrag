@@ -27,31 +27,69 @@ A complete image understanding and analysis pipeline that extracts **everything*
 ImageSummarizer prioritizes deterministic signals, confidence scoring, and auditability.
 Vision LLMs enhance analysis but are never the sole source of truth.
 
+## Desktop GUI Application
+
+For a visual experience, use the **ImageSummarizer Desktop** app:
+
+![Desktop Preview](demo-images/desktop-preview.png)
+
+### Features
+- **Drag & Drop**: Drop any image or GIF for instant analysis
+- **Live Signal Log**: Watch analysis signals appear in real-time with confidence coloring
+- **Model Status Indicators**: Traffic lights show which ML models are available/active
+- **Animated GIF Preview**: Filmstrip thumbnail + animated playback
+- **Quality Tiers**: Choose fast/balanced/quality for auto pipeline
+- **Ollama Integration**: Auto-discovers vision models from your local Ollama
+
+### Running the Desktop App
+```bash
+# From source
+dotnet run --project src/Mostlylucid.ImageSummarizer.Desktop
+
+# Or download pre-built release
+```
+
 ## Demo: What It Can Do
 
 ### Motion Detection & Animation Analysis
 ![Cat on couch](demo-images/cat_wag.gif)
 
 ```bash
-$ imagesummarizer demo-images/cat_wag.gif --pipeline caption --output text
+$ imagesummarizer demo-images/cat_wag.gif --pipeline motion --output text
 Caption: A black and white photo of a tabby cat resting on the armrests of a couch.
 Scene: indoor
 Motion: MODERATE object_motion motion (partial coverage)
 ```
 
-### Meme & Subtitle Extraction
+### Meme & Subtitle Extraction (Optimized Filmstrip Mode)
 ![Anchorman meme](demo-images/anchorman-not-even-mad.gif)
 
 ```bash
-$ imagesummarizer demo-images/anchorman-not-even-mad.gif --pipeline caption --output text
-"I'm not even I mad."
-"That's amazing."
-Caption: This screenshot features a person with facial hair and wearing a turtleneck sweater...
+$ imagesummarizer demo-images/anchorman-not-even-mad.gif --pipeline auto --output text
+[FAST route: animated:93frames; minimal_text:0%; small_image]
+"I'm not even mad."
+Caption: The video shows an individual speaking with expressions suggesting disbelief...
 Scene: meme
 Motion: SUBTLE general motion (localized coverage)
 ```
 
-Subtitle-aware frame deduplication detects text changes in the bottom 25% of frames, weighting bright pixels (white/yellow text) more heavily.
+**Performance**: The `auto` pipeline uses **filmstrip mode** for animated GIFs:
+- Extracts text-only regions (~100ms)
+- Skips per-frame Florence-2 OCR (saves ~15-20 seconds)
+- VisionLLM reads the filmstrip in one call (~2 seconds)
+- **Result**: 2-3 seconds instead of 27+ seconds
+
+### Text-Only Strip Extraction
+![Text-Only Strip](demo-images/anchorman-not-even-mad_textonly_strip.png)
+
+The filmstrip extracts **only the text bounding boxes** for maximum token efficiency:
+
+| Approach | Dimensions | Tokens | Time |
+|----------|------------|--------|------|
+| Full frames (10) | 3000×185 | ~1500 | ~27s |
+| Text-only strip | 253×105 | ~50 | ~2-3s |
+
+**30× token reduction** while preserving all subtitle text.
 
 ### Pet & Object Detection
 ![Two dogs playing](demo-images/StyloAndBella.jpg)

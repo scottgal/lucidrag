@@ -179,6 +179,12 @@ public class ImageConfig
     /// Override defaults to customize which signals are prioritized.
     /// </summary>
     public SignalImportanceConfig SignalImportance { get; set; } = new();
+
+    /// <summary>
+    /// Complex mode configuration for segment-based parallel document analysis.
+    /// Segments pages into regions (text blocks, images, charts, tables) and processes in parallel.
+    /// </summary>
+    public ComplexModeConfig ComplexMode { get; set; } = new();
 }
 
 /// <summary>
@@ -341,6 +347,43 @@ public class ColorGridConfig
     /// Bits per channel for color quantization (4 = 16 buckets per channel)
     /// </summary>
     public int BucketBits { get; set; } = 4;
+}
+
+/// <summary>
+/// Complex mode configuration for segment-based parallel document analysis
+/// </summary>
+public class ComplexModeConfig
+{
+    /// <summary>
+    /// Enable complex mode processing
+    /// </summary>
+    public bool Enabled { get; set; } = false;
+
+    /// <summary>
+    /// Minimum number of segments required to trigger complex mode
+    /// </summary>
+    public int MinSegments { get; set; } = 3;
+
+    /// <summary>
+    /// Maximum degree of parallelism for segment processing
+    /// </summary>
+    public int MaxParallelism { get; set; } = 4;
+
+    /// <summary>
+    /// Image segment configuration
+    /// </summary>
+    public ImageSegmentConfig Images { get; set; } = new();
+}
+
+/// <summary>
+/// Configuration for image segment processing in complex mode
+/// </summary>
+public class ImageSegmentConfig
+{
+    /// <summary>
+    /// Prefer Vision LLM over Florence-2 for image descriptions
+    /// </summary>
+    public bool PreferVisionLlm { get; set; } = false;
 }
 
 /// <summary>

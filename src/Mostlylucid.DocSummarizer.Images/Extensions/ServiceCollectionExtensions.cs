@@ -153,6 +153,17 @@ public static class ServiceCollectionExtensions
             return new TextDetectionWave(detectionService, imageConfig, logger);
         });
 
+        // MlOcrWave - Fast ML-based OCR using OpenCV + Florence-2 (priority 28)
+        // For animated GIFs: Uses filmstrip mode - caches frames for VisionLlmWave
+        // For static images: Uses targeted region OCR with Florence-2
+        services.AddSingleton<IAnalysisWave>(sp =>
+        {
+            var florence2 = sp.GetService<Florence2CaptionService>();
+            var imageConfig = sp.GetRequiredService<IOptions<ImageConfig>>();
+            var logger = sp.GetService<Microsoft.Extensions.Logging.ILogger<MlOcrWave>>();
+            return new MlOcrWave(florence2, imageConfig, logger);
+        });
+
         // OcrWave - configured with threshold from OcrConfig, uses auto-download
         services.AddSingleton<IAnalysisWave>(sp =>
         {

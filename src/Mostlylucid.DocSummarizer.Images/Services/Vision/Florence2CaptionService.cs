@@ -289,73 +289,192 @@ public class Florence2CaptionService
     {
         try
         {
-            // Florence2 can't understand filmstrips - use a single representative frame instead
-            // Extract frame from middle of animation (more likely to have interesting content)
-            var (framePath, frameCount) = await ExtractRepresentativeFrameAsync(gifPath, ct);
+            // Florence-2 CANNOT understand filmstrips - process each unique text frame individually
+            // Extract ALL unique text frames and process in parallel for complete OCR coverage
+            using var image = await Image.LoadAsync<Rgba32>(gifPath, ct);
 
-            if (framePath == null)
+            if (image.Frames.Count < 2)
             {
-                // Fallback to first frame
+                // Single frame - use static processing
                 return await GetStaticCaptionAsync(gifPath, detailed, enhanceWithColors, sw, ct);
             }
 
+            // Extract unique frames (sample up to 10 frames for efficiency)
+            var maxFrames = Math.Min(10, image.Frames.Count);
+            var step = Math.Max(1, image.Frames.Count / maxFrames);
+            var framePaths = new List<string>();
+
             try
             {
-                using var imgStream = File.OpenRead(framePath);
-                var streams = new Stream[] { imgStream };
-
-                // Get caption from representative frame
-                var task = detailed ? TaskTypes.DETAILED_CAPTION : TaskTypes.CAPTION;
-                var results = _model!.Run(task, streams, textInput: null, cancellationToken: ct);
-                var caption = ExtractText(results);
-
-                // Also get OCR from frame (may capture subtitles)
-                string? ocrText = null;
-                try
+                // Extract and save unique frames
+                for (int i = 0; i < image.Frames.Count && framePaths.Count < maxFrames; i += step)
                 {
-                    using var imgStream2 = File.OpenRead(framePath);
-                    var ocrResults = _model.Run(TaskTypes.OCR, new[] { imgStream2 }, textInput: null, cancellationToken: ct);
-                    ocrText = ExtractText(ocrResults)?.Trim();
+                    using var frame = image.Frames.CloneFrame(i);
+                    var tempPath = Path.Combine(Path.GetTempPath(), $"florence2_frame_{i}_{Guid.NewGuid():N}.png");
+                    await frame.SaveAsPngAsync(tempPath, ct);
+                    framePaths.Add(tempPath);
                 }
-                catch { /* OCR is optional */ }
 
-                // Note: Don't add "Animated GIF (X frames)" prefix - let caller handle that
-                // Caption should describe what's actually visible in the frame
+                _logger?.LogDebug("Extracted {Count} frames from animated GIF for parallel Florence-2 OCR", framePaths.Count);
 
-                // Enhance with colors
-                string? enhancedCaption = caption;
+                // Process ALL frames in parallel with Florence-2 OCR
+                var ocrTasks = framePaths.Select(path => ProcessFrameOcrAsync(path, ct));
+                var ocrResults = await Task.WhenAll(ocrTasks);
+
+                // Combine unique OCR results (deduplicate similar text)
+                var uniqueTexts = DeduplicateOcrResults(ocrResults);
+                var combinedOcrText = string.Join("\n", uniqueTexts);
+
+                _logger?.LogInformation(
+                    "Florence-2 multi-frame OCR: {FrameCount} frames → {UniqueCount} unique text results",
+                    framePaths.Count, uniqueTexts.Count);
+
+                // Get caption from FIRST frame only (caption is same across frames)
+                string? caption = null;
                 bool wasEnhanced = false;
 
-                if (enhanceWithColors && !string.IsNullOrWhiteSpace(caption))
+                try
                 {
-                    var colorResult = await EnhanceCaptionWithColorsAsync(gifPath, caption, ct);
-                    enhancedCaption = colorResult.caption;
-                    wasEnhanced = colorResult.enhanced;
+                    using var imgStream = File.OpenRead(framePaths[0]);
+                    var task = detailed ? TaskTypes.DETAILED_CAPTION : TaskTypes.CAPTION;
+                    var captionResult = _model!.Run(task, new[] { imgStream }, textInput: null, cancellationToken: ct);
+                    caption = ExtractText(captionResult);
+
+                    // Enhance with colors
+                    if (enhanceWithColors && !string.IsNullOrWhiteSpace(caption))
+                    {
+                        var colorResult = await EnhanceCaptionWithColorsAsync(gifPath, caption, ct);
+                        caption = colorResult.caption;
+                        wasEnhanced = colorResult.enhanced;
+                    }
+                }
+                catch (Exception ex)
+                {
+                    _logger?.LogWarning(ex, "Caption generation failed for first frame");
                 }
 
                 return new Florence2CaptionResult(
-                    Success: !string.IsNullOrWhiteSpace(enhancedCaption),
-                    Caption: CleanCaption(enhancedCaption),
-                    OcrText: ocrText,
-                    Error: string.IsNullOrWhiteSpace(enhancedCaption) ? "No caption generated" : null,
+                    Success: !string.IsNullOrWhiteSpace(caption) || !string.IsNullOrWhiteSpace(combinedOcrText),
+                    Caption: CleanCaption(caption),
+                    OcrText: string.IsNullOrWhiteSpace(combinedOcrText) ? null : combinedOcrText,
+                    Error: string.IsNullOrWhiteSpace(caption) && string.IsNullOrWhiteSpace(combinedOcrText)
+                        ? "No caption or text generated"
+                        : null,
                     DurationMs: sw.ElapsedMilliseconds,
                     EnhancedWithColors: wasEnhanced,
-                    FrameCount: frameCount);
+                    FrameCount: framePaths.Count);
             }
             finally
             {
-                // Clean up temp frame
-                if (File.Exists(framePath))
+                // Clean up all temp frames
+                foreach (var path in framePaths)
                 {
-                    try { File.Delete(framePath); } catch { /* ignore */ }
+                    try { if (File.Exists(path)) File.Delete(path); } catch { /* ignore */ }
                 }
             }
         }
         catch (Exception ex)
         {
-            _logger?.LogWarning(ex, "GIF frame extraction failed, falling back to first frame");
+            _logger?.LogWarning(ex, "GIF multi-frame processing failed, falling back to first frame");
             return await GetStaticCaptionAsync(gifPath, detailed, enhanceWithColors, sw, ct);
         }
+    }
+
+    /// <summary>
+    /// Process a single frame with Florence-2 OCR.
+    /// </summary>
+    private async Task<string?> ProcessFrameOcrAsync(string framePath, CancellationToken ct)
+    {
+        try
+        {
+            using var imgStream = File.OpenRead(framePath);
+            var ocrResults = _model!.Run(TaskTypes.OCR, new[] { imgStream }, textInput: null, cancellationToken: ct);
+            var text = ExtractText(ocrResults)?.Trim();
+            return text;
+        }
+        catch (Exception ex)
+        {
+            _logger?.LogDebug(ex, "Florence-2 OCR failed for frame {Path}", framePath);
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// Deduplicate OCR results using text similarity (Levenshtein distance).
+    /// Filters out near-duplicate results to get only unique text content.
+    /// </summary>
+    private List<string> DeduplicateOcrResults(string?[] ocrResults)
+    {
+        var uniqueTexts = new List<string>();
+
+        foreach (var text in ocrResults)
+        {
+            if (string.IsNullOrWhiteSpace(text) || text.Length < 3)
+                continue;
+
+            // Check if this text is similar to any existing unique text
+            var isDuplicate = false;
+            foreach (var existing in uniqueTexts)
+            {
+                var similarity = CalculateTextSimilarity(text, existing);
+                if (similarity > 0.85) // 85% similar = duplicate
+                {
+                    isDuplicate = true;
+                    break;
+                }
+            }
+
+            if (!isDuplicate)
+            {
+                uniqueTexts.Add(text);
+            }
+        }
+
+        return uniqueTexts;
+    }
+
+    /// <summary>
+    /// Calculate text similarity using Levenshtein distance (0.0 = completely different, 1.0 = identical).
+    /// </summary>
+    private static double CalculateTextSimilarity(string text1, string text2)
+    {
+        if (string.IsNullOrEmpty(text1) || string.IsNullOrEmpty(text2))
+            return 0.0;
+
+        var maxLen = Math.Max(text1.Length, text2.Length);
+        if (maxLen == 0) return 1.0;
+
+        var distance = LevenshteinDistance(text1.ToLowerInvariant(), text2.ToLowerInvariant());
+        return 1.0 - ((double)distance / maxLen);
+    }
+
+    /// <summary>
+    /// Calculate Levenshtein distance between two strings.
+    /// </summary>
+    private static int LevenshteinDistance(string s1, string s2)
+    {
+        var len1 = s1.Length;
+        var len2 = s2.Length;
+        var matrix = new int[len1 + 1, len2 + 1];
+
+        for (int i = 0; i <= len1; i++)
+            matrix[i, 0] = i;
+        for (int j = 0; j <= len2; j++)
+            matrix[0, j] = j;
+
+        for (int i = 1; i <= len1; i++)
+        {
+            for (int j = 1; j <= len2; j++)
+            {
+                var cost = s1[i - 1] == s2[j - 1] ? 0 : 1;
+                matrix[i, j] = Math.Min(
+                    Math.Min(matrix[i - 1, j] + 1, matrix[i, j - 1] + 1),
+                    matrix[i - 1, j - 1] + cost
+                );
+            }
+        }
+
+        return matrix[len1, len2];
     }
 
     /// <summary>

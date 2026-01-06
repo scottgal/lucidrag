@@ -122,7 +122,7 @@ class Program
         var stripOutputArg = new Argument<string?>("output", () => null, "Output path for PNG (default: <image>_strip.png)");
         var maxFramesOpt = new Option<int>("--max-frames", () => 10, "Maximum frames to include");
         var dedupeOpt = new Option<bool>("--dedupe", () => false, "Deduplicate similar frames");
-        var modeOpt = new Option<string>("--mode", () => "auto", "Strip mode: auto, ocr (text-changes only), motion (keyframes for inference)");
+        var modeOpt = new Option<string>("--mode", () => "auto", "Strip mode: auto, ocr (text-changes only), motion (keyframes), text-only (bounding boxes only)");
         exportStripCmd.AddArgument(stripImageArg);
         exportStripCmd.AddArgument(stripOutputArg);
         exportStripCmd.AddOption(maxFramesOpt);
@@ -1826,7 +1826,7 @@ class Program
         {
             if (!File.Exists(imagePath))
             {
-                Console.Error.WriteLine($"File not found: {imagePath}");
+                Spectre.Console.AnsiConsole.MarkupLine($"[red]Error:[/] File not found: {Spectre.Console.Markup.Escape(imagePath)}");
                 return;
             }
 
@@ -1834,7 +1834,7 @@ class Program
 
             if (image.Frames.Count <= 1)
             {
-                Console.Error.WriteLine("Image is not animated (single frame)");
+                Spectre.Console.AnsiConsole.MarkupLine("[yellow]Warning:[/] Image is not animated (single frame)");
                 return;
             }
 
@@ -1860,20 +1860,50 @@ class Program
                 case "ocr":
                     // OCR mode: Very aggressive deduplication, only keep frames where text changed
                     // Uses subtitle-aware similarity with very low threshold (0.85)
-                    Console.WriteLine($"Deduplicating {allFrames.Count} frames (OCR mode - text changes only)...");
+                    Spectre.Console.AnsiConsole.MarkupLine($"[dim]Deduplicating[/] [cyan]{allFrames.Count}[/] [dim]frames (OCR mode - text changes only)...[/]");
                     frames = DeduplicateFramesOcrMode(allFrames, 0.85);
                     modeName = "ocr";
-                    Console.WriteLine($"  Reduced to {frames.Count} unique text frames");
+                    Spectre.Console.AnsiConsole.MarkupLine($"  [green]Reduced to[/] [cyan]{frames.Count}[/] [green]unique text frames[/]");
                     break;
 
                 case "motion":
                     // Motion mode: Keep keyframes showing full motion progression
                     // Uses standard similarity with moderate threshold (0.92)
-                    Console.WriteLine($"Extracting {maxFrames} keyframes from {allFrames.Count} frames (motion mode)...");
+                    Spectre.Console.AnsiConsole.MarkupLine($"[dim]Extracting[/] [cyan]{maxFrames}[/] [dim]keyframes from[/] [cyan]{allFrames.Count}[/] [dim]frames (motion mode)...[/]");
                     frames = ExtractMotionKeyframes(allFrames, maxFrames);
                     modeName = "motion";
-                    Console.WriteLine($"  Extracted {frames.Count} keyframes for motion inference");
+                    Spectre.Console.AnsiConsole.MarkupLine($"  [green]Extracted[/] [cyan]{frames.Count}[/] [green]keyframes for motion inference[/]");
                     break;
+
+                case "text-only":
+                case "textonly":
+                    // Text-only mode: Extract ONLY text bounding boxes for efficient OCR
+                    // Creates a compact vertical strip of just the text regions
+                    Spectre.Console.AnsiConsole.MarkupLine($"[dim]Extracting text bounding boxes from[/] [cyan]{allFrames.Count}[/] [dim]frames...[/]");
+
+                    // Use the TextOnlyStripGenerator
+                    var textOnlyGen = new Mostlylucid.DocSummarizer.Images.Services.Ocr.TextOnlyStripGenerator();
+                    var textOnlyResult = await textOnlyGen.GenerateTextOnlyStripAsync(imagePath, maxFrames);
+
+                    // Save the text-only strip
+                    var textOnlySuffix = "_textonly_strip";
+                    var textOnlyOutput = outputPath ?? Path.Combine(
+                        Path.GetDirectoryName(imagePath) ?? ".",
+                        Path.GetFileNameWithoutExtension(imagePath) + textOnlySuffix + ".png");
+
+                    using (var textOnlyStream = File.Create(textOnlyOutput))
+                    {
+                        await textOnlyResult.StripImage.SaveAsync(textOnlyStream, new PngEncoder());
+                    }
+
+                    Spectre.Console.AnsiConsole.MarkupLine($"[green]✓ Saved text-only strip to:[/] [link]{Spectre.Console.Markup.Escape(textOnlyOutput)}[/]");
+                    Spectre.Console.AnsiConsole.MarkupLine($"  [cyan]{textOnlyResult.TotalFrames}[/] frames → [cyan]{textOnlyResult.TextSegments}[/] segments → [cyan]{textOnlyResult.TextRegionsExtracted}[/] text regions");
+                    Spectre.Console.AnsiConsole.MarkupLine($"  [dim]Clear frames detected:[/] [cyan]{textOnlyResult.ClearFramesDetected}[/]");
+                    Spectre.Console.AnsiConsole.MarkupLine($"  [dim]Strip dimensions:[/] [cyan]{textOnlyResult.StripImage.Width}x{textOnlyResult.StripImage.Height}[/]");
+
+                    textOnlyResult.StripImage.Dispose();
+                    foreach (var f in allFrames) f.Dispose();
+                    return; // Early return since we handled everything
 
                 default:
                     // Fallback: evenly spaced frames
@@ -1892,7 +1922,7 @@ class Program
 
             if (frames.Count == 0)
             {
-                Console.Error.WriteLine("No frames extracted");
+                Spectre.Console.AnsiConsole.MarkupLine("[red]Error:[/] No frames extracted");
                 return;
             }
 
@@ -1920,12 +1950,12 @@ class Program
             using var fileStream = File.Create(finalOutput);
             var encoder = new PngEncoder();
             await strip.SaveAsync(fileStream, encoder);
-            Console.WriteLine($"✓ Saved {modeName} strip to: {finalOutput}");
-            Console.WriteLine($"  Dimensions: {strip.Width}x{strip.Height} ({frames.Count} frames)");
+            Spectre.Console.AnsiConsole.MarkupLine($"[green]✓ Saved {modeName} strip to:[/] [link]{Spectre.Console.Markup.Escape(finalOutput)}[/]");
+            Spectre.Console.AnsiConsole.MarkupLine($"  [dim]Dimensions:[/] [cyan]{strip.Width}x{strip.Height}[/] ([cyan]{frames.Count}[/] frames)");
         }
         catch (Exception ex)
         {
-            Console.Error.WriteLine($"Error: {ex.Message}");
+            Spectre.Console.AnsiConsole.MarkupLine($"[red]Error:[/] {Spectre.Console.Markup.Escape(ex.Message)}");
         }
     }
 

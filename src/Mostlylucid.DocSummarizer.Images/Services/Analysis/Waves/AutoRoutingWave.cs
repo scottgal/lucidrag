@@ -327,8 +327,8 @@ public class AutoRoutingWave : IAnalysisWave
             }
         });
 
-        // Check if this is an animated GIF - for animated GIFs we should always run OCR
-        // because Florence-2 only reads one frame, but subtitles appear across many frames
+        // Check if this is an animated GIF - for animated GIFs we run multi-frame OCR
+        // Florence-2 now processes all frames in parallel, but Tesseract voting adds accuracy
         var isAnimated = context.GetValue<bool>("identity.is_animated");
         var frameCount = context.GetValue<int>("identity.frame_count");
         var isAnimatedGif = isAnimated && frameCount > 1;
@@ -384,29 +384,49 @@ public class AutoRoutingWave : IAnalysisWave
 
     /// <summary>
     /// Get list of waves to skip based on route and text complexity.
-    /// FAST + caption tier: Florence-2 only, skip all heavy OCR (UNLESS animated GIF)
-    /// FAST + other tiers: Still use Florence-2 but may escalate
-    /// BALANCED: Skip advanced OCR unless text tier is substantial+
-    /// QUALITY: Run everything
-    /// Animated GIFs NEVER skip OcrWave/AdvancedOcrWave - multi-frame OCR is essential for subtitles.
+    ///
+    /// For STATIC images:
+    /// - FAST + caption tier: Florence-2 only, skip Tesseract/CLIP
+    /// - FAST + other tiers: Florence-2 + Tesseract, skip CLIP
+    /// - BALANCED: Standard OCR pipeline
+    /// - QUALITY: Run everything
+    ///
+    /// For ANIMATED GIFs (filmstrip optimization):
+    /// - ALL routes: Use filmstrip mode for OCR (~10-15x faster)
+    /// - MlOcrWave: Fast OpenCV detection + cache frames (~100-200ms)
+    /// - VisionLlmWave: Create text-only strip + read with single LLM call (~1-2s)
+    /// - Skip per-frame OCR waves (OcrWave, AdvancedOcrWave) since filmstrip handles it
+    /// - NEVER skip VisionLlmWave - it's essential for filmstrip OCR
     /// </summary>
     private static List<string> GetSkipWaves(Route route, string textTier, bool isAnimatedGif = false)
     {
-        // Animated GIFs need multi-frame OCR regardless of route
-        // Florence-2 only reads one frame, so we need Tesseract for accurate subtitle extraction
+        // Animated GIFs use FILMSTRIP mode for OCR:
+        // 1. MlOcrWave extracts frames + runs OpenCV detection (fast, ~100-200ms)
+        // 2. MlOcrWave caches frames/regions and defers to VisionLLM
+        // 3. VisionLlmWave creates text-only strip and reads it (single LLM call, ~1-2s)
+        // 4. Total: ~2-3 seconds instead of 27+ seconds with per-frame Florence-2 OCR
+        //
+        // NEVER skip VisionLlmWave for animated GIFs - it handles the filmstrip OCR!
         if (isAnimatedGif)
         {
             return route switch
             {
                 Route.Fast => new List<string>
                 {
-                    // For animated GIFs, only skip non-OCR expensive waves
+                    // For animated GIFs in filmstrip mode:
+                    // - Keep MlOcrWave (does fast OpenCV detection + caches frames)
+                    // - Keep VisionLlmWave (reads the filmstrip - this is where OCR happens!)
+                    // - Skip heavy per-frame OCR waves (filmstrip replaces them)
+                    "OcrWave",              // Skip per-frame Tesseract (filmstrip replaces it)
+                    "AdvancedOcrWave",      // Skip advanced OCR (filmstrip handles subtitles)
                     "OcrVerificationWave",  // Skip verification
                     "ClipEmbeddingWave",    // Skip CLIP
                     "FaceDetectionWave"     // Skip face detection
                 },
                 Route.Balanced => new List<string>
                 {
+                    // Balanced still uses filmstrip but may run some Tesseract
+                    "AdvancedOcrWave",      // Skip advanced OCR
                     "OcrVerificationWave",
                     "ClipEmbeddingWave"
                 },

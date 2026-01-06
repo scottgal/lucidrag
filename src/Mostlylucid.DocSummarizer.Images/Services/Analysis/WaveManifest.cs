@@ -162,7 +162,7 @@ public static class WaveRegistry
         new WaveManifest
         {
             WaveName = "MlOcrWave",
-            Priority = 28,
+            Priority = 65, // Before MotionWave/Florence2Wave (55), VisionLlmWave (50)
             Tags = ["ocr", "ml", "opencv", "content"],
             Emits = [
                 // OpenCV fast detection signals
@@ -174,13 +174,14 @@ public static class WaveRegistry
                 "ocr.ml.has_text",
                 "ocr.ml.frames_with_text",
                 "ocr.ml.skipped",
+                "ocr.ml.defer_to_visionllm",
                 // Escalation signals for downstream OCR
                 "ocr.escalation.run_tesseract",
                 "ocr.escalation.skip_tesseract"
             ],
             Requires = [],
             Optional = ["identity.is_animated", "identity.frame_count", "content.text_likeliness"],
-            Description = "Fast OpenCV MSER + Florence-2 text detection before Tesseract (caches text regions for targeted OCR)"
+            Description = "Fast OpenCV MSER detection for animated GIFs (filmstrip mode - caches frames for VisionLlmWave)"
         },
 
         new WaveManifest

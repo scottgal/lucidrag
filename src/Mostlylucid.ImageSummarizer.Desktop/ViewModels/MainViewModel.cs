@@ -612,6 +612,17 @@ public partial class MainViewModel : ObservableObject
             if (!string.IsNullOrEmpty(SelectedRoute))
             {
                 AddLogEntry($"🎯 Route: {SelectedRoute.ToUpperInvariant()} ({RouteReason})", 1.0);
+
+                // Update status bar to show actual route used (instead of static "Full analysis")
+                var routeUpper = SelectedRoute.ToUpperInvariant();
+                var wavesUsed = routeUpper switch
+                {
+                    "FAST" => "Florence-2 + filmstrip",
+                    "BALANCED" => "Florence-2 + OCR + filmstrip",
+                    "QUALITY" => "Vision LLM + Florence-2 + OCR",
+                    _ => "auto-selected"
+                };
+                FallbackMode = $"{routeUpper} route ({wavesUsed})";
             }
 
             // Log all signals from the analysis and flash model lights

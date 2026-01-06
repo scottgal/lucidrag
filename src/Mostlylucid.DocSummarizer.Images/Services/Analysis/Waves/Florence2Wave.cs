@@ -42,12 +42,29 @@ public class Florence2Wave : IAnalysisWave
 
     /// <summary>
     /// Florence-2 should run if it's enabled and available.
+    /// For animated GIFs: Skip if MlOcrWave is using filmstrip mode (VisionLlmWave will handle OCR).
     /// It's a fast alternative to Vision LLM that works offline.
     /// </summary>
     public bool ShouldRun(string imagePath, AnalysisContext context)
     {
         // Check if Florence-2 is enabled
-        return Config.EnableFlorence2;
+        if (!Config.EnableFlorence2)
+            return false;
+
+        // OPTIMIZATION: For animated GIFs in filmstrip mode, skip Florence-2 per-frame OCR
+        // MlOcrWave has cached frames and VisionLlmWave will create a text-only strip
+        // This saves ~15-20 seconds of per-frame Florence-2 processing
+        var isAnimated = context.GetValue<bool>("identity.is_animated");
+        var frameCount = context.GetValue<int>("identity.frame_count");
+        var deferToVisionLlm = context.GetValue<bool>("ocr.ml.defer_to_visionllm");
+
+        if (isAnimated && frameCount > 1 && deferToVisionLlm)
+        {
+            _logger?.LogDebug("Skipping Florence2Wave: filmstrip mode active (MlOcrWave deferred to VisionLLM)");
+            return false;
+        }
+
+        return true;
     }
 
     public async Task<IEnumerable<Signal>> AnalyzeAsync(
