@@ -131,8 +131,12 @@ public class VisionLlmWave : IAnalysisWave
             var textLikeliness = context.GetValue<double>("content.text_likeliness");
             var ocrText = context.GetValue<string>("ocr.full_text") ?? context.GetValue<string>("ocr.voting.consensus_text");
 
-            // If there's likely text and OCR is unreliable, use Vision LLM to read it
-            if (textLikeliness > 0.3 || ocrGarbled || !string.IsNullOrEmpty(ocrText))
+            // ALWAYS attempt text extraction for animated images - subtitles often appear in later frames
+            // that text detection (which only looks at first frame) misses
+            var shouldExtractText = textLikeliness > 0.3 || ocrGarbled || !string.IsNullOrEmpty(ocrText) || isAnimated;
+
+            // If there's likely text, OCR is unreliable, or it's animated (may have subtitles)
+            if (shouldExtractText)
             {
                 // For animated images, create a mosaic of all unique frames so LLM can read all text
                 string textImageBase64 = imageBase64;
@@ -140,19 +144,53 @@ public class VisionLlmWave : IAnalysisWave
                 int textFrameCount = 1;
 
                 var frames = context.GetCached<List<Image<Rgba32>>>("ocr.frames");
+
+                // Get OpenCV-detected text regions per frame (if available)
+                var perFrameRegions = context.GetCached<Dictionary<int, List<Dictionary<string, int>>>>("ocr.opencv.per_frame_regions");
+
                 if (frames != null && frames.Count > 1)
                 {
                     try
                     {
-                        // Create a horizontal strip of frames to preserve temporal order (subtitles read left-to-right)
-                        using var strip = CreateFrameStrip(frames);
-                        var tempPath = Path.Combine(Path.GetTempPath(), $"vllm_strip_{Guid.NewGuid()}.png");
-                        await strip.SaveAsPngAsync(tempPath, ct);
-                        textImageBase64 = Convert.ToBase64String(await File.ReadAllBytesAsync(tempPath, ct));
-                        File.Delete(tempPath);
-                        imageSource = "frame_strip";
-                        textFrameCount = frames.Count;
-                        _logger?.LogInformation("Created strip of {FrameCount} frames for Vision LLM text extraction", textFrameCount);
+                        // Use text-region-only filmstrip if we have OpenCV detection data
+                        if (perFrameRegions != null && perFrameRegions.Count > 0)
+                        {
+                            // Create filmstrip of ONLY the text regions - much more efficient
+                            using var strip = CreateTextRegionFilmstrip(frames, perFrameRegions);
+                            if (strip != null)
+                            {
+                                var tempPath = Path.Combine(Path.GetTempPath(), $"vllm_text_strip_{Guid.NewGuid()}.png");
+                                await strip.SaveAsPngAsync(tempPath, ct);
+                                textImageBase64 = Convert.ToBase64String(await File.ReadAllBytesAsync(tempPath, ct));
+                                File.Delete(tempPath);
+                                imageSource = "text_region_strip";
+                                textFrameCount = perFrameRegions.Count;
+                                _logger?.LogInformation("Created text-region-only strip from {FrameCount} frames for Vision LLM", textFrameCount);
+                            }
+                            else
+                            {
+                                // Fallback to full frame strip
+                                using var fullStrip = CreateFrameStrip(frames);
+                                var tempPath = Path.Combine(Path.GetTempPath(), $"vllm_strip_{Guid.NewGuid()}.png");
+                                await fullStrip.SaveAsPngAsync(tempPath, ct);
+                                textImageBase64 = Convert.ToBase64String(await File.ReadAllBytesAsync(tempPath, ct));
+                                File.Delete(tempPath);
+                                imageSource = "frame_strip";
+                                textFrameCount = frames.Count;
+                            }
+                        }
+                        else
+                        {
+                            // No OpenCV regions - create a horizontal strip of frames to preserve temporal order
+                            using var strip = CreateFrameStrip(frames);
+                            var tempPath = Path.Combine(Path.GetTempPath(), $"vllm_strip_{Guid.NewGuid()}.png");
+                            await strip.SaveAsPngAsync(tempPath, ct);
+                            textImageBase64 = Convert.ToBase64String(await File.ReadAllBytesAsync(tempPath, ct));
+                            File.Delete(tempPath);
+                            imageSource = "frame_strip";
+                            textFrameCount = frames.Count;
+                            _logger?.LogInformation("Created strip of {FrameCount} frames for Vision LLM text extraction", textFrameCount);
+                        }
                     }
                     catch (Exception ex)
                     {
@@ -195,7 +233,7 @@ public class VisionLlmWave : IAnalysisWave
                         {
                             ["model"] = Config.VisionLlmModel ?? "llava",
                             ["ocr_was_garbled"] = ocrGarbled,
-                            ["fallback_reason"] = ocrGarbled ? "ocr_quality_poor" : "text_likely",
+                            ["fallback_reason"] = isAnimated ? "animated_subtitle_check" : (ocrGarbled ? "ocr_quality_poor" : "text_likely"),
                             ["image_source"] = imageSource
                         }
                     });
@@ -1041,6 +1079,147 @@ If no subtitle text exists, respond with 'NO_TEXT'.";
         }
 
         return line;
+    }
+
+    /// <summary>
+    /// Creates a filmstrip showing ONLY the text regions from each frame.
+    /// Uses OpenCV-detected bounding boxes to crop to text areas only.
+    /// This is much more efficient than full-frame strips as it:
+    /// - Reduces noise/background that confuses OCR
+    /// - Creates smaller images (faster to process)
+    /// - Focuses Vision LLM attention on actual text
+    /// </summary>
+    private Image<Rgba32>? CreateTextRegionFilmstrip(
+        List<Image<Rgba32>> frames,
+        Dictionary<int, List<Dictionary<string, int>>> perFrameRegions)
+    {
+        if (frames.Count == 0 || perFrameRegions.Count == 0)
+            return null;
+
+        var croppedRegions = new List<Image<Rgba32>>();
+
+        try
+        {
+            // For each frame with detected text regions, extract and merge the regions
+            foreach (var kvp in perFrameRegions.OrderBy(k => k.Key))
+            {
+                var frameIndex = kvp.Key;
+                var regions = kvp.Value;
+
+                if (frameIndex >= frames.Count || regions.Count == 0)
+                    continue;
+
+                var frame = frames[frameIndex];
+
+                // Merge all text regions in this frame into one bounding box
+                var mergedBounds = MergeTextRegions(regions, frame.Width, frame.Height);
+
+                // Crop the frame to the merged text region
+                var cropRect = new Rectangle(
+                    mergedBounds.X,
+                    mergedBounds.Y,
+                    mergedBounds.Width,
+                    mergedBounds.Height);
+
+                var cropped = frame.Clone(ctx => ctx.Crop(cropRect));
+                croppedRegions.Add(cropped);
+
+                _logger?.LogDebug("Frame {Index}: cropped text region {Width}x{Height} from {OrigW}x{OrigH}",
+                    frameIndex, cropRect.Width, cropRect.Height, frame.Width, frame.Height);
+            }
+
+            if (croppedRegions.Count == 0)
+                return null;
+
+            // Normalize heights for a clean filmstrip (use tallest region as reference)
+            var maxHeight = croppedRegions.Max(r => r.Height);
+            var targetHeight = Math.Min(maxHeight, 128); // Cap height for efficiency
+
+            var normalizedRegions = new List<Image<Rgba32>>();
+            foreach (var region in croppedRegions)
+            {
+                // Scale to target height while maintaining aspect ratio
+                var scale = (double)targetHeight / region.Height;
+                var newWidth = Math.Max(20, (int)(region.Width * scale));
+
+                var normalized = region.Clone(ctx => ctx.Resize(newWidth, targetHeight));
+                normalizedRegions.Add(normalized);
+                region.Dispose();
+            }
+
+            // Calculate strip dimensions
+            var totalWidth = normalizedRegions.Sum(r => r.Width) + (normalizedRegions.Count - 1) * 4; // 4px gap
+
+            // Create the filmstrip
+            var strip = new Image<Rgba32>(totalWidth, targetHeight);
+            strip.Mutate(ctx => ctx.BackgroundColor(Color.Black));
+
+            var xOffset = 0;
+            foreach (var region in normalizedRegions)
+            {
+                strip.Mutate(ctx => ctx.DrawImage(region, new Point(xOffset, 0), 1f));
+                xOffset += region.Width + 4;
+                region.Dispose();
+            }
+
+            _logger?.LogInformation(
+                "Created text-region filmstrip: {Width}x{Height} from {RegionCount} text regions",
+                strip.Width, strip.Height, croppedRegions.Count);
+
+            return strip;
+        }
+        catch (Exception ex)
+        {
+            _logger?.LogWarning(ex, "Failed to create text region filmstrip");
+
+            // Cleanup on error
+            foreach (var region in croppedRegions)
+                region.Dispose();
+
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// Merges multiple text regions into a single bounding box with padding.
+    /// </summary>
+    private (int X, int Y, int Width, int Height) MergeTextRegions(
+        List<Dictionary<string, int>> regions,
+        int imageWidth,
+        int imageHeight)
+    {
+        if (regions.Count == 0)
+            return (0, 0, imageWidth, imageHeight);
+
+        var minX = int.MaxValue;
+        var minY = int.MaxValue;
+        var maxX = 0;
+        var maxY = 0;
+
+        foreach (var region in regions)
+        {
+            var x = region.GetValueOrDefault("x", 0);
+            var y = region.GetValueOrDefault("y", 0);
+            var w = region.GetValueOrDefault("width", 0);
+            var h = region.GetValueOrDefault("height", 0);
+
+            minX = Math.Min(minX, x);
+            minY = Math.Min(minY, y);
+            maxX = Math.Max(maxX, x + w);
+            maxY = Math.Max(maxY, y + h);
+        }
+
+        // Add padding (10% of dimensions or 10px minimum)
+        var padX = Math.Max(10, (int)((maxX - minX) * 0.1));
+        var padY = Math.Max(10, (int)((maxY - minY) * 0.1));
+
+        // Apply padding and clamp to image bounds
+        minX = Math.Max(0, minX - padX);
+        minY = Math.Max(0, minY - padY);
+        maxX = Math.Min(imageWidth, maxX + padX);
+        maxY = Math.Min(imageHeight, maxY + padY);
+
+        return (minX, minY, maxX - minX, maxY - minY);
     }
 
     /// <summary>

@@ -1,6 +1,7 @@
 using Microsoft.Extensions.Logging;
 using Mostlylucid.DocSummarizer.Images.Models.Dynamic;
 using Mostlylucid.DocSummarizer.Images.Services.Storage;
+using Mostlylucid.DocSummarizer.Images.Services.Vision;
 
 namespace Mostlylucid.DocSummarizer.Images.Services.Analysis.Waves;
 
@@ -9,16 +10,22 @@ namespace Mostlylucid.DocSummarizer.Images.Services.Analysis.Waves;
 /// Runs early (after Identity/Color) to route images through fast/balanced/quality paths.
 ///
 /// Routes:
-/// - fast: Simple static images → Florence2 only, skip advanced OCR
-/// - balanced: Standard images → Florence2 + OCR, escalate to VisionLLM if needed
-/// - quality: Complex images (animation, text, faces) → Full pipeline
+/// - fast: Simple static images → Florence2 + OpenCV only, skip Tesseract OCR
+/// - balanced: Standard images → Florence2 + Tesseract OCR, escalate to VisionLLM if needed
+/// - quality: Complex images (animation, heavy text, documents) → Full pipeline
+///
+/// Uses fast OpenCV MSER detection (~5-20ms) to assess text quantity for routing:
+/// - Low text coverage (&lt;10%): FAST route (Florence-2 captions sufficient)
+/// - Medium coverage (10-40%): BALANCED route (need Tesseract for accuracy)
+/// - High coverage (&gt;40%): QUALITY route (document scan needs full pipeline)
 ///
 /// This implements "probability proposes, determinism persists" at the routing level:
-/// fast deterministic signals (identity, color, edge density) gate expensive operations.
+/// fast deterministic signals (identity, color, text detection) gate expensive operations.
 /// </summary>
 public class AutoRoutingWave : IAnalysisWave
 {
     private readonly ISignalDatabase? _signalDb;
+    private readonly OpenCvTextDetector? _textDetector;
     private readonly ILogger<AutoRoutingWave>? _logger;
 
     public string Name => "AutoRoutingWave";
@@ -30,6 +37,7 @@ public class AutoRoutingWave : IAnalysisWave
         ILogger<AutoRoutingWave>? logger = null)
     {
         _signalDb = signalDb;
+        _textDetector = new OpenCvTextDetector(logger as ILogger<OpenCvTextDetector>);
         _logger = logger;
     }
 
@@ -45,6 +53,8 @@ public class AutoRoutingWave : IAnalysisWave
         var frameCount = context.GetValue<int>("identity.frame_count");
         var pixelCount = context.GetValue<int>("identity.pixel_count");
         var format = context.GetValue<string>("identity.format") ?? "";
+        var imageWidth = context.GetValue<int>("identity.width");
+        var imageHeight = context.GetValue<int>("identity.height");
 
         var textLikeliness = context.GetValue<double>("content.text_likeliness");
         var edgeDensity = context.GetValue<double>("quality.edge_density");
@@ -57,13 +67,57 @@ public class AutoRoutingWave : IAnalysisWave
         if (cachedRoute != null)
         {
             _logger?.LogDebug("Using cached route '{Route}' for image {Hash}", cachedRoute, imageHash?.Substring(0, 8));
-            return Task.FromResult(EmitRoutingSignals(signals, cachedRoute.Value, "cached_decision"));
+            return Task.FromResult(EmitRoutingSignals(signals, cachedRoute.Value, "cached_decision", 0, 0));
         }
 
-        // Route selection logic based on fast signals
+        // FAST text detection with OpenCV MSER (~5-20ms)
+        // This gives us accurate text quantity info for routing decisions
+        double textCoverage = 0;
+        int textRegionCount = 0;
+        bool hasSubtitles = false;
+
+        if (_textDetector != null)
+        {
+            try
+            {
+                var detection = _textDetector.DetectTextRegions(imagePath);
+                textRegionCount = detection.TextRegionCount;
+                textCoverage = detection.TextAreaRatio;
+                hasSubtitles = _textDetector.HasSubtitleRegion(imagePath);
+
+                // Cache detection results for downstream waves (MlOcrWave, etc.)
+                if (detection.TextBoundingBoxes.Count > 0)
+                {
+                    var boxesData = detection.TextBoundingBoxes.Select(b => new Dictionary<string, int>
+                    {
+                        ["x"] = b.X, ["y"] = b.Y, ["width"] = b.Width, ["height"] = b.Height
+                    }).ToList();
+                    context.SetCached("ocr.opencv.text_regions", boxesData);
+                }
+
+                signals.Add(new Signal
+                {
+                    Key = "route.text_detection",
+                    Value = new { regions = textRegionCount, coverage = textCoverage, hasSubtitles, ms = detection.DetectionTimeMs },
+                    Confidence = detection.Confidence,
+                    Source = Name,
+                    Tags = new List<string> { "routing", "text", "opencv" }
+                });
+
+                _logger?.LogDebug("Fast text detection: {Regions} regions, {Coverage:P1} coverage, subtitles={Subtitles}",
+                    textRegionCount, textCoverage, hasSubtitles);
+            }
+            catch (Exception ex)
+            {
+                _logger?.LogWarning(ex, "Fast text detection failed, using fallback signals");
+            }
+        }
+
+        // Route selection logic based on fast signals + text detection
         var (route, reasons) = SelectRoute(
             isAnimated, frameCount, pixelCount, format,
-            textLikeliness, edgeDensity, isGrayscale, contentType);
+            textLikeliness, edgeDensity, isGrayscale, contentType,
+            textCoverage, textRegionCount, hasSubtitles);
 
         _logger?.LogInformation(
             "Auto-routing: {Route} ({Reasons}) for {Path}",
@@ -75,39 +129,72 @@ public class AutoRoutingWave : IAnalysisWave
             CacheRoute(imageHash, route);
         }
 
-        return Task.FromResult(EmitRoutingSignals(signals, route, string.Join("; ", reasons)));
+        return Task.FromResult(EmitRoutingSignals(signals, route, string.Join("; ", reasons), textCoverage, textRegionCount));
     }
 
     /// <summary>
-    /// Select optimal route based on fast signals.
-    /// Returns route and list of reasons for the decision.
+    /// Select optimal route based on fast signals + OpenCV text detection.
+    /// Uses text coverage to determine OCR complexity needs:
+    /// - Low coverage (&lt;10%): FAST - Florence-2 sufficient for captions
+    /// - Medium coverage (10-40%): BALANCED - need Tesseract for accuracy
+    /// - High coverage (&gt;40%): QUALITY - document scan, full pipeline
     /// </summary>
     private (Route route, List<string> reasons) SelectRoute(
         bool isAnimated, int frameCount, int pixelCount, string format,
-        double textLikeliness, double edgeDensity, bool isGrayscale, string contentType)
+        double textLikeliness, double edgeDensity, bool isGrayscale, string contentType,
+        double textCoverage, int textRegionCount, bool hasSubtitles)
     {
         var reasons = new List<string>();
 
         // Quality indicators (any of these → quality path)
         var qualityIndicators = 0;
 
+        // HIGH TEXT COVERAGE = Document/Screenshot → needs quality OCR pipeline
+        if (textCoverage > 0.40)
+        {
+            qualityIndicators += 3; // Strong indicator
+            reasons.Add($"document_text:{textCoverage:P0}");
+        }
+        else if (textCoverage > 0.20)
+        {
+            qualityIndicators += 2;
+            reasons.Add($"significant_text:{textCoverage:P0}");
+        }
+        else if (textCoverage > 0.10)
+        {
+            qualityIndicators++;
+            reasons.Add($"moderate_text:{textCoverage:P0}");
+        }
+
+        // Many text regions = complex layout (tables, multiple text blocks)
+        if (textRegionCount > 10)
+        {
+            qualityIndicators += 2;
+            reasons.Add($"complex_layout:{textRegionCount}regions");
+        }
+
         // Animated GIF with many frames needs full analysis
         if (isAnimated && frameCount > 3)
         {
-            qualityIndicators += 2;
-            reasons.Add($"animated:{frameCount}frames");
+            // But if it has subtitles, Florence-2 can handle it in FAST mode
+            if (hasSubtitles && textCoverage < 0.15)
+            {
+                reasons.Add($"animated_subtitles:{frameCount}f");
+                // Don't add quality indicators - FAST route can handle subtitles
+            }
+            else
+            {
+                qualityIndicators += 2;
+                reasons.Add($"animated:{frameCount}frames");
+            }
         }
 
-        // High text likeliness needs good OCR
-        if (textLikeliness > 0.5)
-        {
-            qualityIndicators += 2;
-            reasons.Add($"text_likely:{textLikeliness:F2}");
-        }
-        else if (textLikeliness > 0.2)
+        // High text likeliness (from edge analysis) combined with low OpenCV detection
+        // suggests stylized text that needs VisionLLM
+        if (textLikeliness > 0.5 && textCoverage < 0.05)
         {
             qualityIndicators++;
-            reasons.Add($"text_possible:{textLikeliness:F2}");
+            reasons.Add("stylized_text_likely");
         }
 
         // Complex content types need quality analysis
@@ -117,42 +204,49 @@ public class AutoRoutingWave : IAnalysisWave
             reasons.Add($"content_type:{contentType}");
         }
 
-        // High edge density = complex image
-        if (edgeDensity > 0.15)
+        // High edge density with many text regions = complex document
+        if (edgeDensity > 0.15 && textRegionCount > 5)
         {
             qualityIndicators++;
-            reasons.Add($"high_complexity:{edgeDensity:F2}");
+            reasons.Add($"complex_doc:{edgeDensity:F2}");
         }
 
-        // Large images need more careful analysis
-        if (pixelCount > 2_000_000)
+        // Large images with text need more careful analysis
+        if (pixelCount > 2_000_000 && textCoverage > 0.05)
         {
             qualityIndicators++;
-            reasons.Add("large_image");
+            reasons.Add("large_text_image");
         }
 
-        // Fast indicators (all of these → fast path)
+        // ========== FAST INDICATORS ==========
         var fastIndicators = 0;
 
-        // Static, simple images
-        if (!isAnimated && frameCount <= 1)
+        // LOW TEXT COVERAGE = Caption/meme/photo → Florence-2 sufficient
+        if (textCoverage < 0.10 && textRegionCount <= 3)
         {
-            fastIndicators++;
-            reasons.Add("static");
+            fastIndicators += 2;
+            reasons.Add($"minimal_text:{textCoverage:P0}");
         }
 
-        // Low text likeliness = skip heavy OCR
-        if (textLikeliness < 0.1)
+        // Static, simple images with little text
+        if (!isAnimated && frameCount <= 1 && textCoverage < 0.15)
         {
             fastIndicators++;
-            reasons.Add("no_text_expected");
+            reasons.Add("static_simple");
         }
 
-        // Simple grayscale images
-        if (isGrayscale && edgeDensity < 0.05)
+        // No text detected at all
+        if (textRegionCount == 0 && textLikeliness < 0.1)
+        {
+            fastIndicators += 2;
+            reasons.Add("no_text_detected");
+        }
+
+        // Subtitle GIF (text only in bottom region) - Florence-2 handles well
+        if (hasSubtitles && textCoverage < 0.15 && !contentType.Contains("Document"))
         {
             fastIndicators++;
-            reasons.Add("simple_grayscale");
+            reasons.Add("subtitle_only");
         }
 
         // Small images
@@ -162,25 +256,28 @@ public class AutoRoutingWave : IAnalysisWave
             reasons.Add("small_image");
         }
 
-        // Route decision
+        // ========== ROUTE DECISION ==========
+        // Priority: Quality if high text coverage, else Fast if low text coverage
         if (qualityIndicators >= 3)
         {
             return (Route.Quality, reasons);
         }
-        else if (qualityIndicators >= 1 || fastIndicators < 2)
+        else if (fastIndicators >= 3 || (fastIndicators >= 2 && qualityIndicators == 0))
         {
-            return (Route.Balanced, reasons);
+            return (Route.Fast, reasons);
         }
         else
         {
-            return (Route.Fast, reasons);
+            return (Route.Balanced, reasons);
         }
     }
 
     /// <summary>
     /// Emit routing signals that downstream waves can check.
     /// </summary>
-    private IEnumerable<Signal> EmitRoutingSignals(List<Signal> signals, Route route, string reason)
+    private IEnumerable<Signal> EmitRoutingSignals(
+        List<Signal> signals, Route route, string reason,
+        double textCoverage, int textRegionCount)
     {
         signals.Add(new Signal
         {
@@ -188,7 +285,12 @@ public class AutoRoutingWave : IAnalysisWave
             Value = route.ToString().ToLowerInvariant(),
             Confidence = 1.0,
             Source = Name,
-            Tags = new List<string> { "routing", "auto" }
+            Tags = new List<string> { "routing", "auto" },
+            Metadata = new Dictionary<string, object>
+            {
+                ["text_coverage"] = textCoverage,
+                ["text_regions"] = textRegionCount
+            }
         });
 
         signals.Add(new Signal
@@ -200,8 +302,33 @@ public class AutoRoutingWave : IAnalysisWave
             Tags = new List<string> { "routing" }
         });
 
+        // Text quantity tier for OCR decisions
+        // FAST: Florence-2 only, BALANCED: + Tesseract, QUALITY: + Advanced pipeline
+        var textTier = textCoverage switch
+        {
+            < 0.10 => "caption",     // Minimal text - Florence-2 sufficient
+            < 0.25 => "moderate",    // Some text - need Tesseract
+            < 0.40 => "substantial", // Lots of text - full OCR
+            _ => "document"          // Document scan - quality pipeline
+        };
+
+        signals.Add(new Signal
+        {
+            Key = "route.text_tier",
+            Value = textTier,
+            Confidence = 1.0,
+            Source = Name,
+            Tags = new List<string> { "routing", "text" },
+            Metadata = new Dictionary<string, object>
+            {
+                ["coverage"] = textCoverage,
+                ["regions"] = textRegionCount,
+                ["ocr_recommended"] = textTier != "caption" // True if Tesseract recommended
+            }
+        });
+
         // Emit skip signals for downstream waves to check
-        var skipWaves = GetSkipWaves(route);
+        var skipWaves = GetSkipWaves(route, textTier);
         signals.Add(new Signal
         {
             Key = "route.skip_waves",
@@ -212,6 +339,7 @@ public class AutoRoutingWave : IAnalysisWave
             Metadata = new Dictionary<string, object>
             {
                 ["route"] = route.ToString(),
+                ["text_tier"] = textTier,
                 ["skip_count"] = skipWaves.Count
             }
         });
@@ -249,25 +377,44 @@ public class AutoRoutingWave : IAnalysisWave
     }
 
     /// <summary>
-    /// Get list of waves to skip based on route.
+    /// Get list of waves to skip based on route and text complexity.
+    /// FAST + caption tier: Florence-2 only, skip all heavy OCR
+    /// FAST + other tiers: Still use Florence-2 but may escalate
+    /// BALANCED: Skip advanced OCR unless text tier is substantial+
+    /// QUALITY: Run everything
     /// </summary>
-    private static List<string> GetSkipWaves(Route route)
+    private static List<string> GetSkipWaves(Route route, string textTier)
     {
         return route switch
         {
+            Route.Fast when textTier == "caption" => new List<string>
+            {
+                // Caption-only: Florence-2 is sufficient, skip ALL heavy processing
+                "OcrWave",              // Skip Tesseract - Florence-2 handles captions
+                "AdvancedOcrWave",      // Skip multi-frame OCR
+                "OcrVerificationWave",  // Skip OCR verification
+                "TextDetectionWave",    // Already did fast detection in routing
+                "ClipEmbeddingWave",    // Skip CLIP (expensive)
+                "FaceDetectionWave"     // Skip face detection
+            },
             Route.Fast => new List<string>
             {
-                "VisionLlmWave",        // Use Florence2 only
+                // FAST with more text: Use Florence-2 but keep Tesseract available
                 "AdvancedOcrWave",      // Skip multi-frame OCR
                 "OcrVerificationWave",  // Skip OCR verification
                 "ClipEmbeddingWave",    // Skip CLIP (expensive)
                 "FaceDetectionWave"     // Skip face detection
             },
-            Route.Balanced => new List<string>
+            Route.Balanced when textTier is "caption" or "moderate" => new List<string>
             {
-                "AdvancedOcrWave",      // Skip advanced OCR unless escalated
+                "AdvancedOcrWave",      // Skip advanced OCR for light text
                 "OcrVerificationWave",  // Skip verification unless needed
                 "ClipEmbeddingWave"     // Skip CLIP
+            },
+            Route.Balanced => new List<string>
+            {
+                // Balanced with substantial text: enable most OCR
+                "ClipEmbeddingWave"     // Still skip CLIP
             },
             Route.Quality => new List<string>(), // Run everything
             _ => new List<string>()

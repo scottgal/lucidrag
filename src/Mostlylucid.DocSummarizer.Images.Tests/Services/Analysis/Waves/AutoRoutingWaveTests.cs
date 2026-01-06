@@ -279,8 +279,11 @@ public class AutoRoutingWaveTests : IDisposable
         var routeSignal = signals.First(s => s.Key == "route.selected");
         if (routeSignal.Value?.ToString() == "fast")
         {
-            signals.Should().Contain(s => s.Key == "route.skip.VisionLlmWave");
+            // FAST route with caption tier skips heavy OCR but keeps Florence-2 (VisionLlmWave)
+            // Expected skips: OcrWave, AdvancedOcrWave, ClipEmbeddingWave, FaceDetectionWave
+            signals.Should().Contain(s => s.Key == "route.skip.AdvancedOcrWave");
             signals.Should().Contain(s => s.Key == "route.skip.ClipEmbeddingWave");
+            signals.Should().Contain(s => s.Key == "route.skip.FaceDetectionWave");
 
             _output.WriteLine("Skip flags emitted for fast route:");
             foreach (var skipSignal in signals.Where(s => s.Key.StartsWith("route.skip.")))
@@ -288,6 +291,11 @@ public class AutoRoutingWaveTests : IDisposable
                 _output.WriteLine($"  {skipSignal.Key}");
             }
         }
+
+        // Also verify text tier signal is emitted
+        signals.Should().Contain(s => s.Key == "route.text_tier");
+        var textTierSignal = signals.First(s => s.Key == "route.text_tier");
+        _output.WriteLine($"Text tier: {textTierSignal.Value}");
     }
 
     #region Helper Methods
