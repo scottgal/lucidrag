@@ -861,8 +861,9 @@ class Program
             output.Add(text.Trim());
         }
 
-        // Get Vision LLM caption
-        var caption = profile.GetValue<string>("vision.llm.caption");
+        // Get best caption (Vision LLM takes precedence over Florence2)
+        var caption = profile.GetValue<string>("vision.llm.caption")
+                   ?? profile.GetValue<string>("florence2.caption");
         if (!string.IsNullOrWhiteSpace(caption))
         {
             output.Add($"Caption: {caption}");

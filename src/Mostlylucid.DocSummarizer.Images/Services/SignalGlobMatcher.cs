@@ -19,15 +19,16 @@ public static class SignalGlobMatcher
     {
         ["motion"] = new[] { "motion.*", "complexity.*" },
         ["color"] = new[] { "color.*" },
-        ["text"] = new[] { "content.text*", "content.extracted*", "ocr.*", "vision.llm.text" },
+        ["text"] = new[] { "content.text*", "content.extracted*", "ocr.*", "vision.llm.text", "florence2.ocr_text" },
         ["quality"] = new[] { "quality.*" },
         ["identity"] = new[] { "identity.*" },
-        ["vision"] = new[] { "vision.*" },
+        ["vision"] = new[] { "vision.*", "florence2.*" },
         ["faces"] = new[] { "face.*", "vision.llm.entity.person" },
         ["all"] = new[] { "*" },
         // Use case specific collections
-        ["alttext"] = new[] { "vision.llm.caption", "vision.llm.text", "ocr.*", "content.extracted_text", "motion.summary", "identity.format", "identity.is_animated" },
-        ["tool"] = new[] { "identity.*", "color.dominant*", "motion.*", "vision.llm.*", "ocr.voting.*" }
+        ["alttext"] = new[] { "vision.llm.caption", "florence2.caption", "vision.llm.text", "ocr.*", "content.extracted_text", "motion.summary", "identity.format", "identity.is_animated" },
+        ["tool"] = new[] { "identity.*", "color.dominant*", "motion.*", "vision.llm.*", "florence2.*", "ocr.voting.*" },
+        ["caption"] = new[] { "vision.llm.caption", "florence2.caption" }
     };
 
     /// <summary>

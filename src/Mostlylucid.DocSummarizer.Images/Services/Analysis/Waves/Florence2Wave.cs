@@ -123,20 +123,9 @@ public class Florence2Wave : IAnalysisWave
                     }
                 });
 
-                // Also add as vision.llm.caption for compatibility with existing output formatters
-                signals.Add(new Signal
-                {
-                    Key = "vision.llm.caption",
-                    Value = result.Caption,
-                    Confidence = CalculateCaptionConfidence(result) * 0.95, // Slightly lower than dedicated LLM
-                    Source = Name,
-                    Tags = new List<string> { SignalTags.Content, "caption", "vision" },
-                    Metadata = new Dictionary<string, object>
-                    {
-                        ["model"] = "florence-2-base",
-                        ["provider"] = "onnx-local"
-                    }
-                });
+                // Note: We intentionally do NOT emit vision.llm.caption here.
+                // Each wave should use its own namespace to avoid duplicate key conflicts.
+                // Output formatters should check both florence2.caption and vision.llm.caption.
             }
 
             // Add OCR text signal if detected

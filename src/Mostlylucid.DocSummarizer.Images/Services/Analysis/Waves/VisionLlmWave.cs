@@ -590,7 +590,88 @@ public class VisionLlmWave : IAnalysisWave
         var response = await QueryVisionLlmAsync(imageBase64, prompt, ct);
 
         // Clean and extract caption
-        return CleanCaptionResponse(response);
+        var cleaned = CleanCaptionResponse(response);
+
+        // Apply temporal verb gate for static images
+        // "Probability proposes, determinism persists" - don't claim motion without evidence
+        if (!isAnimated && filmstripFrames <= 1)
+        {
+            cleaned = GateTemporalVerbs(cleaned);
+        }
+
+        return cleaned;
+    }
+
+    /// <summary>
+    /// Gate temporal verbs in captions for static images.
+    /// When is_animated=false, we have no temporal evidence, so action verbs
+    /// like "moving", "dancing", "walking" must be converted to static equivalents.
+    /// This enforces "probability proposes, determinism persists".
+    /// </summary>
+    private string? GateTemporalVerbs(string? caption)
+    {
+        if (string.IsNullOrWhiteSpace(caption))
+            return caption;
+
+        var result = caption;
+
+        // Map temporal verbs to static equivalents
+        // Order matters: longer phrases first to avoid partial matches
+        var temporalToStatic = new (string Pattern, string Replacement)[]
+        {
+            // Continuous actions → static poses
+            (@"\bis moving\b", "appears in motion"),
+            (@"\bare moving\b", "appear in motion"),
+            (@"\bis dancing\b", "is in a dance pose"),
+            (@"\bare dancing\b", "are in dance poses"),
+            (@"\bis walking\b", "is mid-stride"),
+            (@"\bare walking\b", "are mid-stride"),
+            (@"\bis running\b", "is in a running pose"),
+            (@"\bare running\b", "are in running poses"),
+            (@"\bis jumping\b", "is mid-jump"),
+            (@"\bare jumping\b", "are mid-jump"),
+            (@"\bis waving\b", "has arm raised"),
+            (@"\bare waving\b", "have arms raised"),
+            (@"\bis gesturing\b", "is mid-gesture"),
+            (@"\bare gesturing\b", "are mid-gesture"),
+            (@"\bis spinning\b", "is in a spin pose"),
+            (@"\bis turning\b", "is mid-turn"),
+            (@"\bis swinging\b", "is mid-swing"),
+            (@"\bis nodding\b", "has head tilted"),
+            (@"\bis shaking\b", "appears to shake"),
+            (@"\bis bouncing\b", "is mid-bounce"),
+
+            // Adverbs implying continuous motion
+            (@"\brhythmically\b", "in a rhythmic pose"),
+            (@"\bcontinuously\b", ""),
+            (@"\brepeatedly\b", ""),
+
+            // Present participles suggesting ongoing action
+            (@"\bmoving their\b", "with their"),
+            (@"\bswinging their\b", "with their"),
+            (@"\braising their\b", "with their"),
+            (@"\blowering their\b", "with their"),
+        };
+
+        foreach (var (pattern, replacement) in temporalToStatic)
+        {
+            result = System.Text.RegularExpressions.Regex.Replace(
+                result, pattern, replacement,
+                System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+        }
+
+        // Clean up any double spaces from removals
+        result = System.Text.RegularExpressions.Regex.Replace(result, @"\s{2,}", " ").Trim();
+
+        // Log if we made changes
+        if (result != caption)
+        {
+            _logger?.LogDebug("Temporal verb gate applied: '{Original}' → '{Gated}'",
+                caption?.Substring(0, Math.Min(50, caption?.Length ?? 0)),
+                result.Substring(0, Math.Min(50, result.Length)));
+        }
+
+        return result;
     }
 
     /// <summary>

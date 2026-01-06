@@ -202,8 +202,8 @@ public static class WaveRegistry
                 "florence2.ocr_text",
                 "florence2.should_escalate",
                 "florence2.duration_ms",
-                "florence2.available",
-                "vision.llm.caption" // Also emits as compatibility alias
+                "florence2.available"
+                // Note: Does NOT emit vision.llm.caption - each wave uses its own namespace
             ],
             Requires = [],
             Optional = ["color.dominant_rgb", "color.dominant_name"],

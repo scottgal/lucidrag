@@ -95,17 +95,43 @@ public class OcrQualityWave : IAnalysisWave
             ocrSource = "ocr.full_text";
         }
 
-        // No OCR text found
+        // No OCR text found - distinguish between "skipped" vs "ran and found nothing"
         if (string.IsNullOrWhiteSpace(ocrText))
         {
-            signals.Add(new Signal
+            // Check if OCR was actually skipped (not just empty result)
+            var ocrSkipped = context.GetValue<bool>("ocr.skipped");
+            var ocrEnabled = context.HasSignal("ocr.enabled")
+                ? context.GetValue<bool>("ocr.enabled")
+                : true; // Default to enabled if not specified
+
+            if (ocrSkipped || !ocrEnabled)
             {
-                Key = "ocr.quality.no_text",
-                Value = true,
-                Confidence = 1.0,
-                Source = Name,
-                Tags = new List<string> { "ocr", "quality" }
-            });
+                // OCR was skipped - don't assert "no text", just note it wasn't evaluated
+                signals.Add(new Signal
+                {
+                    Key = "ocr.quality.not_evaluated",
+                    Value = true,
+                    Confidence = 1.0,
+                    Source = Name,
+                    Tags = new List<string> { "ocr", "quality" },
+                    Metadata = new Dictionary<string, object>
+                    {
+                        ["reason"] = ocrSkipped ? "ocr_skipped" : "ocr_disabled"
+                    }
+                });
+            }
+            else
+            {
+                // OCR ran but found no text
+                signals.Add(new Signal
+                {
+                    Key = "ocr.quality.no_text_detected",
+                    Value = true,
+                    Confidence = 1.0,
+                    Source = Name,
+                    Tags = new List<string> { "ocr", "quality" }
+                });
+            }
             return signals;
         }
 
