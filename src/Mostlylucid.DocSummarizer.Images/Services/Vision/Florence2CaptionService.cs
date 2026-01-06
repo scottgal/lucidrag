@@ -289,40 +289,38 @@ public class Florence2CaptionService
     {
         try
         {
-            // Create frame strip for GIF
-            var (stripPath, frameCount) = await CreateGifFrameStripAsync(gifPath, ct);
+            // Florence2 can't understand filmstrips - use a single representative frame instead
+            // Extract frame from middle of animation (more likely to have interesting content)
+            var (framePath, frameCount) = await ExtractRepresentativeFrameAsync(gifPath, ct);
 
-            if (stripPath == null || frameCount < 2)
+            if (framePath == null)
             {
-                // Single frame GIF - treat as static
+                // Fallback to first frame
                 return await GetStaticCaptionAsync(gifPath, detailed, enhanceWithColors, sw, ct);
             }
 
             try
             {
-                using var imgStream = File.OpenRead(stripPath);
+                using var imgStream = File.OpenRead(framePath);
                 var streams = new Stream[] { imgStream };
 
-                // Get caption
+                // Get caption from representative frame
                 var task = detailed ? TaskTypes.DETAILED_CAPTION : TaskTypes.CAPTION;
                 var results = _model!.Run(task, streams, textInput: null, cancellationToken: ct);
                 var caption = ExtractText(results);
 
-                // Also get OCR from strip (may capture subtitles)
+                // Also get OCR from frame (may capture subtitles)
                 string? ocrText = null;
                 try
                 {
-                    using var imgStream2 = File.OpenRead(stripPath);
+                    using var imgStream2 = File.OpenRead(framePath);
                     var ocrResults = _model.Run(TaskTypes.OCR, new[] { imgStream2 }, textInput: null, cancellationToken: ct);
                     ocrText = ExtractText(ocrResults)?.Trim();
                 }
                 catch { /* OCR is optional */ }
 
-                // Add GIF context
-                if (!string.IsNullOrWhiteSpace(caption))
-                {
-                    caption = $"Animated GIF ({frameCount} frames): {caption}";
-                }
+                // Note: Don't add "Animated GIF (X frames)" prefix - let caller handle that
+                // Caption should describe what's actually visible in the frame
 
                 // Enhance with colors
                 string? enhancedCaption = caption;
@@ -346,18 +344,55 @@ public class Florence2CaptionService
             }
             finally
             {
-                // Clean up temp strip
-                if (File.Exists(stripPath))
+                // Clean up temp frame
+                if (File.Exists(framePath))
                 {
-                    try { File.Delete(stripPath); } catch { /* ignore */ }
+                    try { File.Delete(framePath); } catch { /* ignore */ }
                 }
             }
         }
         catch (Exception ex)
         {
-            _logger?.LogWarning(ex, "GIF frame strip creation failed, falling back to first frame");
+            _logger?.LogWarning(ex, "GIF frame extraction failed, falling back to first frame");
             return await GetStaticCaptionAsync(gifPath, detailed, enhanceWithColors, sw, ct);
         }
+    }
+
+    /// <summary>
+    /// Extract a representative single frame from an animated GIF for Florence2 analysis.
+    /// Uses the middle frame which is more likely to show interesting content.
+    /// </summary>
+    private async Task<(string? FramePath, int TotalFrameCount)> ExtractRepresentativeFrameAsync(
+        string gifPath,
+        CancellationToken ct)
+    {
+        using var image = await Image.LoadAsync<Rgba32>(gifPath, ct);
+
+        if (image.Frames.Count < 2)
+            return (null, 1);
+
+        // Use middle frame - more likely to have interesting content than first/last
+        var middleIndex = image.Frames.Count / 2;
+
+        // Try to find a frame with text (subtitle) if possible
+        // Check a few frames around the middle
+        var framesToCheck = new[] { middleIndex, middleIndex + 1, middleIndex - 1, middleIndex + 2 }
+            .Where(i => i >= 0 && i < image.Frames.Count)
+            .Distinct()
+            .Take(3);
+
+        var selectedIndex = middleIndex;
+
+        // For subtitle detection, we'd need OCR here but that's expensive
+        // Just use middle frame for now
+
+        using var selectedFrame = image.Frames.CloneFrame(selectedIndex);
+
+        // Save to temp file
+        var tempPath = Path.Combine(Path.GetTempPath(), $"florence2_frame_{Guid.NewGuid():N}.jpg");
+        await selectedFrame.SaveAsJpegAsync(tempPath, ct);
+
+        return (tempPath, image.Frames.Count);
     }
 
     /// <summary>

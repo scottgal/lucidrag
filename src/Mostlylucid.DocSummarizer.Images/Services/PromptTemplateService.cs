@@ -543,7 +543,7 @@ public class PromptTemplateService
             ImageTypes = new Dictionary<string, ImageTypeTemplate>
             {
                 ["photo"] = new() { Name = "Photograph", Focus = "main subject, setting, action/pose", SignalWeights = new() { ["colors"] = 0.6, ["quality"] = 0.4 } },
-                ["animated"] = new() { Name = "Animated Image", Focus = "the action/movement, what is happening", SignalWeights = new() { ["motion"] = 1.0, ["text"] = 0.8, ["colors"] = 0.5 } },
+                ["animated"] = new() { Name = "Animated Image", Focus = "the action/movement, what is happening, and ANY VISIBLE TEXT/SUBTITLES shown (quote the text exactly)", SignalWeights = new() { ["motion"] = 1.0, ["text"] = 1.0, ["colors"] = 0.5 } },
                 ["screenshot"] = new() { Name = "Screenshot", Focus = "UI elements, visible text, application", SignalWeights = new() { ["text"] = 1.0, ["colors"] = 0.4 } },
                 ["diagram"] = new() { Name = "Diagram", Focus = "diagram type, what it represents", SignalWeights = new() { ["text"] = 0.9, ["edges"] = 0.8 } },
                 ["chart"] = new() { Name = "Chart", Focus = "chart type, data shown, key takeaway", SignalWeights = new() { ["text"] = 1.0, ["colors"] = 0.7 } },

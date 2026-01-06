@@ -1,6 +1,7 @@
 <Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:vm="using:Mostlylucid.ImageSummarizer.Desktop.ViewModels"
+        xmlns:anim="clr-namespace:AnimatedImage.Avalonia;assembly=AnimatedImage.Avalonia"
         x:Class="Mostlylucid.ImageSummarizer.Desktop.MainWindow"
         x:DataType="vm:MainViewModel"
         Title="Image Summarizer"
@@ -80,18 +81,44 @@
             </WrapPanel>
 
             <!-- Right: Status indicators (compact) -->
-            <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
-                <StackPanel Orientation="Horizontal" Spacing="4" ToolTip.Tip="{Binding OcrStatus}">
-                    <Ellipse Width="8" Height="8" Fill="{Binding OcrStatusColor}"/>
-                    <TextBlock Text="OCR" FontSize="10" Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}"/>
+            <StackPanel Grid.Column="1" Orientation="Vertical" Spacing="4" VerticalAlignment="Center">
+                <!-- Services row -->
+                <StackPanel Orientation="Horizontal" Spacing="8">
+                    <StackPanel Orientation="Horizontal" Spacing="4" ToolTip.Tip="{Binding OcrStatus}">
+                        <Ellipse Width="8" Height="8" Fill="{Binding TesseractModelColor}"/>
+                        <TextBlock Text="OCR" FontSize="10" Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}"/>
+                    </StackPanel>
+                    <StackPanel Orientation="Horizontal" Spacing="4" ToolTip.Tip="{Binding OpenCvStatus}">
+                        <Ellipse Width="8" Height="8" Fill="{Binding OpenCvStatusColor}"/>
+                        <TextBlock Text="CV" FontSize="10" Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}"/>
+                    </StackPanel>
+                    <StackPanel Orientation="Horizontal" Spacing="4" ToolTip.Tip="{Binding OllamaStatus}">
+                        <Ellipse Width="8" Height="8" Fill="{Binding OllamaStatusColor}"/>
+                        <TextBlock Text="LLM" FontSize="10" Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}"/>
+                    </StackPanel>
                 </StackPanel>
-                <StackPanel Orientation="Horizontal" Spacing="4" ToolTip.Tip="{Binding OpenCvStatus}">
-                    <Ellipse Width="8" Height="8" Fill="{Binding OpenCvStatusColor}"/>
-                    <TextBlock Text="CV" FontSize="10" Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}"/>
-                </StackPanel>
-                <StackPanel Orientation="Horizontal" Spacing="4" ToolTip.Tip="{Binding OllamaStatus}">
-                    <Ellipse Width="8" Height="8" Fill="{Binding OllamaStatusColor}"/>
-                    <TextBlock Text="LLM" FontSize="10" Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}"/>
+                <!-- ML Models row -->
+                <StackPanel Orientation="Horizontal" Spacing="6">
+                    <StackPanel Orientation="Horizontal" Spacing="3" ToolTip.Tip="{Binding Florence2Status}">
+                        <Ellipse Width="6" Height="6" Fill="{Binding Florence2ModelColor}"/>
+                        <TextBlock Text="Flor" FontSize="9" Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}"/>
+                    </StackPanel>
+                    <StackPanel Orientation="Horizontal" Spacing="3" ToolTip.Tip="{Binding EastModelStatus}">
+                        <Ellipse Width="6" Height="6" Fill="{Binding EastModelColor}"/>
+                        <TextBlock Text="EAST" FontSize="9" Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}"/>
+                    </StackPanel>
+                    <StackPanel Orientation="Horizontal" Spacing="3" ToolTip.Tip="{Binding CraftModelStatus}">
+                        <Ellipse Width="6" Height="6" Fill="{Binding CraftModelColor}"/>
+                        <TextBlock Text="CRFT" FontSize="9" Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}"/>
+                    </StackPanel>
+                    <StackPanel Orientation="Horizontal" Spacing="3" ToolTip.Tip="{Binding ClipModelStatus}">
+                        <Ellipse Width="6" Height="6" Fill="{Binding ClipModelColor}"/>
+                        <TextBlock Text="CLIP" FontSize="9" Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}"/>
+                    </StackPanel>
+                    <StackPanel Orientation="Horizontal" Spacing="3" ToolTip.Tip="{Binding EsrganModelStatus}">
+                        <Ellipse Width="6" Height="6" Fill="{Binding EsrganModelColor}"/>
+                        <TextBlock Text="ESRG" FontSize="9" Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}"/>
+                    </StackPanel>
                 </StackPanel>
             </StackPanel>
         </Grid>
@@ -125,10 +152,15 @@
                                        FontSize="12"/>
                         </StackPanel>
 
-                        <!-- Image preview -->
+                        <!-- Static image preview (non-animated) -->
                         <Image Source="{Binding ImagePreview}"
                                Stretch="Uniform"
-                               IsVisible="{Binding ImagePreview, Converter={x:Static ObjectConverters.IsNotNull}}"/>
+                               IsVisible="{Binding IsStaticImage}"/>
+
+                        <!-- Animated GIF preview -->
+                        <Image anim:ImageBehavior.AnimatedSource="{Binding GifPath}"
+                               Stretch="Uniform"
+                               IsVisible="{Binding IsAnimatedGif}"/>
                     </Grid>
                 </Border>
 

@@ -685,7 +685,8 @@ public class EscalationService
         if (isAnimated)
         {
             prompt.AppendLine("This is an ANIMATED image (GIF/WebP).");
-            prompt.AppendLine("Focus on: the action/movement, what is happening, any text shown.");
+            prompt.AppendLine("Focus on: the action/movement, what is happening.");
+            prompt.AppendLine("IMPORTANT: If there is ANY visible text, subtitles, or captions in ANY frame, quote the text EXACTLY.");
             prompt.AppendLine("The image shows a filmstrip of frames - describe the animation.");
         }
         else
@@ -713,7 +714,7 @@ public class EscalationService
 
                 case ImageType.Meme:
                     prompt.AppendLine("This appears to be a MEME image.");
-                    prompt.AppendLine("Focus on: the visual content and any text/captions shown.");
+                    prompt.AppendLine("Focus on: the visual content. QUOTE any visible text/captions EXACTLY as written.");
                     break;
 
                 case ImageType.ScannedDocument:
