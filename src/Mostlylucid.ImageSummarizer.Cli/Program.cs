@@ -1772,6 +1772,10 @@ class Program
         var visionText = profile.GetValue<string>("vision.llm.text");
         if (!string.IsNullOrEmpty(visionText))
             return visionText;
+        if (profile.HasSignal("ocr.ml.fused_text"))
+            return profile.GetValue<string>("ocr.ml.fused_text");
+        if (profile.HasSignal("ocr.ml.text"))
+            return profile.GetValue<string>("ocr.ml.text");
         if (profile.HasSignal("ocr.final.corrected_text"))
             return profile.GetValue<string>("ocr.final.corrected_text");
         if (profile.HasSignal("ocr.corrected.text"))
@@ -1787,6 +1791,10 @@ class Program
 
     static double GetTextConfidence(DynamicImageProfile profile)
     {
+        if (profile.HasSignal("ocr.ml.fused_text"))
+            return profile.GetBestSignal("ocr.ml.fused_text")?.Confidence ?? 0;
+        if (profile.HasSignal("ocr.ml.text"))
+            return profile.GetBestSignal("ocr.ml.text")?.Confidence ?? 0;
         if (profile.HasSignal("ocr.final.corrected_text"))
             return profile.GetBestSignal("ocr.final.corrected_text")?.Confidence ?? 0;
         if (profile.HasSignal("ocr.corrected.text"))

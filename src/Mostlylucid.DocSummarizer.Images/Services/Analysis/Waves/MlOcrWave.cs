@@ -239,30 +239,12 @@ public class MlOcrWave : IAnalysisWave
 
             if (isAnimated && frameCount > 1)
             {
-                // OPTIMIZATION: For animated GIFs, use filmstrip approach instead of per-frame OCR
-                // This is 10-15x faster: ~2-3s total vs ~27s for per-frame analysis
-                //
-                // Strategy when VisionLLM is enabled:
-                // 1. Extract key frames (~100ms)
-                // 2. Detect text regions with OpenCV per frame (~5-20ms each)
-                // 3. Create text-only strip combining all unique text regions (~100ms)
-                // 4. Cache the strip for VisionLLM to read in one call (~1-2s)
-                // 5. Skip per-frame Florence-2 OCR entirely (VisionLLM is better for stylized text)
-                //
-                // When VisionLLM is DISABLED:
-                // - Use legacy per-frame Florence-2 OCR (slower but works standalone)
+                // Signal-based escalation for animated GIFs:
+                // 1. Try fast OpenCV+Florence-2 per-frame OCR
+                // 2. Emit signals with confidence scores
+                // 3. Downstream waves (VisionLLM) can escalate if OCR quality is poor
 
-                AnimatedTextResult result;
-                if (_config.EnableVisionLlm)
-                {
-                    result = await AnalyzeAnimatedTextFastAsync(imagePath, frameCount, context, ct);
-                }
-                else
-                {
-                    // VisionLLM disabled - must extract text ourselves using Florence-2
-                    _logger?.LogDebug("VisionLLM disabled, using legacy per-frame Florence-2 OCR");
-                    result = await AnalyzeAnimatedTextWithOpenCvAsync(imagePath, frameCount, ct);
-                }
+                var result = await AnalyzeAnimatedTextWithOpenCvAsync(imagePath, frameCount, ct);
                 mlText = result.Text;
                 framesWithText = result.FramesWithText;
                 textChangedFrameIndices = result.TextChangedFrameIndices;
@@ -302,38 +284,20 @@ public class MlOcrWave : IAnalysisWave
                     context.SetCached("ocr.frames", result.Frames);
                 }
 
-                // Signal that VisionLLM should handle OCR (it's better for stylized subtitle text)
-                // BUT only if VisionLLM is actually enabled!
-                if (_config.EnableVisionLlm && (hasSubtitles || result.FramesWithTextRegions > 0))
-                {
-                    signals.Add(new Signal
-                    {
-                        Key = "ocr.ml.defer_to_visionllm",
-                        Value = true,
-                        Confidence = 0.9,
-                        Source = Name,
-                        Tags = new List<string> { "ocr", "ml", "optimization" },
-                        Metadata = new Dictionary<string, object>
-                        {
-                            ["reason"] = "filmstrip_mode",
-                            ["has_subtitles"] = hasSubtitles
-                        }
-                    });
-                }
-
-                // Emit fused text signal if we extracted text (used by VisionLlmWave to skip)
+                // Emit fused text signal - Florence-2 extracted text (VisionLlmWave will skip text extraction)
                 if (!string.IsNullOrWhiteSpace(mlText))
                 {
                     signals.Add(new Signal
                     {
                         Key = "ocr.ml.fused_text",
                         Value = mlText,
-                        Confidence = 0.80,
+                        Confidence = 0.85,
                         Source = Name,
                         Tags = new List<string> { "ocr", "ml", "text", SignalTags.Content },
                         Metadata = new Dictionary<string, object>
                         {
-                            ["source"] = _config.EnableVisionLlm ? "filmstrip_deferred" : "florence2_per_frame"
+                            ["source"] = "florence2_per_frame",
+                            ["frames_with_text"] = framesWithText
                         }
                     });
                 }

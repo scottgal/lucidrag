@@ -864,18 +864,8 @@ public class VisionLlmWave : IAnalysisWave
             result = char.ToUpper(result[0]) + result[1..];
         }
 
-        // Truncate if too long (WCAG: ~125 chars)
-        if (result.Length > 150)
-        {
-            var lastPeriod = result.LastIndexOf('.', 147);
-            if (lastPeriod > 50)
-                result = result[..(lastPeriod + 1)];
-            else
-            {
-                var lastSpace = result.LastIndexOf(' ', 147);
-                result = lastSpace > 50 ? result[..lastSpace] + "..." : result[..147] + "...";
-            }
-        }
+        // NOTE: Do NOT truncate captions here - let the UI decide how to display
+        // WCAG truncation should only be applied when generating @alttext signals
 
         return result;
     }
@@ -972,28 +962,19 @@ Be factual - only describe what you can see. Keep it under 100 words.";
         string prompt;
         if (frameCount > 1)
         {
-            // STRICT prompt to prevent hallucination - only extract what's VISIBLE
-            prompt = $@"TASK: Extract ONLY the text that is VISUALLY PRESENT in this filmstrip of {frameCount} frames.
+            // STRICT prompt for subtitle extraction from filmstrip
+            prompt = $@"This filmstrip shows {frameCount} frames from a movie or TV show with subtitles.
 
-RULES:
-- Only transcribe text you can ACTUALLY SEE in the image
-- Do NOT invent, guess, or complete any text
-- Do NOT add dialogue that isn't visible
-- If text is unclear, write ONLY the parts you can read with certainty
-- If a frame has no visible text, skip it entirely
+Read the yellow or white subtitle text at the bottom of each frame, left to right.
+Return ONLY the exact subtitle words you see. No XML tags, no formatting, just the words.
 
-OUTPUT: Return only the visible text, nothing else. If no text is visible, respond with 'NO_TEXT'.";
+If you cannot read any text, reply: NO_TEXT";
         }
         else
         {
-            prompt = @"TASK: Extract ONLY the text that is VISUALLY PRESENT in this image.
-
-RULES:
-- Only transcribe text you can ACTUALLY SEE
-- Do NOT guess, invent, or complete text
-- If text is partially visible, only write the readable parts
-
-OUTPUT: Return only the visible text. If no text exists, respond with 'NO_TEXT'.";
+            prompt = @"Read any text visible in this image.
+Return ONLY the exact words you see. No XML tags, no formatting, just the words.
+If no text is visible, reply: NO_TEXT";
         }
 
         var response = await QueryVisionLlmAsync(imageBase64, prompt, ct);

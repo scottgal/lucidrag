@@ -1006,9 +1006,8 @@ public partial class MainViewModel : ObservableObject
             {
                 sb.AppendLine();
                 sb.AppendLine("📝 Extracted Text:");
-                // Show more text for animated GIFs - up to 300 chars
-                var displayText = Mostlylucid.DocSummarizer.Services.ShortTextSummarizer.Summarize(ocrText!.Trim(), 300);
-                sb.AppendLine($"\"{displayText}\"");
+                // Show FULL text - no truncation for analysis output
+                sb.AppendLine($"\"{ocrText!.Trim()}\"");
             }
         }
         else
@@ -1016,13 +1015,12 @@ public partial class MainViewModel : ObservableObject
             // STATIC IMAGE - Standard description
             sb.AppendLine(caption);
 
-            // Show OCR text if available
+            // Show OCR text if available - FULL text, no truncation
             if (hasText)
             {
                 sb.AppendLine();
                 sb.AppendLine("📝 Text:");
-                var displayText = Mostlylucid.DocSummarizer.Services.ShortTextSummarizer.Summarize(ocrText!.Trim(), 200);
-                sb.AppendLine($"\"{displayText}\"");
+                sb.AppendLine($"\"{ocrText!.Trim()}\"");
             }
 
             // Add scene context if available and not already in caption
@@ -1104,6 +1102,8 @@ public partial class MainViewModel : ObservableObject
         var signalKeys = new[]
         {
             "vision.llm.text",           // Vision LLM extracted text (best quality)
+            "ocr.ml.fused_text",         // MlOcrWave fused text (OpenCV+Florence2)
+            "ocr.ml.text",               // MlOcrWave raw text
             "ocr.final.corrected_text",  // Tier 2/3 corrections
             "ocr.corrected.text",        // Legacy Tier 3 signal
             "ocr.voting.consensus_text", // Temporal voting
@@ -1202,9 +1202,10 @@ public partial class MainViewModel : ObservableObject
             return true;
 
         // Check for obvious OCR garbage patterns
+        // NOTE: Do NOT filter all-caps - subtitles are legitimately ALL CAPS!
         var garbledPatterns = new[]
         {
-            @"^[A-Z\s]{5,}$",  // All caps with no lowercase or punctuation
+            // @"^[A-Z\s]{5,}$",  // REMOVED - subtitles are often all caps
             @"(.{2,4})\s*\1",  // Repeated short patterns
             @"[^\w\s]{3,}"     // 3+ special characters in a row
         };
