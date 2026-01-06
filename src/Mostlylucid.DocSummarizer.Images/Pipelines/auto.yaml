@@ -1,0 +1,72 @@
+# Auto Pipeline (Smart Routing)
+# Automatically selects fast/balanced/quality path based on image characteristics
+# Uses fast signals (identity, color, complexity) to route intelligently
+# Best for: Production use - optimal speed/quality tradeoff
+
+name: auto
+description: Smart routing - auto-selects fast/balanced/quality based on image
+version: 1
+
+signals:
+  # Always run fast signals for routing decisions
+  - identity.*
+  - color.*
+  - route.*           # Routing decisions
+  # All other signals are conditional based on route
+  - motion.*
+  - ocr.*
+  - vision.*
+  - florence2.*
+
+waves:
+  # These always run (fast analysis for routing)
+  required:
+    - IdentityWave
+    - ColorWave
+    - AutoRoutingWave
+  # These respect routing decisions (check route.skip.{WaveName})
+  conditional:
+    - MotionWave
+    - OcrWave
+    - AdvancedOcrWave
+    - OcrQualityWave
+    - Florence2Wave
+    - VisionLlmWave
+    - FaceDetectionWave
+    - ClipEmbeddingWave
+
+output:
+  format: auto        # Adapts based on route
+  show_route: true    # Display which route was selected
+  include_metadata: true
+  include_confidence: true
+
+llm:
+  enabled: auto       # Let routing decide
+  model: minicpm-v:8b
+  fast_mode: auto     # Fast mode for simple images
+  context: true
+
+routing:
+  # Quality indicators (any → quality path)
+  quality_thresholds:
+    animated_frames: 3        # > 3 frames → quality
+    text_likeliness: 0.5      # > 0.5 → quality
+    edge_density: 0.15        # > 0.15 → quality
+    pixel_count: 2000000      # > 2M pixels → quality
+  # Fast indicators (all → fast path)
+  fast_thresholds:
+    text_likeliness: 0.1      # < 0.1 → fast candidate
+    edge_density: 0.05        # < 0.05 → fast candidate
+    pixel_count: 100000       # < 100K → fast candidate
+  # Memory
+  cache_decisions: true       # Remember routing for same images
+  cache_expiry_hours: 24
+
+escalation:
+  # Even in fast mode, escalate if needed
+  florence2_to_llm: true      # Let Florence2 trigger escalation
+  gif_to_llm: true
+  complexity_threshold: 0.4
+  on_no_caption: true
+  min_caption_length: 20

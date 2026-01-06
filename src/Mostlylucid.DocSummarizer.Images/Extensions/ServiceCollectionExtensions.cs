@@ -11,6 +11,7 @@ using Mostlylucid.DocSummarizer.Images.Services.Ocr;
 using Mostlylucid.DocSummarizer.Images.Services.Ocr.Models;
 using Mostlylucid.DocSummarizer.Images.Services.Ocr.PostProcessing;
 using Mostlylucid.DocSummarizer.Images.Services.Vision;
+using Mostlylucid.DocSummarizer.Images.Services.Storage;
 using Mostlylucid.DocSummarizer.Images.Models.Dynamic;
 using Mostlylucid.DocSummarizer.Services;
 
@@ -121,6 +122,15 @@ public static class ServiceCollectionExtensions
             var colorAnalyzer = sp.GetRequiredService<ColorAnalyzer>();
             var streamProcessor = sp.GetService<ImageStreamProcessor>();
             return new ColorWave(colorAnalyzer, streamProcessor);
+        });
+
+        // AutoRoutingWave - Uses fast signals to route images through optimal paths
+        // Runs after Identity/Color but before expensive waves
+        services.AddSingleton<IAnalysisWave>(sp =>
+        {
+            var signalDb = sp.GetService<ISignalDatabase>();
+            var logger = sp.GetService<Microsoft.Extensions.Logging.ILogger<AutoRoutingWave>>();
+            return new AutoRoutingWave(signalDb, logger);
         });
 
         // OcrWave - configured with threshold from OcrConfig, uses auto-download

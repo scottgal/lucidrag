@@ -41,8 +41,8 @@ class Program
         // Options
         var pipelineOpt = new Option<string>(
             "--pipeline",
-            getDefaultValue: () => "caption",
-            description: "Pipeline: socialmediaalt (WCAG full), caption (default), vision (no OCR), motion (fast), advancedocr, simpleocr, quality, stats, alttext, florence2 (fast local ONNX), florence2+llm (hybrid)");
+            getDefaultValue: () => "auto",
+            description: "Pipeline: auto (smart routing), caption, vision (no OCR), motion (fast), advancedocr, simpleocr, quality, stats, alttext, florence2 (fast ONNX), florence2+llm (hybrid)");
 
         var outputOpt = new Option<string>(
             "--output",
@@ -286,13 +286,14 @@ class Program
                         if (arg == null)
                         {
                             Spectre.Console.AnsiConsole.MarkupLine($"[dim]Current pipeline:[/] [cyan]{pipeline}[/]");
-                            Spectre.Console.AnsiConsole.MarkupLine("[dim]Available: caption, vision, motion, advancedocr, simpleocr, quality, stats, alttext[/]");
+                            Spectre.Console.AnsiConsole.MarkupLine("[dim]Available: auto, caption, vision, motion, advancedocr, simpleocr, quality, stats, alttext[/]");
+                            Spectre.Console.AnsiConsole.MarkupLine("[dim]  auto        - Smart routing (fast/balanced/quality based on image)[/]");
                             Spectre.Console.AnsiConsole.MarkupLine("[dim]  caption     - Vision LLM captions with OCR fallback[/]");
                             Spectre.Console.AnsiConsole.MarkupLine("[dim]  vision      - Vision LLM only (no Tesseract required)[/]");
                             Spectre.Console.AnsiConsole.MarkupLine("[dim]  motion      - Motion analysis only (fast, no LLM/OCR)[/]");
                             Spectre.Console.AnsiConsole.MarkupLine("[dim]  advancedocr - Multi-frame OCR with stabilization[/]");
                         }
-                        else if (arg is "advancedocr" or "simpleocr" or "quality" or "stats" or "caption" or "alttext" or "vision" or "motion")
+                        else if (arg is "auto" or "advancedocr" or "simpleocr" or "quality" or "stats" or "caption" or "alttext" or "vision" or "motion")
                         {
                             pipeline = arg;
                             Spectre.Console.AnsiConsole.MarkupLine($"[green]✓[/] Pipeline set to [cyan]{pipeline}[/]");
@@ -305,7 +306,7 @@ class Program
                         }
                         else
                         {
-                            Spectre.Console.AnsiConsole.MarkupLine($"[red]✗[/] Unknown pipeline: {arg}. Use: caption, vision, motion, advancedocr, simpleocr, quality, stats, alttext");
+                            Spectre.Console.AnsiConsole.MarkupLine($"[red]✗[/] Unknown pipeline: {arg}. Use: auto, caption, vision, motion, advancedocr, simpleocr, quality, stats, alttext");
                         }
                         continue;
 
@@ -768,6 +769,10 @@ class Program
                     OutputVisual(profile, llmCaption);
                     break;
 
+                case "auto":
+                    OutputAdaptive(profile, llmCaption);
+                    break;
+
                 case "text":
                 default:
                     OutputText(profile);
@@ -787,6 +792,7 @@ class Program
     {
         return pipeline switch
         {
+            "auto" => "auto",       // Auto pipeline uses adaptive output
             "stats" => "metrics",
             "caption" => "caption",
             "alttext" => "alttext",
@@ -853,6 +859,14 @@ class Program
     static void OutputText(DynamicImageProfile profile)
     {
         var output = new List<string>();
+
+        // Show route info if using auto pipeline
+        var route = profile.GetValue<string>("route.selected");
+        if (!string.IsNullOrWhiteSpace(route))
+        {
+            var reason = profile.GetValue<string>("route.reason") ?? "";
+            output.Add($"[{route.ToUpperInvariant()} route{(string.IsNullOrEmpty(reason) ? "" : $": {reason}")}]");
+        }
 
         // Get OCR text
         var text = GetExtractedText(profile);
@@ -982,6 +996,92 @@ class Program
         };
 
         Console.WriteLine(JsonSerializer.Serialize(result, options));
+    }
+
+    /// <summary>
+    /// Output an adaptive, detailed description based on image content.
+    /// Adapts the output style to the image type (animated, text-heavy, photo, etc.)
+    /// </summary>
+    static void OutputAdaptive(DynamicImageProfile profile, string? llmCaption)
+    {
+        var ledger = profile.GetLedger();
+
+        // Get the best caption
+        var caption = llmCaption != null ? ExtractCaptionFromLlmResponse(llmCaption) : null;
+        caption ??= profile.GetValue<string>("florence2.caption");
+        caption ??= ledger.ToLlmSummary();
+
+        // Clean up common prefixes
+        if (!string.IsNullOrWhiteSpace(caption))
+        {
+            caption = caption.Trim();
+            if (caption.StartsWith("In this image", StringComparison.OrdinalIgnoreCase))
+            {
+                caption = caption.Substring("In this image".Length).TrimStart(',', ' ');
+                if (caption.Length > 0)
+                    caption = char.ToUpper(caption[0]) + caption[1..];
+            }
+        }
+
+        // Check image characteristics
+        var isAnimated = ledger.Identity.IsAnimated;
+        var ocrText = GetExtractedText(profile);
+        var hasText = !string.IsNullOrWhiteSpace(ocrText);
+        var motionSummary = profile.GetValue<string>("motion.summary");
+        var hasMotion = !string.IsNullOrWhiteSpace(motionSummary);
+        var scene = profile.GetValue<string>("vision.llm.scene");
+        var route = profile.GetValue<string>("route.selected");
+
+        var output = new List<string>();
+
+        // Show route if using auto pipeline
+        if (!string.IsNullOrEmpty(route))
+        {
+            var reason = profile.GetValue<string>("route.reason") ?? "";
+            output.Add($"[{route.ToUpperInvariant()} route: {reason}]");
+            output.Add("");
+        }
+
+        // Build adaptive description
+        if (isAnimated && hasMotion)
+        {
+            // Animated image with motion
+            var frameCount = ledger.Motion?.FrameCount ?? profile.GetValue<int>("identity.frame_count");
+            output.Add($"📽️ Animated {ledger.Identity.Format} ({frameCount} frames)");
+            output.Add("");
+            output.Add(caption ?? "");
+
+            if (!string.IsNullOrWhiteSpace(motionSummary))
+            {
+                output.Add("");
+                output.Add($"Motion: {motionSummary}");
+            }
+        }
+        else if (hasText)
+        {
+            // Text-heavy image (screenshot, meme, document)
+            output.Add(caption ?? "");
+
+            output.Add("");
+            output.Add("📝 Text:");
+            output.Add($"\"{ocrText!.Trim()}\"");
+        }
+        else
+        {
+            // Standard photo/image
+            output.Add(caption ?? "");
+        }
+
+        // Add scene context if available and not already in caption
+        if (!string.IsNullOrWhiteSpace(scene) &&
+            !string.IsNullOrWhiteSpace(caption) &&
+            !caption.ToLowerInvariant().Contains(scene.ToLowerInvariant()))
+        {
+            output.Add("");
+            output.Add($"📍 Scene: {scene}");
+        }
+
+        Console.WriteLine(string.Join("\n", output).Trim());
     }
 
     static void OutputCaption(DynamicImageProfile profile, string? llmCaption)

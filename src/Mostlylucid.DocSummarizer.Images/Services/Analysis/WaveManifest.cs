@@ -62,6 +62,22 @@ public static class WaveRegistry
     {
         new WaveManifest
         {
+            WaveName = "AutoRoutingWave",
+            Priority = 98,
+            Tags = ["routing", "auto", "optimization"],
+            Emits = [
+                "route.selected",       // "fast", "balanced", or "quality"
+                "route.reason",         // Why this route was selected
+                "route.skip_waves",     // List of waves to skip
+                "route.quality_tier"    // 1=fast, 2=balanced, 3=quality
+            ],
+            Requires = ["identity.*", "content.text_likeliness", "quality.edge_density"],
+            Optional = ["color.*"],
+            Description = "Auto-routing based on fast signals (identity, color, complexity)"
+        },
+
+        new WaveManifest
+        {
             WaveName = "IdentityWave",
             Priority = 10,
             Tags = ["identity"],

@@ -30,6 +30,22 @@ public class ClipEmbeddingWave : IAnalysisWave
     public int Priority => 45; // After vision LLM, before synthesis
     public IReadOnlyList<string> Tags => new[] { SignalTags.Content, "embedding", "clip", "ml" };
 
+    /// <summary>
+    /// Check if CLIP should run. Respects auto-routing (fast route skips CLIP).
+    /// </summary>
+    public bool ShouldRun(string imagePath, AnalysisContext context)
+    {
+        // Skip if auto-routing says to skip this wave
+        if (context.IsWaveSkippedByRouting(Name))
+            return false;
+
+        // Skip if CLIP is disabled
+        if (!_config.EnableClipEmbedding)
+            return false;
+
+        return true;
+    }
+
     // CLIP ViT-B/32 input dimensions
     private const int ClipImageSize = 224;
     private const int ClipEmbeddingSize = 512;

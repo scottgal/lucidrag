@@ -140,4 +140,33 @@ public class AnalysisContext
     {
         _cache.Clear();
     }
+
+    /// <summary>
+    /// Check if a wave is skipped by auto-routing.
+    /// Waves should call this in ShouldRun() to respect routing decisions.
+    /// </summary>
+    /// <param name="waveName">Name of the wave to check</param>
+    /// <returns>True if the wave should be skipped</returns>
+    public bool IsWaveSkippedByRouting(string waveName)
+    {
+        return GetValue<bool>($"route.skip.{waveName}");
+    }
+
+    /// <summary>
+    /// Get the selected route (fast/balanced/quality).
+    /// </summary>
+    public string? GetSelectedRoute()
+    {
+        return GetValue<string>("route.selected");
+    }
+
+    /// <summary>
+    /// Check if we're in fast mode (skip expensive operations).
+    /// </summary>
+    public bool IsFastRoute => GetSelectedRoute() == "fast";
+
+    /// <summary>
+    /// Check if we're in quality mode (run everything).
+    /// </summary>
+    public bool IsQualityRoute => GetSelectedRoute() == "quality";
 }

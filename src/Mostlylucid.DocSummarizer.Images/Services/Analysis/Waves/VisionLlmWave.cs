@@ -32,12 +32,24 @@ public class VisionLlmWave : IAnalysisWave
 
     /// <summary>
     /// Check if VisionLLM should run - this is expensive (LLM call).
-    /// Only runs if enabled in config.
+    /// Respects auto-routing decisions (fast route skips VisionLLM).
     /// </summary>
     public bool ShouldRun(string imagePath, AnalysisContext context)
     {
         // Skip if disabled in config
-        return Config.EnableVisionLlm;
+        if (!Config.EnableVisionLlm)
+            return false;
+
+        // Skip if auto-routing says to skip this wave
+        if (context.IsWaveSkippedByRouting(Name))
+        {
+            // But still run if Florence2 requested escalation
+            var shouldEscalate = context.GetValue<bool>("florence2.should_escalate");
+            if (!shouldEscalate)
+                return false;
+        }
+
+        return true;
     }
 
     public VisionLlmWave(

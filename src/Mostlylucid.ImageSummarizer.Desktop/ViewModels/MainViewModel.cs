@@ -53,10 +53,37 @@ public partial class MainViewModel : ObservableObject
     private bool _isStaticImage;
 
     [ObservableProperty]
-    private string _selectedPipeline = "caption";
+    private string _selectedPipeline = "auto";  // Smart routing: auto-selects fast/balanced/quality
 
     [ObservableProperty]
-    private string _selectedOutput = "alttext";
+    private string _selectedOutput = "auto";  // Adaptive detailed description
+
+    // Route selected by auto-routing (fast/balanced/quality)
+    [ObservableProperty]
+    private string? _selectedRoute;
+
+    [ObservableProperty]
+    private string? _routeReason;
+
+    // Preferred route for auto mode (user can hint their preference)
+    [ObservableProperty]
+    private string _preferredRoute = "balanced";
+
+    // Quality tiers for auto mode
+    public ObservableCollection<string> QualityTiers { get; } = new()
+    {
+        "fast",      // Florence2 only, minimal processing
+        "balanced",  // Florence2 + OCR + Motion, escalate to LLM if needed
+        "quality"    // Full pipeline with VisionLLM
+    };
+
+    // Show quality tier dropdown when auto pipeline is selected
+    public bool ShowQualityTier => SelectedPipeline == "auto";
+
+    partial void OnSelectedPipelineChanged(string value)
+    {
+        OnPropertyChanged(nameof(ShowQualityTier));
+    }
 
     [ObservableProperty]
     private string? _resultText;
@@ -69,12 +96,6 @@ public partial class MainViewModel : ObservableObject
 
     [ObservableProperty]
     private bool _enableVisionLlm = true;
-
-    [ObservableProperty]
-    private bool _fastMode;  // Skip heuristics, direct LLM only
-
-    [ObservableProperty]
-    private bool _disableContext;  // Don't send analysis context to LLM
 
     [ObservableProperty]
     private string _ollamaUrl = "http://localhost:11434";
@@ -130,29 +151,27 @@ public partial class MainViewModel : ObservableObject
     partial void OnOllamaAvailableChanged(bool value) => OnPropertyChanged(nameof(OllamaStatusColor));
     partial void OnFlorence2AvailableChanged(bool value) => OnPropertyChanged(nameof(Florence2StatusColor));
 
+    // Pipelines: auto is default and recommended
     public ObservableCollection<string> Pipelines { get; } = new()
     {
-        "caption",
-        "alttext",
-        "socialmediaalt",
-        "vision",
+        "auto",           // Smart routing - auto-selects fast/balanced/quality (recommended)
+        "caption",        // Full caption pipeline
+        "vision",         // Vision LLM only (no OCR)
         "florence2",      // Fast local ONNX captioning
-        "florence2+llm",  // Florence-2 first pass + LLM escalation
-        "motion",
-        "advancedocr",
-        "simpleocr",
-        "quality",
-        "stats"
+        "motion",         // Motion analysis for GIFs
+        "advancedocr",    // Full OCR pipeline
+        "quality",        // Full quality pipeline
     };
 
     public ObservableCollection<string> OutputFormats { get; } = new()
     {
-        "alttext",
-        "caption",
-        "text",
-        "json",
-        "markdown",
-        "signals"
+        "auto",           // Adaptive detailed description (recommended)
+        "caption",        // Caption only
+        "alttext",        // Alt text format
+        "text",           // Route + caption + OCR
+        "json",           // Full JSON
+        "markdown",       // Markdown format
+        "signals"         // Raw signals
     };
 
     public MainViewModel()
@@ -400,24 +419,19 @@ public partial class MainViewModel : ObservableObject
 
             var provider = services.BuildServiceProvider();
 
-            // Fast mode: skip heuristics, direct LLM call only (but still uses shared service)
-            if (FastMode && EnableVisionLlm)
-            {
-                StatusText = $"Fast mode: calling {VisionModel}...";
-                AddLogEntry($"⚡ Fast mode: calling {VisionModel}...");
-                var llmResult = await DirectVisionLlmCallAsync(ImagePath, provider);
-                ResultText = llmResult ?? "No response from LLM";
-                AddLogEntry("✓ LLM caption received", 0.9);
-                StatusText = "Done (fast mode)";
-                AddLogEntry("✓ Done (fast mode)");
-                return;
-            }
-
             _orchestrator = provider.GetRequiredService<WaveOrchestrator>();
 
             StatusText = "Running wave analysis...";
             AddLogEntry($"🌊 Running {SelectedPipeline} pipeline...");
             var profile = await _orchestrator.AnalyzeAsync(ImagePath);
+
+            // Extract route info if using auto pipeline
+            SelectedRoute = profile.GetValue<string>("route.selected");
+            RouteReason = profile.GetValue<string>("route.reason");
+            if (!string.IsNullOrEmpty(SelectedRoute))
+            {
+                AddLogEntry($"🎯 Route: {SelectedRoute.ToUpperInvariant()} ({RouteReason})", 1.0);
+            }
 
             // Log all signals from the analysis
             foreach (var signal in profile.GetAllSignals().OrderBy(s => s.Key))
@@ -466,45 +480,6 @@ public partial class MainViewModel : ObservableObject
         }
     }
 
-    /// <summary>
-    /// Fast mode: uses shared FastCaptionService for consistent prompts across all clients.
-    /// </summary>
-    private async Task<string?> DirectVisionLlmCallAsync(string imagePath, IServiceProvider provider)
-    {
-        try
-        {
-            var fastCaptionService = provider.GetService<Mostlylucid.DocSummarizer.Images.Services.Vision.FastCaptionService>();
-            if (fastCaptionService == null)
-            {
-                return "Fast caption service not available";
-            }
-
-            StatusText = "Fast mode: analyzing...";
-            var result = await fastCaptionService.GetCaptionAsync(
-                imagePath,
-                detailed: !DisableContext,
-                model: VisionModel);
-
-            if (result.FrameCount > 1)
-            {
-                StatusText = $"Fast mode: analyzed {result.FrameCount} frames";
-            }
-
-            if (result.Success)
-            {
-                return SanitizeCaption(result.Caption);
-            }
-            else
-            {
-                return $"Fast mode error: {result.Error}";
-            }
-        }
-        catch (Exception ex)
-        {
-            return $"Fast mode error: {ex.Message}";
-        }
-    }
-
     private string FormatOutput(Mostlylucid.DocSummarizer.Images.Models.Dynamic.DynamicImageProfile profile, string? llmCaption)
     {
         var ledger = profile.GetLedger();
@@ -514,9 +489,10 @@ public partial class MainViewModel : ObservableObject
 
         return SelectedOutput switch
         {
+            "auto" => GenerateAdaptiveDescription(profile, ledger, cleanCaption),
             "alttext" => GenerateAltText(profile, ledger, cleanCaption),
-            "caption" => cleanCaption ?? ledger.ToLlmSummary(),
-            "text" => GetExtractedText(profile) ?? "No text found",
+            "caption" => cleanCaption ?? profile.GetValue<string>("florence2.caption") ?? ledger.ToLlmSummary(),
+            "text" => FormatTextOutput(profile, cleanCaption),
             "json" => System.Text.Json.JsonSerializer.Serialize(new
             {
                 image = profile.ImagePath,
@@ -637,6 +613,139 @@ public partial class MainViewModel : ObservableObject
         }
 
         return sb.ToString();
+    }
+
+    /// <summary>
+    /// Generate an adaptive, detailed description based on image content.
+    /// Adapts the output style to the image type (animated, text-heavy, photo, etc.)
+    /// </summary>
+    private string GenerateAdaptiveDescription(
+        Mostlylucid.DocSummarizer.Images.Models.Dynamic.DynamicImageProfile profile,
+        Mostlylucid.DocSummarizer.Images.Models.Dynamic.ImageLedger ledger,
+        string? llmCaption)
+    {
+        var sb = new System.Text.StringBuilder();
+
+        // Get the best caption
+        var caption = llmCaption
+            ?? profile.GetValue<string>("florence2.caption")
+            ?? ledger.ToLlmSummary();
+
+        // Clean up the caption
+        if (!string.IsNullOrWhiteSpace(caption))
+        {
+            // Remove common prefixes
+            caption = caption.Trim();
+            if (caption.StartsWith("In this image", StringComparison.OrdinalIgnoreCase))
+            {
+                caption = caption.Substring("In this image".Length).TrimStart(',', ' ');
+                if (caption.Length > 0)
+                    caption = char.ToUpper(caption[0]) + caption[1..];
+            }
+        }
+
+        // Check image characteristics
+        var isAnimated = ledger.Identity.IsAnimated;
+        var hasText = !string.IsNullOrWhiteSpace(GetExtractedText(profile));
+        var hasMotion = !string.IsNullOrWhiteSpace(profile.GetValue<string>("motion.summary"));
+        var scene = profile.GetValue<string>("vision.llm.scene");
+
+        // Build adaptive description
+        if (isAnimated && hasMotion)
+        {
+            // Animated image with motion
+            var motionSummary = profile.GetValue<string>("motion.summary") ?? "";
+            var motionType = profile.GetValue<string>("motion.type") ?? "animation";
+
+            var frameCount = ledger.Motion?.FrameCount ?? profile.GetValue<int>("identity.frame_count");
+            sb.AppendLine($"📽️ Animated {ledger.Identity.Format} ({frameCount} frames)");
+            sb.AppendLine();
+            sb.AppendLine(caption);
+
+            if (!string.IsNullOrWhiteSpace(motionSummary))
+            {
+                sb.AppendLine();
+                sb.AppendLine($"Motion: {motionSummary}");
+            }
+        }
+        else if (hasText)
+        {
+            // Text-heavy image (screenshot, meme, document)
+            var ocrText = GetExtractedText(profile);
+
+            sb.AppendLine(caption);
+
+            if (!string.IsNullOrWhiteSpace(ocrText))
+            {
+                sb.AppendLine();
+                sb.AppendLine("📝 Text:");
+                sb.AppendLine($"\"{ocrText.Trim()}\"");
+            }
+        }
+        else
+        {
+            // Standard photo/image
+            sb.AppendLine(caption);
+        }
+
+        // Add scene context if available and not already in caption
+        if (!string.IsNullOrWhiteSpace(scene) &&
+            !string.IsNullOrWhiteSpace(caption) &&
+            !caption.ToLowerInvariant().Contains(scene.ToLowerInvariant()))
+        {
+            sb.AppendLine();
+            sb.AppendLine($"📍 Scene: {scene}");
+        }
+
+        return sb.ToString().Trim();
+    }
+
+    /// <summary>
+    /// Format text output with route info, caption, and OCR text.
+    /// </summary>
+    private string FormatTextOutput(
+        Mostlylucid.DocSummarizer.Images.Models.Dynamic.DynamicImageProfile profile,
+        string? llmCaption)
+    {
+        var parts = new System.Collections.Generic.List<string>();
+
+        // Show route info if available (from auto pipeline)
+        var route = profile.GetValue<string>("route.selected");
+        var reason = profile.GetValue<string>("route.reason");
+        if (!string.IsNullOrEmpty(route))
+        {
+            parts.Add($"[{route.ToUpperInvariant()} route: {reason}]");
+        }
+
+        // Show OCR text if found
+        var ocrText = GetExtractedText(profile);
+        if (!string.IsNullOrWhiteSpace(ocrText))
+        {
+            parts.Add(ocrText.Trim());
+        }
+
+        // Show caption (prefer LLM, fallback to Florence2)
+        var caption = llmCaption ?? profile.GetValue<string>("florence2.caption");
+        if (!string.IsNullOrWhiteSpace(caption))
+        {
+            parts.Add($"Caption: {caption}");
+        }
+
+        // Show scene if available
+        var scene = profile.GetValue<string>("vision.llm.scene");
+        if (!string.IsNullOrWhiteSpace(scene))
+        {
+            parts.Add($"Scene: {scene}");
+        }
+
+        // Show motion info for animated images
+        var motionSummary = profile.GetValue<string>("motion.summary");
+        if (!string.IsNullOrWhiteSpace(motionSummary))
+        {
+            parts.Add($"Motion: {motionSummary}");
+        }
+
+        return parts.Count > 0 ? string.Join("\n", parts) : "No content extracted";
     }
 
     private string? GetExtractedText(Mostlylucid.DocSummarizer.Images.Models.Dynamic.DynamicImageProfile profile)

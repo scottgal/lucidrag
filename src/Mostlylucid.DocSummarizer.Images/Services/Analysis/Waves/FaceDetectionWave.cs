@@ -22,10 +22,14 @@ public class FaceDetectionWave : IAnalysisWave
 
     /// <summary>
     /// Check cheap preconditions before running expensive face detection.
-    /// Skips face detection for documents, diagrams, and text-heavy images.
+    /// Respects auto-routing and skips for documents, diagrams, and text-heavy images.
     /// </summary>
     public bool ShouldRun(string imagePath, AnalysisContext context)
     {
+        // Skip if auto-routing says to skip this wave (fast route)
+        if (context.IsWaveSkippedByRouting(Name))
+            return false;
+
         // Skip if this looks like a document (high text-likeliness)
         var textLikeliness = context.GetValue<double>("content.text_likeliness");
         if (textLikeliness > 0.7)

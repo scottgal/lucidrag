@@ -459,37 +459,93 @@ public class Florence2CaptionService
         try
         {
             var type = results.GetType();
-            var textProp = type.GetProperty("Text") ?? type.GetProperty("text");
-            if (textProp != null)
+
+            // Try common text property names (Florence2 uses PureText for caption/OCR results)
+            var propertyNames = new[] { "PureText", "Text", "text", "Caption", "caption", "Description", "description", "Content", "content" };
+            foreach (var propName in propertyNames)
             {
-                return textProp.GetValue(results)?.ToString();
+                var prop = type.GetProperty(propName);
+                if (prop != null)
+                {
+                    var value = prop.GetValue(results)?.ToString();
+                    if (!string.IsNullOrWhiteSpace(value))
+                    {
+                        return value;
+                    }
+                }
             }
 
-            // If it's a collection, get first item
+            // If it's a collection, extract text from each item and combine
             if (results is System.Collections.IEnumerable enumerable)
             {
+                var texts = new List<string>();
+                var itemCount = 0;
                 foreach (var item in enumerable)
                 {
-                    if (item is string s) return s;
-                    var itemType = item.GetType();
-                    var itemTextProp = itemType.GetProperty("Text") ?? itemType.GetProperty("text");
-                    if (itemTextProp != null)
+                    itemCount++;
+                    if (item is string s && !string.IsNullOrWhiteSpace(s))
                     {
-                        return itemTextProp.GetValue(item)?.ToString();
+                        texts.Add(s);
+                        continue;
                     }
+
+                    var itemType = item.GetType();
+
+                    // Log element type on first item for debugging
+                    if (itemCount == 1)
+                    {
+                        _logger?.LogDebug("Florence2 collection element type: {Type}, properties: {Props}",
+                            itemType.FullName,
+                            string.Join(", ", itemType.GetProperties().Select(p => $"{p.Name}:{p.PropertyType.Name}")));
+                    }
+
+                    foreach (var propName in propertyNames)
+                    {
+                        var itemProp = itemType.GetProperty(propName);
+                        if (itemProp != null)
+                        {
+                            var value = itemProp.GetValue(item)?.ToString();
+                            if (!string.IsNullOrWhiteSpace(value))
+                            {
+                                texts.Add(value);
+                                break;
+                            }
+                        }
+                    }
+                }
+
+                _logger?.LogDebug("Florence2 collection had {Count} items, extracted {TextCount} text values",
+                    itemCount, texts.Count);
+
+                if (texts.Count > 0)
+                {
+                    return string.Join(" ", texts);
                 }
             }
 
             // Last resort - ToString
             var toString = results.ToString();
-            if (!string.IsNullOrWhiteSpace(toString) && toString != results.GetType().Name)
+            var typeName = type.Name;
+            var fullTypeName = type.FullName;
+            // Avoid returning unhelpful type strings like "FlorenceResults[]" or "Florence2.FlorenceResults[]"
+            if (!string.IsNullOrWhiteSpace(toString)
+                && toString != typeName
+                && !toString.EndsWith(typeName)
+                && fullTypeName != null && !toString.Contains(fullTypeName)
+                && !toString.Contains("[]")  // Avoid array type names
+                && !toString.StartsWith("System."))  // Avoid system type names
             {
                 return toString;
             }
+
+            // Debug: Log property names to help diagnose
+            _logger?.LogDebug("Florence2 result type: {Type}, properties: {Props}",
+                type.FullName,
+                string.Join(", ", type.GetProperties().Select(p => $"{p.Name}:{p.PropertyType.Name}")));
         }
-        catch
+        catch (Exception ex)
         {
-            // Ignore reflection errors
+            _logger?.LogDebug(ex, "Error extracting text from Florence2 result");
         }
 
         return null;

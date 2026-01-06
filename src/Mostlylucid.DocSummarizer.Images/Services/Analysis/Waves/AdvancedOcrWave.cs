@@ -31,6 +31,22 @@ public class AdvancedOcrWave : IAnalysisWave
     public int Priority => 59; // Runs after simple OcrWave
     public IReadOnlyList<string> Tags => new[] { SignalTags.Content, "ocr", "advanced" };
 
+    /// <summary>
+    /// Check if advanced OCR should run. Respects auto-routing.
+    /// </summary>
+    public bool ShouldRun(string imagePath, AnalysisContext context)
+    {
+        // Skip if auto-routing says to skip this wave
+        if (context.IsWaveSkippedByRouting(Name))
+            return false;
+
+        // Skip if advanced pipeline is disabled
+        if (!_config.UseAdvancedPipeline)
+            return false;
+
+        return true;
+    }
+
     public AdvancedOcrWave(
         IOcrEngine ocrEngine,
         IOptions<ImageConfig> imageConfig,

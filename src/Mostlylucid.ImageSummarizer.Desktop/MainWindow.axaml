@@ -44,7 +44,14 @@
 
                 <ComboBox ItemsSource="{Binding Pipelines}"
                           SelectedItem="{Binding SelectedPipeline}"
-                          ToolTip.Tip="Analysis pipeline"
+                          ToolTip.Tip="Analysis pipeline (auto = smart routing)"
+                          Margin="0,0,8,8"/>
+
+                <!-- Quality tier dropdown (only shown for auto pipeline) -->
+                <ComboBox ItemsSource="{Binding QualityTiers}"
+                          SelectedItem="{Binding PreferredRoute}"
+                          IsVisible="{Binding ShowQualityTier}"
+                          ToolTip.Tip="Quality tier: fast (Florence2), balanced (+ OCR/Motion), quality (full LLM)"
                           Margin="0,0,8,8"/>
 
                 <ComboBox ItemsSource="{Binding OutputFormats}"
@@ -55,27 +62,13 @@
                 <CheckBox Content="LLM"
                           IsChecked="{Binding EnableVisionLlm}"
                           VerticalAlignment="Center"
-                          ToolTip.Tip="Enable Vision LLM for captions"
+                          ToolTip.Tip="Enable Vision LLM for enhanced captions (requires Ollama)"
                           Margin="0,0,8,8"/>
 
                 <ComboBox ItemsSource="{Binding AvailableModels}"
                           SelectedItem="{Binding VisionModel}"
                           IsVisible="{Binding EnableVisionLlm}"
                           ToolTip.Tip="Vision model"
-                          Margin="0,0,8,8"/>
-
-                <CheckBox Content="Fast"
-                          IsChecked="{Binding FastMode}"
-                          IsVisible="{Binding EnableVisionLlm}"
-                          VerticalAlignment="Center"
-                          ToolTip.Tip="Fast mode: Direct LLM call, skips all heuristics"
-                          Margin="0,0,8,8"/>
-
-                <CheckBox Content="No Ctx"
-                          IsChecked="{Binding DisableContext}"
-                          IsVisible="{Binding EnableVisionLlm}"
-                          VerticalAlignment="Center"
-                          ToolTip.Tip="Disable context: Don't send analysis signals to LLM"
                           Margin="0,0,8,8"/>
 
                 <Button Command="{Binding AnalyzeCommand}"
@@ -215,16 +208,32 @@
                 CornerRadius="4"
                 Padding="12,6"
                 Margin="0,12,0,0">
-            <Grid ColumnDefinitions="*,Auto">
-                <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="12">
+            <Grid ColumnDefinitions="Auto,*,Auto">
+                <!-- Route indicator (left) -->
+                <Border Grid.Column="0"
+                        Background="#3B82F6"
+                        CornerRadius="4"
+                        Padding="8,4"
+                        IsVisible="{Binding SelectedRoute, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"
+                        Margin="0,0,12,0">
+                    <StackPanel Orientation="Horizontal" Spacing="6">
+                        <TextBlock Text="{Binding SelectedRoute, StringFormat='⚡ {0}'}"
+                                   FontWeight="SemiBold"
+                                   Foreground="White"
+                                   FontSize="11"/>
+                    </StackPanel>
+                </Border>
+
+                <!-- Status text (center) -->
+                <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="12" VerticalAlignment="Center">
                     <TextBlock Text="{Binding StatusText}" VerticalAlignment="Center"/>
                     <TextBlock Text="{Binding FallbackMode}" FontSize="11" FontStyle="Italic"
                                Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}"
                                VerticalAlignment="Center"/>
                 </StackPanel>
 
-                <!-- Ollama URL (collapsed by default) -->
-                <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8" IsVisible="{Binding EnableVisionLlm}">
+                <!-- Ollama URL (right) -->
+                <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="8" IsVisible="{Binding EnableVisionLlm}">
                     <TextBlock Text="Ollama:" VerticalAlignment="Center" FontSize="11"
                                Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}"/>
                     <TextBox Text="{Binding OllamaUrl}"
