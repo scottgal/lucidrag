@@ -111,8 +111,17 @@ public class OcrConfig
     /// SSIM threshold (0-1) for frame deduplication
     /// Higher = more aggressive deduplication (faster, might miss subtle differences)
     /// Lower = keep more unique frames (slower, more data)
+    /// NOTE: For subtitle GIFs, text-content deduplication is used instead (compares OCR text)
     /// </summary>
-    public double SsimDeduplicationThreshold { get; set; } = 0.95;
+    public double SsimDeduplicationThreshold { get; set; } = 0.92;
+
+    /// <summary>
+    /// Text similarity threshold (0-1) for text-content deduplication
+    /// Higher = more aggressive (drop frames with similar text)
+    /// Lower = keep more frames with text variations
+    /// Uses Levenshtein distance - 0.85 means 85% similar text = duplicate
+    /// </summary>
+    public double TextSimilarityDeduplicationThreshold { get; set; } = 0.85;
 
     /// <summary>
     /// IoU threshold (0-1) for non-maximum suppression in text detection

@@ -286,6 +286,7 @@ public class WaveOcrPipelineTests
     [Theory]
     [InlineData("F:/Gifs/anchorman-not-even-mad.gif")]
     [InlineData("F:/Gifs/animatedbullshit.gif")]
+    [InlineData("F:/Gifs/aed.gif")]
     public async Task AdvancedOcrWave_ShouldExtractText_FromGifWithText(string gifPath)
     {
         // This test verifies that actual text is extracted and returned as signals

@@ -25,6 +25,7 @@ public class EscalationService
     private readonly ILogger<EscalationService> _logger;
     private readonly EscalationConfig _config;
     private readonly PromptTemplateService _promptTemplateService;
+    private readonly Florence2CaptionService? _florence2Service;
 
     public EscalationService(
         IImageAnalyzer imageAnalyzer,
@@ -32,7 +33,8 @@ public class EscalationService
         ILogger<EscalationService> logger,
         ISignalDatabase? signalDatabase = null,
         UnifiedVisionService? unifiedVisionService = null,
-        PromptTemplateService? promptTemplateService = null)
+        PromptTemplateService? promptTemplateService = null,
+        Florence2CaptionService? florence2Service = null)
     {
         _imageAnalyzer = imageAnalyzer;
         _visionLlmService = visionLlmService;
@@ -40,6 +42,7 @@ public class EscalationService
         _signalDatabase = signalDatabase;
         _logger = logger;
         _promptTemplateService = promptTemplateService ?? new PromptTemplateService();
+        _florence2Service = florence2Service;
 
         // Default escalation configuration
         _config = new EscalationConfig
@@ -227,17 +230,25 @@ public class EscalationService
         string? extractedText = null;
         double ocrConfidence = 0.0;
 
-        if (enableOcr && analyzedProfile.TextLikeliness >= _config.TextLikelinessThreshold)
+        // Check if this is an animated image (GIF/WebP) - these often have subtitles
+        var isAnimatedForOcr = analyzedProfile.Format?.Equals("GIF", StringComparison.OrdinalIgnoreCase) == true ||
+                               analyzedProfile.Format?.Equals("WEBP", StringComparison.OrdinalIgnoreCase) == true;
+
+        // Always try OCR for:
+        // 1. Images with high text likeliness
+        // 2. Animated images (GIFs often have subtitles even with low text likeliness score)
+        var shouldRunOcr = enableOcr && (
+            analyzedProfile.TextLikeliness >= _config.TextLikelinessThreshold ||
+            isAnimatedForOcr // GIFs often have subtitles - always try OCR
+        );
+
+        if (shouldRunOcr)
         {
-            _logger.LogInformation("Image {ImagePath} has high text likeliness ({Score:F3}), performing OCR early",
-                imagePath, analyzedProfile.TextLikeliness);
+            _logger.LogInformation("Image {ImagePath} - performing OCR (text_likeliness={Score:F3}, animated={IsAnimated})",
+                imagePath, analyzedProfile.TextLikeliness, isAnimatedForOcr);
 
             try
             {
-                // Check if this is an animated image (GIF/WebP)
-                var isAnimatedForOcr = analyzedProfile.Format?.Equals("GIF", StringComparison.OrdinalIgnoreCase) == true ||
-                                 analyzedProfile.Format?.Equals("WEBP", StringComparison.OrdinalIgnoreCase) == true;
-
                 if (isAnimatedForOcr)
                 {
                     // Use multi-frame text extraction for animated images
@@ -259,10 +270,31 @@ public class EscalationService
                         ? Math.Min(0.95, 0.7 + (0.25 * result.FramesWithText / result.TotalFrames))
                         : 0.0;
 
-                    _logger.LogInformation("Extracted text from {Frames} frames (confidence: {Conf:P0}): {Preview}",
+                    _logger.LogInformation("Tesseract extracted text from {Frames} frames: {Preview}",
                         result.FramesWithText,
-                        ocrConfidence,
                         extractedText.Length > 50 ? extractedText.Substring(0, 50) + "..." : extractedText);
+
+                    // If Tesseract found no text, try Florence-2 (better at stylized subtitle text)
+                    if (string.IsNullOrWhiteSpace(extractedText) && _florence2Service != null)
+                    {
+                        _logger.LogDebug("Tesseract found no text, trying Florence-2 for {ImagePath}", imagePath);
+                        try
+                        {
+                            // Florence-2 can read subtitle text that Tesseract misses
+                            var florenceResult = await _florence2Service.ExtractTextAsync(imagePath, ct);
+                            if (florenceResult.Success && !string.IsNullOrWhiteSpace(florenceResult.Text))
+                            {
+                                extractedText = florenceResult.Text;
+                                ocrConfidence = 0.75; // Florence-2 confidence estimate
+                                _logger.LogInformation("Florence-2 extracted text: {Preview}",
+                                    extractedText.Length > 50 ? extractedText.Substring(0, 50) + "..." : extractedText);
+                            }
+                        }
+                        catch (Exception florenceEx)
+                        {
+                            _logger.LogWarning(florenceEx, "Florence-2 text extraction failed for {ImagePath}", imagePath);
+                        }
+                    }
                 }
                 else
                 {

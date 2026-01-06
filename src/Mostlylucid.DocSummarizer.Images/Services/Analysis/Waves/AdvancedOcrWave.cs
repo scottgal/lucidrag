@@ -269,11 +269,16 @@ public class AdvancedOcrWave : IAnalysisWave
                 });
 
                 // Further deduplicate using actual text content comparison
-                if (frames.Count > 1 && _config.SsimDeduplicationThreshold > 0)
+                // Use text similarity threshold (default 0.85) - lower than SSIM to catch text variations
+                var textThreshold = _config.TextSimilarityDeduplicationThreshold > 0
+                    ? _config.TextSimilarityDeduplicationThreshold
+                    : 0.85;
+
+                if (frames.Count > 1 && textThreshold > 0)
                 {
                     var beforeTextDedup = frames.Count;
                     frames = await DeduplicateFramesUsingTextContentAsync(
-                        frames, perFrameRegions, _config.SsimDeduplicationThreshold, ct);
+                        frames, perFrameRegions, textThreshold, ct);
 
                     if (frames.Count < beforeTextDedup)
                     {
@@ -305,7 +310,12 @@ public class AdvancedOcrWave : IAnalysisWave
                 }
 
                 // Smart deduplication: prefer text-content comparison if we have OpenCV regions
-                if (frameCount > 1 && _config.SsimDeduplicationThreshold > 0)
+                // Use lower text threshold (0.85) to catch text variations like "mean" vs "means"
+                var textThreshold = _config.TextSimilarityDeduplicationThreshold > 0
+                    ? _config.TextSimilarityDeduplicationThreshold
+                    : 0.85;
+
+                if (frameCount > 1 && (_config.SsimDeduplicationThreshold > 0 || textThreshold > 0))
                 {
                     var originalCount = frames.Count;
 
@@ -313,7 +323,7 @@ public class AdvancedOcrWave : IAnalysisWave
                     {
                         // Use smart text-content deduplication
                         frames = await DeduplicateFramesUsingTextContentAsync(
-                            frames, perFrameRegions, _config.SsimDeduplicationThreshold, ct);
+                            frames, perFrameRegions, textThreshold, ct);
 
                         signals.Add(new Signal
                         {

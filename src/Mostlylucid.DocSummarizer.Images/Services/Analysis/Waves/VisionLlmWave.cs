@@ -366,15 +366,16 @@ public class VisionLlmWave : IAnalysisWave
     /// <summary>
     /// Creates a filmstrip of key frames from an animated GIF for caption generation.
     /// Extracts evenly-spaced frames to show the animation sequence.
+    /// For subtitle GIFs, also samples frames from text-changing regions.
     /// </summary>
     private async Task<(string Base64, int FrameCount)> CreateFilmstripForCaptionAsync(string imagePath, int totalFrames, CancellationToken ct)
     {
-        // Target 4-8 frames for caption filmstrip (enough to show action without overwhelming)
-        const int MinFrames = 4;
-        const int MaxFrames = 8;
+        // Target 6-12 frames for caption filmstrip - increased for better subtitle coverage
+        const int MinFrames = 6;
+        const int MaxFrames = 12;
         const int MaxFrameHeight = 256; // Keep frames readable but compact
 
-        var targetFrames = Math.Min(MaxFrames, Math.Max(MinFrames, totalFrames / 3));
+        var targetFrames = Math.Min(MaxFrames, Math.Max(MinFrames, totalFrames / 2));
 
         try
         {

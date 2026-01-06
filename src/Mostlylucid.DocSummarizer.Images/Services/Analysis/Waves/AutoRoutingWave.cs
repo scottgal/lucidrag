@@ -67,7 +67,7 @@ public class AutoRoutingWave : IAnalysisWave
         if (cachedRoute != null)
         {
             _logger?.LogDebug("Using cached route '{Route}' for image {Hash}", cachedRoute, imageHash?.Substring(0, 8));
-            return Task.FromResult(EmitRoutingSignals(signals, cachedRoute.Value, "cached_decision", 0, 0));
+            return Task.FromResult(EmitRoutingSignals(signals, cachedRoute.Value, "cached_decision", 0, 0, context));
         }
 
         // FAST text detection with OpenCV MSER (~5-20ms)
@@ -129,7 +129,7 @@ public class AutoRoutingWave : IAnalysisWave
             CacheRoute(imageHash, route);
         }
 
-        return Task.FromResult(EmitRoutingSignals(signals, route, string.Join("; ", reasons), textCoverage, textRegionCount));
+        return Task.FromResult(EmitRoutingSignals(signals, route, string.Join("; ", reasons), textCoverage, textRegionCount, context));
     }
 
     /// <summary>
@@ -277,7 +277,7 @@ public class AutoRoutingWave : IAnalysisWave
     /// </summary>
     private IEnumerable<Signal> EmitRoutingSignals(
         List<Signal> signals, Route route, string reason,
-        double textCoverage, int textRegionCount)
+        double textCoverage, int textRegionCount, AnalysisContext context)
     {
         signals.Add(new Signal
         {
@@ -327,8 +327,14 @@ public class AutoRoutingWave : IAnalysisWave
             }
         });
 
+        // Check if this is an animated GIF - for animated GIFs we should always run OCR
+        // because Florence-2 only reads one frame, but subtitles appear across many frames
+        var isAnimated = context.GetValue<bool>("identity.is_animated");
+        var frameCount = context.GetValue<int>("identity.frame_count");
+        var isAnimatedGif = isAnimated && frameCount > 1;
+
         // Emit skip signals for downstream waves to check
-        var skipWaves = GetSkipWaves(route, textTier);
+        var skipWaves = GetSkipWaves(route, textTier, isAnimatedGif);
         signals.Add(new Signal
         {
             Key = "route.skip_waves",
@@ -378,13 +384,38 @@ public class AutoRoutingWave : IAnalysisWave
 
     /// <summary>
     /// Get list of waves to skip based on route and text complexity.
-    /// FAST + caption tier: Florence-2 only, skip all heavy OCR
+    /// FAST + caption tier: Florence-2 only, skip all heavy OCR (UNLESS animated GIF)
     /// FAST + other tiers: Still use Florence-2 but may escalate
     /// BALANCED: Skip advanced OCR unless text tier is substantial+
     /// QUALITY: Run everything
+    /// Animated GIFs NEVER skip OcrWave/AdvancedOcrWave - multi-frame OCR is essential for subtitles.
     /// </summary>
-    private static List<string> GetSkipWaves(Route route, string textTier)
+    private static List<string> GetSkipWaves(Route route, string textTier, bool isAnimatedGif = false)
     {
+        // Animated GIFs need multi-frame OCR regardless of route
+        // Florence-2 only reads one frame, so we need Tesseract for accurate subtitle extraction
+        if (isAnimatedGif)
+        {
+            return route switch
+            {
+                Route.Fast => new List<string>
+                {
+                    // For animated GIFs, only skip non-OCR expensive waves
+                    "OcrVerificationWave",  // Skip verification
+                    "ClipEmbeddingWave",    // Skip CLIP
+                    "FaceDetectionWave"     // Skip face detection
+                },
+                Route.Balanced => new List<string>
+                {
+                    "OcrVerificationWave",
+                    "ClipEmbeddingWave"
+                },
+                Route.Quality => new List<string>(),
+                _ => new List<string>()
+            };
+        }
+
+        // Static images: use original logic
         return route switch
         {
             Route.Fast when textTier == "caption" => new List<string>
