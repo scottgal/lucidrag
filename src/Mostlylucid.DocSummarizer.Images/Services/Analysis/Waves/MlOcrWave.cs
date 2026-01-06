@@ -1,6 +1,7 @@
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Mostlylucid.DocSummarizer.Images.Config;
+using Mostlylucid.DocSummarizer.Images.Coordination;
 using Mostlylucid.DocSummarizer.Images.Models.Dynamic;
 using Mostlylucid.DocSummarizer.Images.Services.Vision;
 using OpenCvSharp;
@@ -12,16 +13,25 @@ namespace Mostlylucid.DocSummarizer.Images.Services.Analysis.Waves;
 
 /// <summary>
 /// ML-based OCR Wave - Uses OpenCV + Florence-2 for fast text detection before Tesseract.
-/// Priority: 28 (runs BEFORE OcrWave at 30)
 ///
-/// Pipeline:
-/// 1. OpenCV MSER detection (~5-20ms) - quick check for text-like regions
-/// 2. If no text regions found, skip OCR entirely
-/// 3. If text regions found and Florence-2 available, use for fast OCR (~1-2s)
-/// 4. Based on results, signal whether to run Tesseract for accuracy
-/// 5. For GIFs, detect which frames have text changes using OpenCV
+/// Signal Contract (see waves/ml-ocr.wave.yaml):
+/// - Emits: ocr.ml.fused_text, ocr.ml.text, ocr.ml.frames_with_text, ocr.ml.has_text
+/// - Listens: identity.is_animated, identity.frame_count, ocr.opencv.text_regions (cached)
+/// - Caches: ocr.frames, ocr.opencv.per_frame_regions
 /// </summary>
-public class MlOcrWave : IAnalysisWave
+[EmitsSignal("ocr.ml.fused_text", Type = "string", Description = "Fused OCR text from OpenCV+Florence2")]
+[EmitsSignal("ocr.ml.text", Type = "string", Description = "Raw concatenated OCR text")]
+[EmitsSignal("ocr.ml.frames_with_text", Type = "int", Description = "Number of frames with text")]
+[EmitsSignal("ocr.ml.has_text", Type = "bool", Description = "Whether any text was detected")]
+[EmitsSignal("ocr.opencv.has_text", Type = "bool", Description = "OpenCV MSER detection result")]
+[EmitsSignal("ocr.ml.skipped", Type = "bool", Description = "Wave was skipped")]
+[RequiresSignal("identity.is_animated")]
+[RequiresSignal("identity.frame_count")]
+[UsesSignal("ocr.opencv.text_regions")]
+[UsesSignal("route.quality_tier")]
+[Caches("ocr.frames", Type = "List<Image<Rgba32>>")]
+[Caches("ocr.opencv.per_frame_regions", Type = "Dictionary<int, List<BoundingBox>>")]
+public class MlOcrWave : IAnalysisWave, ISignalAware
 {
     private readonly Florence2CaptionService? _florence2;
     private readonly OpenCvTextDetector _opencvDetector;
@@ -30,8 +40,44 @@ public class MlOcrWave : IAnalysisWave
     private readonly ILogger<MlOcrWave>? _logger;
 
     public string Name => "MlOcrWave";
+    public string ManifestName => Name; // Links to waves/ml-ocr.wave.yaml
     public int Priority => 65; // Before MotionWave (55), Florence2Wave (55), VisionLlmWave (50)
     public IReadOnlyList<string> Tags => new[] { SignalTags.Content, "ocr", "ml", "text" };
+
+    // ISignalAware implementation - fallback if manifest not loaded
+    // Primary source of truth is waves/ml-ocr.wave.yaml
+    public IReadOnlyList<string> EmittedSignals => new[]
+    {
+        "ocr.ml.fused_text",
+        "ocr.ml.text",
+        "ocr.ml.frames_with_text",
+        "ocr.ml.has_text",
+        "ocr.opencv.has_text",
+        "ocr.ml.skipped"
+    };
+
+    public IReadOnlyList<string> RequiredSignals => new[]
+    {
+        "identity.is_animated",
+        "identity.frame_count"
+    };
+
+    public IReadOnlyList<string> OptionalSignals => new[]
+    {
+        "ocr.opencv.text_regions",
+        "route.quality_tier"
+    };
+
+    public IReadOnlyList<string> CacheEmits => new[]
+    {
+        "ocr.frames",
+        "ocr.opencv.per_frame_regions"
+    };
+
+    public IReadOnlyList<string> CacheUses => new[]
+    {
+        "ocr.opencv.text_regions"
+    };
 
     // Minimum text length to consider "meaningful"
     private const int MinMeaningfulTextLength = 3;
@@ -305,7 +351,12 @@ public class MlOcrWave : IAnalysisWave
             else
             {
                 // Static image - use OpenCV regions if available for targeted OCR
-                if (opencvResult.TextBoundingBoxes.Count > 0 && _florence2 != null)
+                if (_florence2 == null)
+                {
+                    // Florence-2 not available, skip ML OCR for static images
+                    _logger?.LogDebug("Florence-2 not available, skipping ML OCR for static image");
+                }
+                else if (opencvResult.TextBoundingBoxes.Count > 0)
                 {
                     // Extract text from detected regions
                     mlText = await ExtractTextFromRegionsAsync(imagePath, opencvResult.TextBoundingBoxes, ct);

@@ -873,8 +873,8 @@ public class VisionLlmWave : IAnalysisWave
     private async Task<List<EntityDetection>?> ExtractEntitiesAsync(string imageBase64, CancellationToken ct)
     {
         var prompt = @"List all visible objects, people, animals, and text in this image.
-Format: JSON array with [{""type"": ""person|animal|object|text"", ""label"": ""name"", ""confidence"": 0.0-1.0, ""attributes"": {}}]
-Be comprehensive but concise.";
+Format: JSON array with [{""type"": ""person|animal|object|text"", ""label"": ""name"", ""confidence"": 0.0-1.0}]
+Be comprehensive but concise. Only output the JSON array, no other text.";
 
         var response = await QueryVisionLlmAsync(imageBase64, prompt, ct);
         if (string.IsNullOrEmpty(response)) return null;
@@ -887,16 +887,49 @@ Be comprehensive but concise.";
             if (jsonStart >= 0 && jsonEnd > jsonStart)
             {
                 var json = response.Substring(jsonStart, jsonEnd - jsonStart + 1);
-                return JsonSerializer.Deserialize<List<EntityDetection>>(json);
+
+                // Clean up common LLM JSON issues
+                json = CleanLlmJson(json);
+
+                var options = new JsonSerializerOptions
+                {
+                    PropertyNameCaseInsensitive = true,
+                    AllowTrailingCommas = true,
+                    ReadCommentHandling = JsonCommentHandling.Skip
+                };
+
+                return JsonSerializer.Deserialize<List<EntityDetection>>(json, options);
             }
+        }
+        catch (JsonException ex)
+        {
+            // Expected for malformed LLM output - log at debug level without stack trace
+            _logger?.LogDebug("Entity extraction JSON parse failed: {Message}, falling back to text parsing", ex.Message);
         }
         catch (Exception ex)
         {
-            _logger?.LogWarning(ex, "Failed to parse entity extraction JSON, falling back to simple parsing");
+            _logger?.LogWarning(ex, "Unexpected error in entity extraction, falling back to simple parsing");
         }
 
         // Fallback: Simple keyword extraction
         return ParseEntitiesFromText(response);
+    }
+
+    /// <summary>
+    /// Clean up common JSON issues from LLM output.
+    /// </summary>
+    private static string CleanLlmJson(string json)
+    {
+        // Remove trailing commas before ] or }
+        json = System.Text.RegularExpressions.Regex.Replace(json, @",\s*([}\]])", "$1");
+
+        // Fix unquoted property names (common LLM error)
+        json = System.Text.RegularExpressions.Regex.Replace(json, @"(\{|\,)\s*([a-zA-Z_][a-zA-Z0-9_]*)\s*:", "$1\"$2\":");
+
+        // Remove control characters
+        json = System.Text.RegularExpressions.Regex.Replace(json, @"[\x00-\x1F]+", " ");
+
+        return json;
     }
 
     private List<EntityDetection> ParseEntitiesFromText(string text)

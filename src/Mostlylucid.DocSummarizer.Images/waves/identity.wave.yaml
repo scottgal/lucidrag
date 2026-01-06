@@ -1,0 +1,68 @@
+# IdentityWave - Basic image metadata extraction
+name: IdentityWave
+priority: 100  # Runs first - provides foundation signals
+enabled: true
+
+scope:
+  sink: docsummarizer.images
+  coordinator: analysis
+  atom: Identity
+
+triggers:
+  # Always runs - no dependencies
+  requires: []
+  skip_when: []
+
+emits:
+  on_complete:
+    - key: identity.width
+      type: int
+      description: Image width in pixels
+
+    - key: identity.height
+      type: int
+      description: Image height in pixels
+
+    - key: identity.format
+      type: string
+      description: Image format (GIF, PNG, JPEG, etc.)
+
+    - key: identity.is_animated
+      type: bool
+      description: Whether image has multiple frames
+
+    - key: identity.frame_count
+      type: int
+      description: Number of frames (1 for static images)
+
+    - key: identity.aspect_ratio
+      type: double
+      description: Width/height ratio
+
+    - key: identity.pixel_count
+      type: int
+      description: Total pixels (width * height)
+
+    - key: identity.file_size
+      type: long
+      description: File size in bytes
+
+    - key: identity.sha256
+      type: string
+      description: Content hash for caching
+
+listens:
+  required: []  # No dependencies - runs first
+  optional: []
+
+config:
+  bindings: []  # Always runs
+
+lane:
+  name: metadata
+  max_concurrency: 8  # Fast, can parallelize
+
+tags:
+  - identity
+  - metadata
+  - foundation

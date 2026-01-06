@@ -4,6 +4,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Options;
 using Mostlylucid.DocSummarizer.Images.Config;
+using Mostlylucid.DocSummarizer.Images.Coordination;
 using Mostlylucid.DocSummarizer.Images.Services;
 using Mostlylucid.DocSummarizer.Images.Services.Analysis;
 using Mostlylucid.DocSummarizer.Images.Services.Analysis.Waves;
@@ -295,8 +296,51 @@ public static class ServiceCollectionExtensions
             return new ContradictionWave(detector, imageConfig, logger);
         });
 
-        // Wave orchestrator
+        // Wave orchestrator (legacy)
         services.TryAddSingleton<WaveOrchestrator>();
+
+        // Signal-based coordination infrastructure (new)
+        // WaveManifestLoader loads YAML wave declarations for signal contracts
+        services.TryAddSingleton<WaveManifestLoader>(sp =>
+        {
+            var loader = new WaveManifestLoader();
+            loader.LoadEmbeddedManifests();
+            return loader;
+        });
+
+        // ProfiledWaveCoordinator uses coordinator profiles for different execution contexts
+        services.TryAddSingleton<ProfiledWaveCoordinator>(sp =>
+        {
+            var manifestLoader = sp.GetRequiredService<WaveManifestLoader>();
+            var logger = sp.GetService<Microsoft.Extensions.Logging.ILogger<ProfiledWaveCoordinator>>();
+            var coordinator = new ProfiledWaveCoordinator(manifestLoader, logger);
+
+            // Register all waves with the coordinator
+            var waves = sp.GetServices<IAnalysisWave>();
+            foreach (var wave in waves)
+            {
+                coordinator.RegisterWave(wave);
+            }
+
+            return coordinator;
+        });
+
+        // WaveSignalCoordinator for reactive signal composition
+        services.TryAddSingleton<WaveSignalCoordinator>(sp =>
+        {
+            var manifestLoader = sp.GetRequiredService<WaveManifestLoader>();
+            var logger = sp.GetService<Microsoft.Extensions.Logging.ILogger<WaveSignalCoordinator>>();
+            var coordinator = new WaveSignalCoordinator(manifestLoader, logger);
+
+            // Register all waves
+            var waves = sp.GetServices<IAnalysisWave>();
+            foreach (var wave in waves)
+            {
+                coordinator.RegisterWave(wave);
+            }
+
+            return coordinator;
+        });
 
         // Image stream processor for memory-efficient large image handling
         services.TryAddSingleton<ImageStreamProcessor>();

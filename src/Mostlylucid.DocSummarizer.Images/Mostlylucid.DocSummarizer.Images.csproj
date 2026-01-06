@@ -57,6 +57,8 @@
 
   <ItemGroup>
     <EmbeddedResource Include="Config\pipelines.json" />
+    <!-- Wave manifest YAML files for dynamic composition -->
+    <EmbeddedResource Include="waves\*.wave.yaml" />
   </ItemGroup>
 
   <ItemGroup>

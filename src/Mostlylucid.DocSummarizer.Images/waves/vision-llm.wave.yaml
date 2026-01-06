@@ -1,0 +1,105 @@
+# VisionLlmWave - Vision LLM for captions and text extraction
+name: VisionLlmWave
+priority: 50
+enabled: true
+
+scope:
+  sink: docsummarizer.images
+  coordinator: analysis
+  atom: VisionLlm
+
+triggers:
+  requires:
+    - signal: identity.width
+      condition: "> 0"
+  skip_when:
+    - signal: wave.skipped.VisionLlmWave
+    - signal: route.skip.VisionLlmWave
+
+emits:
+  on_start:
+    - vision.llm.started
+
+  on_complete:
+    - key: vision.llm.caption
+      type: string
+      description: LLM-generated image caption
+      confidence_range: [0.7, 0.95]
+
+    - key: vision.llm.text
+      type: string
+      description: LLM-extracted text from image (subtitles, overlays)
+      confidence_range: [0.8, 0.98]
+
+    - key: vision.llm.scene
+      type: string
+      description: Detected scene type (meme, photo, screenshot, etc.)
+
+    - key: vision.llm.entities
+      type: List<EntityDetection>
+      description: Detected entities (people, objects, text)
+
+    - key: vision.llm.skipped
+      type: bool
+      description: Wave was skipped
+
+  on_failure:
+    - vision.llm.failed
+
+listens:
+  required:
+    - identity.is_animated
+    - identity.frame_count
+
+  optional:
+    # OCR signals - skip text extraction if OCR succeeded
+    - ocr.ml.fused_text
+    - ocr.full_text
+    - ocr.quality.is_garbled
+
+    # Cached frames from MlOcrWave for filmstrip
+    - ocr.frames
+    - ocr.opencv.per_frame_regions
+
+    # Text detection signals
+    - content.text_likeliness
+
+    # Route signals
+    - route.quality_tier
+
+# Escalation logic - when to extract text vs just caption
+escalation:
+  text_extraction:
+    when:
+      - signal: ocr.quality.is_garbled
+        value: true
+      - signal: ocr.ml.fused_text
+        condition: "IsNullOrWhiteSpace"
+      - signal: identity.is_animated
+        value: true
+        and_signal: ocr.ml.fused_text
+        and_condition: "IsNullOrWhiteSpace"
+    skip_when:
+      - signal: ocr.ml.fused_text
+        condition: "HasValue && !IsGarbled"
+
+cache:
+  uses:
+    - ocr.frames
+    - ocr.opencv.per_frame_regions
+
+config:
+  bindings:
+    - config_key: EnableVisionLlm
+      skip_if_false: true
+
+lane:
+  name: llm
+  max_concurrency: 1  # LLM calls are expensive
+
+tags:
+  - vision
+  - llm
+  - caption
+  - ocr
+  - escalation

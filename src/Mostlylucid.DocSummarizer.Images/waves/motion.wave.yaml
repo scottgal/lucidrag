@@ -1,0 +1,119 @@
+# MotionWave - Optical flow motion analysis for animated GIFs
+name: MotionWave
+priority: 55  # Runs before VisionLLM to provide motion context
+enabled: true
+
+scope:
+  sink: docsummarizer.images
+  coordinator: analysis
+  atom: Motion
+
+triggers:
+  requires:
+    - signal: identity.is_animated
+      value: true
+    - signal: identity.frame_count
+      condition: "> 1"
+  skip_when:
+    - signal: wave.skipped.MotionWave
+    - signal: motion.disabled
+
+emits:
+  on_start:
+    - motion.started
+
+  on_complete:
+    - key: motion.has_motion
+      type: bool
+      description: Whether significant motion was detected
+
+    - key: motion.type
+      type: string
+      description: "Motion type: static, panning, radial, rotating, oscillating, object_motion, general"
+      confidence_range: [0.8, 1.0]
+
+    - key: motion.direction
+      type: string
+      description: Dominant motion direction (up, down, left, right, stationary)
+      confidence_range: [0.7, 0.95]
+
+    - key: motion.magnitude
+      type: double
+      description: Average motion magnitude in pixels per frame
+
+    - key: motion.activity
+      type: double
+      description: Fraction of image with motion (0-1)
+
+    - key: motion.temporal_consistency
+      type: double
+      description: How consistent motion is over time (0-1)
+
+    - key: motion.regions
+      type: List<MotionRegion>
+      description: Detected motion regions with bounding boxes
+
+    - key: motion.region.*
+      type: string
+      description: Individual motion region coordinates
+
+    - key: motion.summary
+      type: string
+      description: Human-readable motion summary
+
+    - key: motion.moving_objects
+      type: List<string>
+      description: Identified moving objects (via VisionLLM)
+      confidence_range: [0.6, 0.85]
+
+    - key: motion.moving.*
+      type: string
+      description: Individual moving object labels
+
+    - key: motion.not_animated
+      type: bool
+      description: Image is static (single frame)
+
+    - key: motion.disabled
+      type: bool
+      description: Motion analysis is disabled in config
+
+    - key: motion.error
+      type: string
+      description: Error message if analysis failed
+
+  on_failure:
+    - motion.failed
+
+listens:
+  required:
+    - identity.is_animated
+    - identity.frame_count
+
+  optional:
+    - vision.llm.entities  # For motion object identification
+    - ocr.final.corrected_text
+    - ocr.text.voting_consensus
+    - ocr.text.raw
+    - content.text_likeliness
+    - color.dominant_colors
+    - faces.detected
+    - faces.count
+    - identity.width
+    - identity.height
+
+config:
+  bindings:
+    - config_key: Motion.Enabled
+      skip_if_false: true
+
+lane:
+  name: motion
+  max_concurrency: 2  # OpenCV optical flow
+
+tags:
+  - motion
+  - animation
+  - optical_flow
+  - opencv
+  - visual

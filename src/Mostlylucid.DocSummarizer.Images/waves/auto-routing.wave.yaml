@@ -1,0 +1,80 @@
+# AutoRoutingWave - Smart route selection based on image characteristics
+name: AutoRoutingWave
+priority: 90  # Runs early to set route for downstream waves
+enabled: true
+
+scope:
+  sink: docsummarizer.images
+  coordinator: analysis
+  atom: AutoRouting
+
+triggers:
+  requires:
+    - signal: identity.width
+      condition: "> 0"
+    - signal: identity.is_animated
+  skip_when:
+    - signal: wave.skipped.AutoRoutingWave
+
+emits:
+  on_complete:
+    - key: route.selected
+      type: string
+      description: Selected route (Fast, Balanced, Quality)
+
+    - key: route.quality_tier
+      type: string
+      description: Quality tier description
+
+    - key: route.text_detection
+      type: string
+      description: Text detection summary
+
+    - key: route.text_tier
+      type: string
+      description: Text processing tier
+
+    - key: route.skipped_waves
+      type: List<string>
+      description: Waves to skip based on route
+
+    # Per-wave skip signals
+    - key: route.skip.OcrWave
+      type: bool
+    - key: route.skip.AdvancedOcrWave
+      type: bool
+    - key: route.skip.OcrVerificationWave
+      type: bool
+    - key: route.skip.ClipEmbeddingWave
+      type: bool
+    - key: route.skip.FaceDetectionWave
+      type: bool
+
+listens:
+  required:
+    - identity.is_animated
+    - identity.frame_count
+    - identity.width
+    - identity.height
+    - identity.pixel_count
+
+  optional:
+    - color.dominant_colors
+
+cache:
+  emits:
+    - key: ocr.opencv.text_regions
+      type: List<BoundingBox>
+      description: OpenCV-detected text regions for downstream OCR
+
+config:
+  bindings: []  # Always runs in auto mode
+
+lane:
+  name: routing
+  max_concurrency: 8
+
+tags:
+  - routing
+  - auto
+  - orchestration
