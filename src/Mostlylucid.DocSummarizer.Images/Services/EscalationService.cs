@@ -747,7 +747,11 @@ public class EscalationService
 
     /// <summary>
     /// Store feedback for learning/improvement.
-    /// This would integrate with SQLite storage for the feedback loop.
+    /// Uses ISignalDatabase for persistent storage when available.
+    /// Feedback is used for:
+    /// 1. Improving auto-escalation thresholds
+    /// 2. Training/fine-tuning models
+    /// 3. Building a knowledge base
     /// </summary>
     public async Task StoreFeedbackAsync(
         string imagePath,
@@ -757,17 +761,34 @@ public class EscalationService
         string? userCorrection = null,
         CancellationToken ct = default)
     {
-        // TODO: Implement SQLite storage for feedback loop
-        // This data can be used to:
-        // 1. Improve auto-escalation thresholds
-        // 2. Train/fine-tune models
-        // 3. Build a knowledge base
-
         _logger.LogInformation(
             "Feedback recorded for {ImagePath}: Correct={Correct}, Correction={Correction}",
             imagePath, wasCorrect, userCorrection);
 
-        await Task.CompletedTask;
+        // Store to SignalDatabase if available
+        if (_signalDatabase != null)
+        {
+            try
+            {
+                var sha256 = await ComputeSha256Async(imagePath, ct);
+                var feedbackType = wasCorrect ? "caption_correct" : "caption_incorrect";
+
+                await _signalDatabase.StoreFeedbackAsync(
+                    sha256: sha256,
+                    feedbackType: feedbackType,
+                    originalValue: llmCaption,
+                    correctedValue: userCorrection,
+                    confidenceAdjustment: wasCorrect ? 0.1 : -0.1,
+                    notes: $"Source: {Path.GetFileName(imagePath)}",
+                    ct: ct);
+
+                _logger.LogDebug("Feedback stored to SignalDatabase for {Hash}", sha256.Substring(0, 8));
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Failed to store feedback to SignalDatabase for {Path}", imagePath);
+            }
+        }
     }
 
     /// <summary>

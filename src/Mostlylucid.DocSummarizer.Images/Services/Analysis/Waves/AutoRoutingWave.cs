@@ -297,7 +297,36 @@ public class AutoRoutingWave : IAnalysisWave
             }
         }
 
-        // TODO: Check SignalDatabase for persistent routing history
+        // Check SignalDatabase for persistent routing history
+        if (_signalDb != null)
+        {
+            try
+            {
+                var profile = _signalDb.LoadProfileAsync(imageHash).GetAwaiter().GetResult();
+                if (profile != null)
+                {
+                    var routeValue = profile.GetValue<string>("route.selected");
+                    if (!string.IsNullOrEmpty(routeValue) &&
+                        Enum.TryParse<Route>(routeValue, ignoreCase: true, out var persistedRoute))
+                    {
+                        _logger?.LogDebug("Found persisted route '{Route}' in SignalDatabase for {Hash}",
+                            persistedRoute, imageHash.Substring(0, 8));
+
+                        // Cache it in memory for faster subsequent lookups
+                        lock (_routeCache)
+                        {
+                            _routeCache[imageHash] = (persistedRoute, DateTime.UtcNow);
+                        }
+                        return persistedRoute;
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger?.LogWarning(ex, "Failed to load route from SignalDatabase for {Hash}", imageHash.Substring(0, 8));
+            }
+        }
+
         return null;
     }
 
@@ -321,7 +350,9 @@ public class AutoRoutingWave : IAnalysisWave
             }
         }
 
-        // TODO: Persist to SignalDatabase for long-term memory
+        // Note: Persistence to SignalDatabase happens automatically when the profile
+        // is stored after analysis completes. The route.selected signal emitted by
+        // EmitRoutingSignals() will be persisted with the full profile.
     }
 
     #endregion

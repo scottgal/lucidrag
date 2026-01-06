@@ -122,6 +122,24 @@ public static class WaveRegistry
 
         new WaveManifest
         {
+            WaveName = "TextDetectionWave",
+            Priority = 82,
+            Tags = ["text", "detection", "ml"],
+            Emits = [
+                "text_detection.method",       // EAST, CRAFT, or TesseractPSM
+                "text_detection.region_count", // Number of detected regions
+                "text_detection.has_text",     // Boolean: text regions found
+                "text_detection.coverage",     // % of image covered by text
+                "text_detection.region.*",     // Individual region bounding boxes
+                "text_detection.regions"       // Collection of all regions
+            ],
+            Requires = ["identity.width", "identity.height"],
+            Optional = ["route.selected", "content.text_likeliness"],
+            Description = "EAST/CRAFT ONNX text region detection for targeted OCR"
+        },
+
+        new WaveManifest
+        {
             WaveName = "MotionWave",
             Priority = 25,
             Tags = ["motion"],

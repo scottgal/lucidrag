@@ -12,6 +12,8 @@ using Microsoft.Extensions.Logging;
 using Mostlylucid.DocSummarizer.Images.Extensions;
 using Mostlylucid.DocSummarizer.Images.Models.Dynamic;
 using Mostlylucid.DocSummarizer.Images.Services.Analysis;
+using SixLabors.ImageSharp;
+using SixLabors.ImageSharp.Processing;
 
 namespace Mostlylucid.ImageSummarizer.Desktop.ViewModels;
 
@@ -51,6 +53,9 @@ public partial class MainViewModel : ObservableObject
 
     [ObservableProperty]
     private bool _isStaticImage;
+
+    [ObservableProperty]
+    private Bitmap? _filmstripPreview;
 
     [ObservableProperty]
     private string _selectedPipeline = "auto";  // Smart routing: auto-selects fast/balanced/quality
@@ -462,6 +467,21 @@ public partial class MainViewModel : ObservableObject
                 }
             }
 
+            // Generate filmstrip for animated images
+            var isAnimated = profile.GetValue<bool>("identity.is_animated");
+            var frameCount = profile.GetValue<int>("identity.frame_count");
+            if (isAnimated && frameCount > 1)
+            {
+                IsAnimatedGif = true;
+                FilmstripPreview = await GenerateFilmstripAsync(ImagePath, frameCount);
+                AddLogEntry($"🎞️ Filmstrip: {frameCount} frames");
+            }
+            else
+            {
+                IsAnimatedGif = false;
+                FilmstripPreview = null;
+            }
+
             // Format output based on selected format
             StatusText = "Formatting output...";
             ResultText = FormatOutput(profile, llmCaption);
@@ -646,7 +666,8 @@ public partial class MainViewModel : ObservableObject
 
         // Check image characteristics
         var isAnimated = ledger.Identity.IsAnimated;
-        var hasText = !string.IsNullOrWhiteSpace(GetExtractedText(profile));
+        var ocrText = GetExtractedText(profile);
+        var hasText = !string.IsNullOrWhiteSpace(ocrText);
         var hasMotion = !string.IsNullOrWhiteSpace(profile.GetValue<string>("motion.summary"));
         var scene = profile.GetValue<string>("vision.llm.scene");
 
@@ -655,7 +676,6 @@ public partial class MainViewModel : ObservableObject
         {
             // Animated image with motion
             var motionSummary = profile.GetValue<string>("motion.summary") ?? "";
-            var motionType = profile.GetValue<string>("motion.type") ?? "animation";
 
             var frameCount = ledger.Motion?.FrameCount ?? profile.GetValue<int>("identity.frame_count");
             sb.AppendLine($"📽️ Animated {ledger.Identity.Format} ({frameCount} frames)");
@@ -668,24 +688,19 @@ public partial class MainViewModel : ObservableObject
                 sb.AppendLine($"Motion: {motionSummary}");
             }
         }
-        else if (hasText)
-        {
-            // Text-heavy image (screenshot, meme, document)
-            var ocrText = GetExtractedText(profile);
-
-            sb.AppendLine(caption);
-
-            if (!string.IsNullOrWhiteSpace(ocrText))
-            {
-                sb.AppendLine();
-                sb.AppendLine("📝 Text:");
-                sb.AppendLine($"\"{ocrText.Trim()}\"");
-            }
-        }
         else
         {
-            // Standard photo/image
+            // Standard photo/image (including text-heavy ones)
             sb.AppendLine(caption);
+        }
+
+        // ALWAYS show OCR text if available (summarize if >200 chars)
+        if (hasText)
+        {
+            sb.AppendLine();
+            sb.AppendLine("📝 Text:");
+            var displayText = Mostlylucid.DocSummarizer.Services.ShortTextSummarizer.Summarize(ocrText!.Trim(), 200);
+            sb.AppendLine($"\"{displayText}\"");
         }
 
         // Add scene context if available and not already in caption
@@ -1022,5 +1037,67 @@ public partial class MainViewModel : ObservableObject
         {
             await LoadImageAsync(files[0]);
         }
+    }
+
+    /// <summary>
+    /// Generate a filmstrip thumbnail from an animated GIF.
+    /// Creates a horizontal strip of evenly-sampled frames.
+    /// </summary>
+    private async Task<Bitmap?> GenerateFilmstripAsync(string imagePath, int totalFrames)
+    {
+        return await Task.Run(() =>
+        {
+            try
+            {
+                using var image = SixLabors.ImageSharp.Image.Load<SixLabors.ImageSharp.PixelFormats.Rgba32>(imagePath);
+
+                // Sample up to 6 frames evenly across the animation
+                var maxFrames = Math.Min(6, totalFrames);
+                var step = totalFrames / maxFrames;
+                var frameIndices = Enumerable.Range(0, maxFrames).Select(i => i * step).ToList();
+
+                // Target thumbnail size: 80px height per frame
+                var thumbHeight = 80;
+                var aspectRatio = (double)image.Width / image.Height;
+                var thumbWidth = (int)(thumbHeight * aspectRatio);
+
+                // Create filmstrip image
+                var filmstripWidth = thumbWidth * maxFrames;
+                using var filmstrip = new SixLabors.ImageSharp.Image<SixLabors.ImageSharp.PixelFormats.Rgba32>(filmstripWidth, thumbHeight);
+
+                var frameCollection = image.Frames;
+                for (var i = 0; i < frameIndices.Count; i++)
+                {
+                    var frameIndex = Math.Min(frameIndices[i], frameCollection.Count - 1);
+
+                    // Clone the specific frame
+                    using var frameImage = image.Frames.CloneFrame(frameIndex);
+
+                    // Resize to thumbnail
+                    frameImage.Mutate(ctx => ctx.Resize(thumbWidth, thumbHeight));
+
+                    // Draw into filmstrip at the correct position
+                    var xOffset = i * thumbWidth;
+                    for (var y = 0; y < thumbHeight; y++)
+                    {
+                        for (var x = 0; x < thumbWidth; x++)
+                        {
+                            var pixel = frameImage[x, y];
+                            filmstrip[xOffset + x, y] = pixel;
+                        }
+                    }
+                }
+
+                // Convert to Avalonia Bitmap
+                using var ms = new MemoryStream();
+                filmstrip.SaveAsPng(ms);
+                ms.Position = 0;
+                return new Bitmap(ms);
+            }
+            catch (Exception)
+            {
+                return null;
+            }
+        });
     }
 }

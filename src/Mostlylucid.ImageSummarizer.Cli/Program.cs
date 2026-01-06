@@ -1057,19 +1057,19 @@ class Program
                 output.Add($"Motion: {motionSummary}");
             }
         }
-        else if (hasText)
-        {
-            // Text-heavy image (screenshot, meme, document)
-            output.Add(caption ?? "");
-
-            output.Add("");
-            output.Add("📝 Text:");
-            output.Add($"\"{ocrText!.Trim()}\"");
-        }
         else
         {
-            // Standard photo/image
+            // Standard photo/image (including text-heavy ones)
             output.Add(caption ?? "");
+        }
+
+        // ALWAYS show OCR text if available (summarize if >200 chars)
+        if (hasText)
+        {
+            output.Add("");
+            output.Add("📝 Text:");
+            var displayText = Mostlylucid.DocSummarizer.Services.ShortTextSummarizer.Summarize(ocrText!.Trim(), 200);
+            output.Add($"\"{displayText}\"");
         }
 
         // Add scene context if available and not already in caption

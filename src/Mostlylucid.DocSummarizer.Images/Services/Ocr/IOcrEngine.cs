@@ -72,6 +72,11 @@ public record BoundingBox
     public int Height { get; init; }
 
     /// <summary>
+    /// Detection confidence score (0.0 - 1.0).
+    /// </summary>
+    public float Confidence { get; init; }
+
+    /// <summary>
     /// Center point X coordinate.
     /// </summary>
     public int CenterX => (X1 + X2) / 2;

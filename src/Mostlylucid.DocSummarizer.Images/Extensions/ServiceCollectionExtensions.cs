@@ -8,6 +8,7 @@ using Mostlylucid.DocSummarizer.Images.Services;
 using Mostlylucid.DocSummarizer.Images.Services.Analysis;
 using Mostlylucid.DocSummarizer.Images.Services.Analysis.Waves;
 using Mostlylucid.DocSummarizer.Images.Services.Ocr;
+using Mostlylucid.DocSummarizer.Images.Services.Ocr.Detection;
 using Mostlylucid.DocSummarizer.Images.Services.Ocr.Models;
 using Mostlylucid.DocSummarizer.Images.Services.Ocr.PostProcessing;
 using Mostlylucid.DocSummarizer.Images.Services.Vision;
@@ -131,6 +132,25 @@ public static class ServiceCollectionExtensions
             var signalDb = sp.GetService<ISignalDatabase>();
             var logger = sp.GetService<Microsoft.Extensions.Logging.ILogger<AutoRoutingWave>>();
             return new AutoRoutingWave(signalDb, logger);
+        });
+
+        // TextDetectionService - EAST/CRAFT ONNX text region detection
+        services.TryAddSingleton<TextDetectionService>(sp =>
+        {
+            var modelDownloader = sp.GetRequiredService<ModelDownloader>();
+            var imageConfig = sp.GetRequiredService<IOptions<ImageConfig>>();
+            var logger = sp.GetService<Microsoft.Extensions.Logging.ILogger<TextDetectionService>>();
+            return new TextDetectionService(modelDownloader, imageConfig.Value.Ocr, logger);
+        });
+
+        // TextDetectionWave - Fast ML-based text region detection (EAST/CRAFT)
+        // Priority 82: Runs after routing, before OCR waves
+        services.AddSingleton<IAnalysisWave>(sp =>
+        {
+            var detectionService = sp.GetService<TextDetectionService>();
+            var imageConfig = sp.GetService<IOptions<ImageConfig>>();
+            var logger = sp.GetService<Microsoft.Extensions.Logging.ILogger<TextDetectionWave>>();
+            return new TextDetectionWave(detectionService, imageConfig, logger);
         });
 
         // OcrWave - configured with threshold from OcrConfig, uses auto-download

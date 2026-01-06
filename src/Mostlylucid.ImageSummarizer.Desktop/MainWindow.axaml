@@ -99,37 +99,59 @@
         <!-- Main Content -->
         <Grid Grid.Row="1" ColumnDefinitions="*,16,*">
             <!-- Left: Image Preview -->
-            <Border Grid.Column="0"
-                    Background="{DynamicResource SystemControlBackgroundAltMediumLowBrush}"
-                    BorderBrush="{DynamicResource SystemControlForegroundBaseMediumLowBrush}"
-                    BorderThickness="1"
-                    CornerRadius="8"
-                    Padding="8"
-                    Name="DropZone">
-                <Grid>
-                    <!-- Drop hint when no image -->
-                    <StackPanel VerticalAlignment="Center"
-                                HorizontalAlignment="Center"
-                                IsVisible="{Binding ImagePreview, Converter={x:Static ObjectConverters.IsNull}}">
-                        <PathIcon Data="M19,13H13V19H11V13H5V11H11V5H13V11H19V13Z"
-                                  Width="48" Height="48"
-                                  Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}"/>
-                        <TextBlock Text="Drop image here"
-                                   HorizontalAlignment="Center"
-                                   Foreground="{DynamicResource SystemControlForegroundBaseMediumHighBrush}"
-                                   Margin="0,16,0,0"/>
-                        <TextBlock Text="or click Browse"
-                                   HorizontalAlignment="Center"
-                                   Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}"
-                                   FontSize="12"/>
-                    </StackPanel>
+            <Grid Grid.Column="0" RowDefinitions="*,Auto">
+                <Border Grid.Row="0"
+                        Background="{DynamicResource SystemControlBackgroundAltMediumLowBrush}"
+                        BorderBrush="{DynamicResource SystemControlForegroundBaseMediumLowBrush}"
+                        BorderThickness="1"
+                        CornerRadius="8"
+                        Padding="8"
+                        Name="DropZone">
+                    <Grid>
+                        <!-- Drop hint when no image -->
+                        <StackPanel VerticalAlignment="Center"
+                                    HorizontalAlignment="Center"
+                                    IsVisible="{Binding ImagePreview, Converter={x:Static ObjectConverters.IsNull}}">
+                            <PathIcon Data="M19,13H13V19H11V13H5V11H11V5H13V11H19V13Z"
+                                      Width="48" Height="48"
+                                      Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}"/>
+                            <TextBlock Text="Drop image here"
+                                       HorizontalAlignment="Center"
+                                       Foreground="{DynamicResource SystemControlForegroundBaseMediumHighBrush}"
+                                       Margin="0,16,0,0"/>
+                            <TextBlock Text="or click Browse"
+                                       HorizontalAlignment="Center"
+                                       Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}"
+                                       FontSize="12"/>
+                        </StackPanel>
 
-                    <!-- Image preview -->
-                    <Image Source="{Binding ImagePreview}"
-                           Stretch="Uniform"
-                           IsVisible="{Binding ImagePreview, Converter={x:Static ObjectConverters.IsNotNull}}"/>
-                </Grid>
-            </Border>
+                        <!-- Image preview -->
+                        <Image Source="{Binding ImagePreview}"
+                               Stretch="Uniform"
+                               IsVisible="{Binding ImagePreview, Converter={x:Static ObjectConverters.IsNotNull}}"/>
+                    </Grid>
+                </Border>
+
+                <!-- Filmstrip preview for animated GIFs -->
+                <Border Grid.Row="1"
+                        Background="{DynamicResource SystemControlBackgroundAltMediumLowBrush}"
+                        BorderBrush="{DynamicResource SystemControlForegroundBaseMediumLowBrush}"
+                        BorderThickness="1"
+                        CornerRadius="4"
+                        Padding="4"
+                        Margin="0,8,0,0"
+                        IsVisible="{Binding IsAnimatedGif}">
+                    <StackPanel>
+                        <TextBlock Text="🎞️ Filmstrip"
+                                   FontSize="11"
+                                   Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}"
+                                   Margin="0,0,0,4"/>
+                        <Image Source="{Binding FilmstripPreview}"
+                               Stretch="Uniform"
+                               MaxHeight="90"/>
+                    </StackPanel>
+                </Border>
+            </Grid>
 
             <!-- Right: Results -->
             <Grid Grid.Column="2" RowDefinitions="Auto,2*,Auto,*,Auto">
