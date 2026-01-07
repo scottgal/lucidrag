@@ -1,0 +1,31 @@
+name: fast
+description: Fast real-time sign language pipeline
+waves:
+  - name: hand_pose
+    type: analysis
+    description: Extract hand landmarks and confidence scores
+    priority: 100
+    enabled: true
+    parameters:
+      target_fps: 15
+      min_confidence: 0.5
+      
+  - name: canonicalization
+    type: analysis
+    description: Normalize landmarks for scale/rotation/translation
+    priority: 150
+    enabled: true
+    parameters:
+      mirror_to_dominant: true
+      dominant_hand: right
+      
+  - name: segmentation
+    type: analysis
+    description: Segment frames into atomic sign units
+    priority: 200
+    enabled: true
+    parameters:
+      hold_motion_threshold: 0.02
+      transition_motion_threshold: 0.1
+      min_atom_duration: 100
+      min_hold_duration: 200

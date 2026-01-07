@@ -1,0 +1,56 @@
+# Training data (downloaded from Giphy)
+TrainingData/
+*.gif
+*.mp4
+*.wav
+*.bin
+ggml-*.bin
+
+# Whisper models
+WhisperModels/
+*.bin
+
+# SignSummarizer models
+Models/
+hand_landmarks.onnx
+face_landmarks.onnx
+pose_landmarks.onnx
+
+# Generated embeddings and vector stores
+*.db
+*.db-shm
+*.db-wal
+*.sqlite
+*.sqlite3
+
+# FFmpeg and Whisper executables (if bundled)
+whisper.exe
+whisper
+ffmpeg.exe
+ffprobe.exe
+
+# Logs and diagnostics
+logs/
+*.log
+
+# IDE and OS files
+.vs/
+.idea/
+*.user
+*.suo
+.DS_Store
+
+# Build artifacts
+bin/
+obj/
+dist/
+publish/
+
+# User-specific files
+appsettings.Local.json
+secrets.json
+
+# Temporary files
+temp/
+tmp/
+*.tmp

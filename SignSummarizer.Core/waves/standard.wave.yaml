@@ -1,0 +1,83 @@
+name: standard
+description: Standard sign language analysis pipeline
+waves:
+  - name: hand_pose
+    type: analysis
+    description: Extract hand landmarks and confidence scores
+    priority: 100
+    enabled: true
+    
+  - name: canonicalization
+    type: analysis
+    description: Normalize landmarks for scale/rotation/translation
+    priority: 150
+    enabled: true
+    parameters:
+      mirror_to_dominant: true
+      dominant_hand: right
+      
+  - name: segmentation
+    type: analysis
+    description: Segment frames into atomic sign units
+    priority: 200
+    enabled: true
+    parameters:
+      hold_motion_threshold: 0.02
+      transition_motion_threshold: 0.1
+      min_atom_duration: 100
+      min_hold_duration: 200
+      
+  - name: filmstrip
+    type: analysis
+    description: Extract keyframe filmstrip from sign atom
+    priority: 250
+    enabled: true
+    parameters:
+      max_keyframes: 12
+      novelty_threshold: 0.1
+      
+  - name: pose_embedding
+    type: analysis
+    description: Generate vector embeddings from sign poses
+    priority: 300
+    enabled: true
+    parameters:
+      embedding_dimensions: 128
+      
+  - name: modifier_detection
+    type: analysis
+    description: Detect non-manual sign modifiers
+    priority: 350
+    enabled: true
+    parameters:
+      detect_brows: true
+      detect_head_motion: true
+      detect_mouth: true
+      detect_torso: true
+      
+  - name: rag_retrieval
+    type: classification
+    description: Retrieve similar signs from vector store
+    priority: 450
+    enabled: true
+    parameters:
+      top_k: 10
+      similarity_threshold: 0.6
+      
+  - name: sign_classification
+    type: classification
+    description: Classify signs using RAG-based retrieval
+    priority: 400
+    enabled: true
+    parameters:
+      top_k: 5
+      confidence_threshold: 0.7
+      
+  - name: vision_llm
+    type: llm
+    description: Generate sign descriptions using Florence-2
+    priority: 500
+    enabled: false
+    parameters:
+      model: florence2-base
+      caption_type: detailed
