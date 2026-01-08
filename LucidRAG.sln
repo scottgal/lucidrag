@@ -4,6 +4,9 @@ Microsoft Visual Studio Solution File, Format Version 12.00
 VisualStudioVersion = 17.0.31903.59
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "src", "src", "{827E0CD3-B72D-47B6-A68D-7590B98EB39B}"
+	ProjectSection(SolutionItems) = preProject
+		src\Mostlylucid.DataSummarizer\Mostlylucid.DataSummarizer.csproj = src\Mostlylucid.DataSummarizer\Mostlylucid.DataSummarizer.csproj
+	EndProjectSection
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "LucidRAG", "src\LucidRAG\LucidRAG.csproj", "{0A84708D-0608-41F0-9904-2E6320B94D77}"
 EndProject
@@ -64,6 +67,8 @@ EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SignSummarizer.UI", "SignSummarizer.UI\SignSummarizer.UI.csproj", "{827EAA89-EA5A-484B-82BF-D5A95D26C90B}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SignSummarizer.Core", "SignSummarizer.Core\SignSummarizer.Core.csproj", "{A4F0C110-7A4A-4CE6-89B8-D9F534CE5BCA}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Mostlylucid.DataSummarizer", "src\Mostlylucid.DataSummarizer\Mostlylucid.DataSummarizer.csproj", "{7A0596C5-49FF-4E7E-949A-D65C34BEFB93}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -363,6 +368,18 @@ Global
 		{A4F0C110-7A4A-4CE6-89B8-D9F534CE5BCA}.Release|x64.Build.0 = Release|Any CPU
 		{A4F0C110-7A4A-4CE6-89B8-D9F534CE5BCA}.Release|x86.ActiveCfg = Release|Any CPU
 		{A4F0C110-7A4A-4CE6-89B8-D9F534CE5BCA}.Release|x86.Build.0 = Release|Any CPU
+		{7A0596C5-49FF-4E7E-949A-D65C34BEFB93}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{7A0596C5-49FF-4E7E-949A-D65C34BEFB93}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{7A0596C5-49FF-4E7E-949A-D65C34BEFB93}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{7A0596C5-49FF-4E7E-949A-D65C34BEFB93}.Debug|x64.Build.0 = Debug|Any CPU
+		{7A0596C5-49FF-4E7E-949A-D65C34BEFB93}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{7A0596C5-49FF-4E7E-949A-D65C34BEFB93}.Debug|x86.Build.0 = Debug|Any CPU
+		{7A0596C5-49FF-4E7E-949A-D65C34BEFB93}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{7A0596C5-49FF-4E7E-949A-D65C34BEFB93}.Release|Any CPU.Build.0 = Release|Any CPU
+		{7A0596C5-49FF-4E7E-949A-D65C34BEFB93}.Release|x64.ActiveCfg = Release|Any CPU
+		{7A0596C5-49FF-4E7E-949A-D65C34BEFB93}.Release|x64.Build.0 = Release|Any CPU
+		{7A0596C5-49FF-4E7E-949A-D65C34BEFB93}.Release|x86.ActiveCfg = Release|Any CPU
+		{7A0596C5-49FF-4E7E-949A-D65C34BEFB93}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

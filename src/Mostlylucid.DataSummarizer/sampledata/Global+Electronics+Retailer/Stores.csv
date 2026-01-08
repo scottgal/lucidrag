@@ -1,0 +1,68 @@
+StoreKey,Country,State,Square Meters,Open Date
+1,Australia,Australian Capital Territory,595,1/1/2008
+2,Australia,Northern Territory,665,1/12/2008
+3,Australia,South Australia,2000,1/7/2012
+4,Australia,Tasmania,2000,1/1/2010
+5,Australia,Victoria,2000,12/9/2015
+6,Australia,Western Australia,2000,1/1/2010
+7,Canada,New Brunswick,1105,5/7/2007
+8,Canada,Newfoundland and Labrador,2105,7/2/2014
+9,Canada,Northwest Territories,1500,3/4/2005
+10,Canada,Nunavut,1210,4/4/2015
+11,Canada,Yukon,1210,6/3/2009
+12,France,Basse-Normandie,350,6/6/2012
+13,France,Corse,245,6/7/2013
+14,France,Franche-Comté,350,12/15/2009
+15,France,La Réunion,400,1/1/2015
+16,France,Limousin,385,6/3/2010
+17,France,Martinique,350,7/8/2007
+18,France,Mayotte,310,8/8/2012
+19,Germany,Berlin,1295,4/4/2015
+20,Germany,Brandenburg,1715,12/15/2012
+21,Germany,Freie Hansestadt Bremen,560,6/3/2018
+22,Germany,Freistaat Thüringen,2000,3/6/2008
+23,Germany,Hamburg,1365,1/1/2010
+24,Germany,Hessen,1855,12/15/2012
+25,Germany,Mecklenburg-Vorpommern,1610,1/1/2010
+26,Germany,Saarland,350,3/5/2019
+27,Germany,Sachsen-Anhalt,2000,8/8/2008
+28,Italy,Caltanissetta,1200,12/15/2012
+29,Italy,Enna,1000,1/1/2008
+30,Italy,Pesaro,2100,1/12/2008
+31,Netherlands,Drenthe,1085,1/7/2012
+32,Netherlands,Flevoland,910,1/1/2010
+33,Netherlands,Friesland,1540,12/9/2015
+34,Netherlands,Groningen,1365,1/1/2010
+35,Netherlands,Zeeland,1225,5/7/2007
+36,United Kingdom,Armagh,1300,7/2/2014
+37,United Kingdom,Ayrshire,2100,3/4/2005
+38,United Kingdom,Belfast,1800,4/4/2015
+39,United Kingdom,Blaenau Gwent,2100,6/3/2009
+40,United Kingdom,Dungannon and South Tyrone,1300,6/6/2012
+41,United Kingdom,Fermanagh,2100,6/7/2013
+42,United Kingdom,North Down,1900,12/15/2009
+43,United States,Alaska,1190,1/1/2015
+44,United States,Arkansas,2000,6/3/2010
+45,United States,Connecticut,2000,7/8/2007
+46,United States,Delaware,1015,8/8/2012
+47,United States,Hawaii,1120,4/4/2015
+48,United States,Idaho,1540,12/15/2012
+49,United States,Iowa,2000,6/3/2018
+50,United States,Kansas,2000,3/6/2008
+51,United States,Maine,1295,1/1/2010
+52,United States,Mississippi,2000,6/3/2009
+53,United States,Montana,1260,6/6/2012
+54,United States,Nebraska,2000,6/7/2013
+55,United States,Nevada,2000,12/15/2009
+56,United States,New Hampshire,1260,1/1/2015
+57,United States,New Mexico,1645,6/3/2010
+58,United States,North Dakota,1330,7/8/2007
+59,United States,Oregon,2000,8/8/2012
+60,United States,Rhode Island,1260,4/4/2005
+61,United States,South Carolina,2000,12/15/2012
+62,United States,South Dakota,1120,6/3/2018
+63,United States,Utah,2000,3/6/2008
+64,United States,Washington DC,1330,1/1/2010
+65,United States,West Virginia,1785,1/1/2012
+66,United States,Wyoming,840,1/1/2014
+0,Online,Online,,1/1/2010

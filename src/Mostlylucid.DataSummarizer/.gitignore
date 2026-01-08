@@ -1,0 +1,22 @@
+# Build outputs
+bin/
+obj/
+
+# Test outputs
+test-outputs/
+reports/
+*.constraints.json
+profile.json
+
+# DuckDB files
+*.duckdb
+*.duckdb.wal
+
+# IDE
+.vs/
+.idea/
+*.user
+
+# OS
+.DS_Store
+Thumbs.db

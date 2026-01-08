@@ -1,0 +1,11 @@
+name,age,salary,department,start_date,is_active
+Alice,28,65000,Engineering,2022-03-15,true
+Bob,35,85000,Engineering,2019-07-01,true
+Charlie,42,95000,Management,2015-01-20,true
+Diana,31,72000,Marketing,2021-06-10,true
+Eve,26,58000,Engineering,2023-01-05,true
+Frank,45,110000,Management,2012-09-15,true
+Grace,33,78000,Sales,2020-04-01,false
+Henry,29,62000,Engineering,2022-11-20,true
+Ivy,38,88000,Marketing,2018-02-28,true
+Jack,41,92000,Sales,2016-08-12,true
