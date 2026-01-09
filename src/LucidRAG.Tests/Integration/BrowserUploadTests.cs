@@ -487,38 +487,55 @@ public class BrowserUploadTests : IAsyncLifetime
             return;
         }
 
-        // Click on the document details button (info icon)
-        var detailsButton = await _page.QuerySelectorAsync("#document-list label button[title='View document details']");
-        if (detailsButton != null)
-        {
-            await detailsButton.ClickAsync();
-            Console.WriteLine("Clicked document details button");
-
-            // Wait for modal to open and load
-            await Task.Delay(2000);
-
-            // Check if modal is open
-            var modalOpen = await _page.EvaluateFunctionAsync<bool>(@"
-                () => document.getElementById('document-details-modal')?.open ?? false
-            ");
-            Console.WriteLine($"Details modal open: {modalOpen}");
-
-            // Check if document details loaded
-            var hasDetails = await _page.EvaluateFunctionAsync<bool>(@"
-                () => {
+        // Get first document ID from API and call showDocumentDetails
+        var showDetailsResult = await _page.EvaluateFunctionAsync<string>(@"
+            async () => {
+                try {
                     const appEl = document.querySelector('[x-data*=""ragApp""]');
-                    const data = appEl?._x_dataStack?.[0];
-                    return data?.documentDetails != null;
-                }
-            ");
-            Console.WriteLine($"Has document details: {hasDetails}");
+                    if (!appEl) return 'No ragApp element';
+                    const data = appEl._x_dataStack?.[0];
+                    if (!data) return 'No Alpine data';
+                    if (typeof data.showDocumentDetails !== 'function') return 'showDocumentDetails not found';
 
-            hasDetails.Should().BeTrue("Document details should load when modal is opened");
-        }
-        else
-        {
-            Console.WriteLine("No document details button found");
-        }
+                    // Get first document ID from API
+                    const response = await fetch('/api/documents');
+                    if (!response.ok) return 'API fetch failed';
+                    const result = await response.json();
+                    if (!result.documents || result.documents.length === 0) return 'No documents from API';
+
+                    const docId = result.documents[0].id;
+
+                    // Call showDocumentDetails directly
+                    await data.showDocumentDetails(docId);
+                    return 'Called showDocumentDetails for ' + docId;
+                } catch(e) {
+                    return 'Error: ' + e.toString();
+                }
+            }
+        ");
+        Console.WriteLine($"Show details result: {showDetailsResult}");
+
+        // Wait for modal to open and data to load
+        await Task.Delay(3000);
+
+        // Check if document details loaded
+        var detailsState = await _page.EvaluateFunctionAsync<JsonElement?>(@"
+            () => {
+                const appEl = document.querySelector('[x-data*=""ragApp""]');
+                const data = appEl?._x_dataStack?.[0];
+                if (!data) return null;
+                return {
+                    hasDetails: data.documentDetails != null,
+                    documentName: data.documentDetails?.document?.name ?? 'not loaded',
+                    segmentCount: data.documentDetails?.totalSegments ?? 0,
+                    entityCount: data.documentDetails?.entitiesTotalCount ?? 0
+                };
+            }
+        ");
+        Console.WriteLine($"Document details state: {detailsState}");
+
+        var hasDetails = detailsState?.GetProperty("hasDetails").GetBoolean() ?? false;
+        hasDetails.Should().BeTrue("Document details should load when showDocumentDetails is called");
     }
 
     #endregion

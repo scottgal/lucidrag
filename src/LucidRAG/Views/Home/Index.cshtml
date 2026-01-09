@@ -573,7 +573,7 @@
 
         <!-- Input -->
         <div class="p-6 border-t border-base-300 bg-base-200/30">
-            <form @@submit.prevent="sendMessage" class="max-w-4xl mx-auto">
+            <form x-on:submit.prevent="sendMessage" class="max-w-4xl mx-auto">
                 <div class="flex gap-3 items-center">
                     <button type="button" class="btn btn-ghost btn-circle btn-sm opacity-60 hover:opacity-100"
                             @@click="showDebugPanel = !showDebugPanel"
@@ -1342,7 +1342,9 @@ function ragApp() {
         async showDocumentDetails(documentId) {
             this.documentDetails = null;
             this.detailsTab = 'entities';
-            this.$refs.documentDetailsModal.showModal();
+            // Use getElementById since modal is outside Alpine component scope
+            const modal = document.getElementById('document-details-modal');
+            if (modal) modal.showModal();
 
             try {
                 const response = await fetch(`/api/documents/${documentId}/details`);
@@ -1359,7 +1361,8 @@ function ragApp() {
         },
 
         closeDocumentDetails() {
-            this.$refs.documentDetailsModal.close();
+            const modal = document.getElementById('document-details-modal');
+            if (modal) modal.close();
             this.documentDetails = null;
         },
 
