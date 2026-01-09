@@ -8,6 +8,7 @@ using Mostlylucid.DocSummarizer.Config;
 using Mostlylucid.DocSummarizer.Services;
 using LucidRAG.Config;
 using LucidRAG.Data;
+using LucidRAG.Services.Sentinel;
 
 namespace LucidRAG.Services;
 
@@ -17,6 +18,7 @@ public class AgenticSearchService(
     IVectorStore vectorStore,
     IEmbeddingService embeddingService,
     IConversationService conversationService,
+    ISentinelService sentinelService,
     IOptions<PromptsConfig> promptsConfig,
     IOptions<DocSummarizerConfig> docSummarizerConfig,
     IOptions<RagDocumentsConfig> ragDocumentsConfig,
@@ -47,33 +49,71 @@ public class AgenticSearchService(
             return new SearchResult([], 0, sw.ElapsedMilliseconds);
         }
 
-        // Generate query embedding
-        var queryEmbedding = await embeddingService.EmbedAsync(request.Query, ct);
+        // Build schema context for Sentinel
+        var schema = await sentinelService.BuildSchemaContextAsync(request.CollectionId, ct);
 
-        // Search vector store directly
+        // Decompose query using Sentinel
+        var options = new SentinelOptions
+        {
+            CollectionId = request.CollectionId,
+            DocumentIds = documentIds,
+            ValidateAssumptions = true,
+            Mode = _prompts.QueryDecomposition.Enabled ? ExecutionMode.Hybrid : ExecutionMode.Traditional
+        };
+
+        var queryPlan = await sentinelService.DecomposeAsync(request.Query, schema, options, ct);
+
+        logger.LogInformation(
+            "Sentinel decomposed query into {SubQueryCount} sub-queries (confidence: {Confidence:F2}, mode: {Mode})",
+            queryPlan.SubQueries.Count, queryPlan.Confidence, queryPlan.Mode);
+
+        // Execute sub-queries and merge results
+        var allResults = new List<SearchResultItem>();
         var collectionName = _docSummarizerConfig.BertRag.CollectionName;
-        logger.LogInformation("Searching collection '{Collection}' with query: {Query}", collectionName, request.Query);
 
-        var segments = await vectorStore.SearchAsync(
-            collectionName,
-            queryEmbedding,
-            request.TopK,
-            docId: null, // Search all documents
-            ct);
+        foreach (var subQuery in queryPlan.SubQueries.OrderBy(sq => sq.Priority))
+        {
+            logger.LogDebug("Executing sub-query: {Query} (purpose: {Purpose})", subQuery.Query, subQuery.Purpose);
 
-        logger.LogInformation("Found {Count} segments", segments.Count);
+            var queryEmbedding = await embeddingService.EmbedAsync(subQuery.Query, ct);
+            var segments = await vectorStore.SearchAsync(
+                collectionName,
+                queryEmbedding,
+                subQuery.TopK,
+                docId: null,
+                ct);
 
-        var results = segments
-            .Select((s, i) => new SearchResultItem(
-                DocumentId: Guid.Empty, // Would need to track this via segment metadata
-                DocumentName: s.SectionTitle ?? s.HeadingPath ?? "Unknown",
-                SegmentId: s.Id,
-                Text: s.Text,
-                Score: s.RetrievalScore,
-                SectionTitle: s.SectionTitle))
+            var subResults = segments
+                .Select((s, i) => new SearchResultItem(
+                    DocumentId: Guid.Empty,
+                    DocumentName: s.SectionTitle ?? s.HeadingPath ?? "Unknown",
+                    SegmentId: s.Id,
+                    Text: s.Text,
+                    Score: s.RetrievalScore * (1.0 / subQuery.Priority), // Weight by priority
+                    SectionTitle: s.SectionTitle))
+                .ToList();
+
+            allResults.AddRange(subResults);
+        }
+
+        // Deduplicate and re-rank by aggregated score
+        var mergedResults = allResults
+            .GroupBy(r => r.SegmentId)
+            .Select(g => g.OrderByDescending(r => r.Score).First() with
+            {
+                Score = g.Sum(r => r.Score) // RRF-like aggregation
+            })
+            .OrderByDescending(r => r.Score)
+            .Take(request.TopK)
             .ToList();
 
-        return new SearchResult(results, results.Count, sw.ElapsedMilliseconds);
+        logger.LogInformation("Found {Count} merged results from {SubQueryCount} sub-queries",
+            mergedResults.Count, queryPlan.SubQueries.Count);
+
+        return new SearchResult(mergedResults, mergedResults.Count, sw.ElapsedMilliseconds)
+        {
+            QueryPlan = queryPlan
+        };
     }
 
     public async Task<ChatResponse> ChatAsync(ChatRequest request, CancellationToken ct = default)
@@ -101,6 +141,45 @@ public class AgenticSearchService(
             request.Query,
             request.CollectionId,
             request.DocumentIds), ct);
+
+        // Check if Sentinel needs clarification
+        if (searchResult.QueryPlan?.NeedsClarification == true)
+        {
+            var clarificationQuestion = searchResult.QueryPlan.ClarificationQuestion
+                ?? "Could you please clarify your question? I want to make sure I understand what you're looking for.";
+
+            logger.LogInformation("Sentinel requesting clarification for query: {Query}", request.Query);
+
+            await conversationService.AddMessageAsync(conversationId.Value, "assistant", clarificationQuestion, ct: ct);
+
+            return new ChatResponse(
+                clarificationQuestion,
+                [],
+                conversationId.Value,
+                AskedForClarification: true,
+                ClarificationQuestion: clarificationQuestion);
+        }
+
+        // Check if no results and low confidence - also ask for clarification
+        if (searchResult.Results.Count == 0 || (searchResult.QueryPlan?.Confidence ?? 1.0) < 0.4)
+        {
+            var noResultsMessage = "I couldn't find relevant information in the uploaded documents. Could you try:\n" +
+                "- Rephrasing your question\n" +
+                "- Being more specific about what you're looking for\n" +
+                "- Asking about topics covered in the documents";
+
+            logger.LogInformation("Low confidence or no results for query: {Query} (confidence: {Confidence})",
+                request.Query, searchResult.QueryPlan?.Confidence);
+
+            await conversationService.AddMessageAsync(conversationId.Value, "assistant", noResultsMessage, ct: ct);
+
+            return new ChatResponse(
+                noResultsMessage,
+                [],
+                conversationId.Value,
+                AskedForClarification: true,
+                ClarificationQuestion: noResultsMessage);
+        }
 
         // In demo mode, check if query is relevant to indexed documents
         if (_ragConfig.DemoMode.Enabled)

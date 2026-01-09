@@ -12,6 +12,7 @@ using LucidRAG.Data;
 using LucidRAG.Multitenancy;
 using LucidRAG.Services;
 using LucidRAG.Services.Background;
+using LucidRAG.Services.Sentinel;
 using LucidRAG.Services.Storage;
 using Scalar.AspNetCore;
 using Serilog;
@@ -98,6 +99,11 @@ builder.Services.AddHostedService<DocumentQueueProcessor>();
 builder.Services.AddHostedService<DemoContentSeeder>();
 builder.Services.AddSingleton<IWebCrawlerService, WebCrawlerService>();
 builder.Services.AddSingleton<IIngestionService, IngestionService>();
+
+// Sentinel query decomposition service
+builder.Services.Configure<SentinelConfig>(
+    builder.Configuration.GetSection("Sentinel"));
+builder.Services.AddScoped<ISentinelService, SentinelService>();
 
 // Evidence storage for multimodal artifacts
 builder.Services.Configure<EvidenceStorageOptions>(

@@ -37,6 +37,11 @@
         <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
     </PropertyGroup>
 
+    <!-- StyloFlow.Retrieval.Core for BM25, TF-IDF, RRF (avoid duplication) -->
+    <ItemGroup>
+        <ProjectReference Include="D:\Source\styloflow\src\StyloFlow.Retrieval.Core\StyloFlow.Retrieval.Core.csproj" />
+    </ItemGroup>
+
     <!-- MinVer for automatic versioning -->
     <PropertyGroup>
         <MinVerTagPrefix>docsumv</MinVerTagPrefix>
