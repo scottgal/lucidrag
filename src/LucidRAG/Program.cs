@@ -97,6 +97,7 @@ builder.Services.AddSingleton<DocumentProcessingQueue>();
 builder.Services.AddHostedService<DocumentQueueProcessor>();
 builder.Services.AddHostedService<DemoContentSeeder>();
 builder.Services.AddSingleton<IWebCrawlerService, WebCrawlerService>();
+builder.Services.AddSingleton<IIngestionService, IngestionService>();
 
 // Evidence storage for multimodal artifacts
 builder.Services.Configure<EvidenceStorageOptions>(

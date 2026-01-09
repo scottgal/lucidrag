@@ -25,6 +25,10 @@ public class RagDocumentsDbContext(DbContextOptions<RagDocumentsDbContext> optio
     public DbSet<ScannedPageGroup> ScannedPageGroups => Set<ScannedPageGroup>();
     public DbSet<ScannedPageMembership> ScannedPageMemberships => Set<ScannedPageMembership>();
 
+    // Ingestion sources and jobs
+    public DbSet<IngestionSourceEntity> IngestionSources => Set<IngestionSourceEntity>();
+    public DbSet<IngestionJobEntity> IngestionJobs => Set<IngestionJobEntity>();
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);
@@ -279,6 +283,54 @@ public class RagDocumentsDbContext(DbContextOptions<RagDocumentsDbContext> optio
             entity.HasOne(e => e.Entity)
                 .WithMany(e => e.PageMemberships)
                 .HasForeignKey(e => e.EntityId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        // IngestionSourceEntity - Registered ingestion sources
+        modelBuilder.Entity<IngestionSourceEntity>(entity =>
+        {
+            entity.ToTable("ingestion_sources");
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.Name).HasMaxLength(255).IsRequired();
+            entity.Property(e => e.SourceType).HasMaxLength(32).IsRequired();
+            entity.Property(e => e.Location).HasMaxLength(2048).IsRequired();
+            entity.Property(e => e.FilePattern).HasMaxLength(256);
+            entity.Property(e => e.Credentials).HasMaxLength(4096);
+            if (!isSqlite)
+            {
+                entity.Property(e => e.Options).HasColumnType("jsonb");
+            }
+
+            // Indexes
+            entity.HasIndex(e => e.SourceType);
+            entity.HasIndex(e => e.IsEnabled);
+            entity.HasIndex(e => e.Name);
+
+            entity.HasOne(e => e.Collection)
+                .WithMany()
+                .HasForeignKey(e => e.CollectionId)
+                .OnDelete(DeleteBehavior.SetNull);
+        });
+
+        // IngestionJobEntity - Ingestion job records
+        modelBuilder.Entity<IngestionJobEntity>(entity =>
+        {
+            entity.ToTable("ingestion_jobs");
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.Status).HasMaxLength(32).IsRequired();
+            if (!isSqlite)
+            {
+                entity.Property(e => e.Errors).HasColumnType("jsonb");
+            }
+
+            // Indexes
+            entity.HasIndex(e => e.SourceId);
+            entity.HasIndex(e => e.Status);
+            entity.HasIndex(e => e.CreatedAt);
+
+            entity.HasOne(e => e.Source)
+                .WithMany(s => s.Jobs)
+                .HasForeignKey(e => e.SourceId)
                 .OnDelete(DeleteBehavior.Cascade);
         });
     }

@@ -129,6 +129,19 @@ public static class EvidenceTypes
     public const string EmbeddingVector = "embedding_vector";
     public const string QualityReport = "quality_report";
     public const string ProcessingLog = "processing_log";
+
+    // Data/Tabular Evidence (DataSummarizer outputs)
+    public const string DataProfile = "data_profile";
+    public const string DataSchema = "data_schema";
+    public const string DataInsights = "data_insights";
+    public const string DataCorrelations = "data_correlations";
+    public const string DataAnomalies = "data_anomalies";
+    public const string DataPiiReport = "data_pii_report";
+    public const string TableCsv = "table_csv";
+    public const string TableParquet = "table_parquet";
+    public const string TableJson = "table_json";
+    public const string DataSampleRows = "data_sample_rows";
+    public const string DataHistograms = "data_histograms";
 }
 
 /// <summary>
@@ -191,4 +204,73 @@ public record BoundingBox
     public int Y { get; init; }
     public int Width { get; init; }
     public int Height { get; init; }
+}
+
+/// <summary>
+/// Metadata for data profile evidence (DataSummarizer outputs).
+/// </summary>
+public record DataEvidenceMetadata
+{
+    /// <summary>Row count in the dataset.</summary>
+    public long RowCount { get; init; }
+
+    /// <summary>Column count in the dataset.</summary>
+    public int ColumnCount { get; init; }
+
+    /// <summary>Column names.</summary>
+    public List<string>? ColumnNames { get; init; }
+
+    /// <summary>Column types inferred.</summary>
+    public Dictionary<string, string>? ColumnTypes { get; init; }
+
+    /// <summary>Number of alerts detected.</summary>
+    public int AlertCount { get; init; }
+
+    /// <summary>Number of insights generated.</summary>
+    public int InsightCount { get; init; }
+
+    /// <summary>Number of correlations found.</summary>
+    public int CorrelationCount { get; init; }
+
+    /// <summary>Whether PII was detected.</summary>
+    public bool HasPii { get; init; }
+
+    /// <summary>Target column if analyzed.</summary>
+    public string? TargetColumn { get; init; }
+
+    /// <summary>Profile processing time in seconds.</summary>
+    public double ProfileSeconds { get; init; }
+
+    /// <summary>LLM model used for insights (if any).</summary>
+    public string? LlmModel { get; init; }
+}
+
+/// <summary>
+/// Metadata for table extraction evidence (PDF tables).
+/// </summary>
+public record TableEvidenceMetadata
+{
+    /// <summary>Table ID/index in source document.</summary>
+    public required string TableId { get; init; }
+
+    /// <summary>Page number where table was found.</summary>
+    public int PageNumber { get; init; }
+
+    /// <summary>Number of rows in the table.</summary>
+    public int RowCount { get; init; }
+
+    /// <summary>Number of columns in the table.</summary>
+    public int ColumnCount { get; init; }
+
+    /// <summary>Column names if detected.</summary>
+    public List<string>? ColumnNames { get; init; }
+
+    /// <summary>Whether a header row was detected.</summary>
+    public bool HasHeader { get; init; }
+
+    /// <summary>Whether extraction was heuristic-based.</summary>
+    public bool IsHeuristic { get; init; }
+
+    /// <summary>Extraction confidence (0-1).</summary>
+    public double Confidence { get; init; }
 }
