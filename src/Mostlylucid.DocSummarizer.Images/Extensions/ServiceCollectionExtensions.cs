@@ -105,7 +105,14 @@ public static class ServiceCollectionExtensions
                 language: config.TesseractLanguage,
                 logger: logger);
         });
-        services.TryAddSingleton<GifTextExtractor>();
+        services.TryAddSingleton<GifTextExtractor>(sp =>
+        {
+            var config = sp.GetRequiredService<IOptions<ImageConfig>>().Value;
+            var ocrEngine = sp.GetRequiredService<IOcrEngine>();
+            var advancedOcr = sp.GetService<AdvancedGifOcrService>();
+            var logger = sp.GetService<Microsoft.Extensions.Logging.ILogger<GifTextExtractor>>();
+            return new GifTextExtractor(ocrEngine, config, advancedOcr, logger);
+        });
 
         services.TryAddSingleton<AdvancedGifOcrService>(sp =>
         {

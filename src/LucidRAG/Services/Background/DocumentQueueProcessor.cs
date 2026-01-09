@@ -175,6 +175,7 @@ public class DocumentQueueProcessor(
         var summarizer = scope.ServiceProvider.GetRequiredService<IDocumentSummarizer>();
         var vectorStore = scope.ServiceProvider.GetRequiredService<IVectorStore>();
         var entityGraph = scope.ServiceProvider.GetRequiredService<IEntityGraphService>();
+        var retrievalEntityService = scope.ServiceProvider.GetRequiredService<IRetrievalEntityService>();
 
         var document = await db.Documents.FindAsync([job.DocumentId], ct);
         if (document is null)
@@ -229,6 +230,26 @@ public class DocumentQueueProcessor(
                     logger.LogInformation(
                         "Extracted {EntityCount} entities and {RelCount} relationships for document {DocumentId}",
                         entityResult.EntitiesExtracted, entityResult.RelationshipsCreated, job.DocumentId);
+
+                    // Store as unified RetrievalEntity for cross-modal search
+                    try
+                    {
+                        progressChannel.Writer.TryWrite(
+                            ProgressUpdates.Stage("Indexing", "Indexing for cross-modal search...", 0, 0));
+
+                        var extractedEntities = await db.DocumentEntityLinks
+                            .Where(del => del.DocumentId == job.DocumentId)
+                            .Include(del => del.Entity)
+                            .Select(del => del.Entity!)
+                            .ToListAsync(ct);
+
+                        await retrievalEntityService.StoreDocumentAsync(document, segments, extractedEntities, ct);
+                        logger.LogInformation("Stored document {DocumentId} as RetrievalEntity for cross-modal search", job.DocumentId);
+                    }
+                    catch (Exception ex)
+                    {
+                        logger.LogWarning(ex, "Failed to store document {DocumentId} as RetrievalEntity, continuing", job.DocumentId);
+                    }
                 }
             }
             catch (Exception ex)
