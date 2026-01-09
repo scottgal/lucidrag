@@ -183,6 +183,57 @@ public class Florence2Wave : IAnalysisWave
                 Tags = new List<string> { "florence2", "performance" }
             });
 
+            // Add scene detection signals for animated GIFs (useful for other waves)
+            if (result.SceneDetection != null)
+            {
+                signals.Add(new Signal
+                {
+                    Key = "scene.count",
+                    Value = result.SceneDetection.SceneCount,
+                    Confidence = 1.0,
+                    Source = Name,
+                    Tags = new List<string> { "scene", "motion", "animation" }
+                });
+
+                signals.Add(new Signal
+                {
+                    Key = "scene.frame_indices",
+                    Value = result.SceneDetection.SceneEndFrameIndices,
+                    Confidence = 1.0,
+                    Source = Name,
+                    Tags = new List<string> { "scene", "frames" },
+                    Metadata = new Dictionary<string, object>
+                    {
+                        ["total_frames"] = result.SceneDetection.TotalFrames,
+                        ["used_motion_detection"] = result.SceneDetection.UsedMotionDetection
+                    }
+                });
+
+                signals.Add(new Signal
+                {
+                    Key = "scene.last_frame",
+                    Value = result.SceneDetection.LastSceneFrameIndex,
+                    Confidence = 1.0,
+                    Source = Name,
+                    Tags = new List<string> { "scene", "frames" }
+                });
+
+                signals.Add(new Signal
+                {
+                    Key = "scene.avg_motion",
+                    Value = result.SceneDetection.AverageMotion,
+                    Confidence = 1.0,
+                    Source = Name,
+                    Tags = new List<string> { "scene", "motion" }
+                });
+
+                _logger?.LogDebug(
+                    "Scene detection: {SceneCount} scenes from {TotalFrames} frames (avgMotion={AvgMotion:F3})",
+                    result.SceneDetection.SceneCount,
+                    result.SceneDetection.TotalFrames,
+                    result.SceneDetection.AverageMotion);
+            }
+
             // Determine if we should escalate to Vision LLM
             var shouldEscalate = ShouldEscalateToLlm(result, context);
             signals.Add(new Signal

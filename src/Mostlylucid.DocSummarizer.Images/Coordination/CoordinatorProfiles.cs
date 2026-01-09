@@ -28,6 +28,7 @@ public static class CoordinatorProfiles
         EnabledWaves = new HashSet<string>
         {
             "IdentityWave",
+            "SceneDetectionWave",
             "ColorWave",
             "AutoRoutingWave",
             "MlOcrWave",
@@ -93,6 +94,7 @@ public static class CoordinatorProfiles
         EnabledWaves = new HashSet<string>
         {
             "IdentityWave",
+            "SceneDetectionWave",
             "ColorWave",
             "AutoRoutingWave",
             "MlOcrWave",
@@ -127,6 +129,7 @@ public static class CoordinatorProfiles
         EnabledWaves = new HashSet<string>
         {
             "IdentityWave",
+            "SceneDetectionWave",
             "ColorWave",
             "MotionWave"
         },
@@ -182,6 +185,7 @@ public static class CoordinatorProfiles
         EnabledWaves = new HashSet<string>
         {
             "IdentityWave",
+            "SceneDetectionWave",
             "ColorWave"
         },
         Scope = new SignalScope
@@ -211,6 +215,7 @@ public static class CoordinatorProfiles
         EnabledWaves = new HashSet<string>
         {
             "IdentityWave",
+            "SceneDetectionWave",
             "ColorWave",
             "MotionWave"
         },
@@ -240,6 +245,7 @@ public static class CoordinatorProfiles
         EnabledWaves = new HashSet<string>
         {
             "IdentityWave",
+            "SceneDetectionWave",
             "ColorWave",
             "Florence2Wave"
         },
@@ -273,6 +279,7 @@ public static class CoordinatorProfiles
         EnabledWaves = new HashSet<string>
         {
             "IdentityWave",
+            "SceneDetectionWave",
             "ColorWave",
             "AutoRoutingWave",
             "MotionWave"
@@ -299,6 +306,7 @@ public static class CoordinatorProfiles
         EnabledWaves = new HashSet<string>
         {
             "IdentityWave",
+            "SceneDetectionWave",
             "ColorWave",
             "AutoRoutingWave",
             "MotionWave"

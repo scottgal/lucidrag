@@ -118,6 +118,22 @@ public static class ServiceCollectionExtensions
         // Highest priority - provides fundamental properties other waves may depend on
         services.AddSingleton<IAnalysisWave>(sp => new IdentityWave());
 
+        // SceneDetectionService - Histogram-based scene boundary detection
+        services.TryAddSingleton<SceneDetectionService>(sp =>
+        {
+            var logger = sp.GetService<Microsoft.Extensions.Logging.ILogger<SceneDetectionService>>();
+            return new SceneDetectionService(logger);
+        });
+
+        // SceneDetectionWave - Early scene detection for animated images
+        // Priority 15: After Identity, before ColorWave - informs escalation decisions
+        services.AddSingleton<IAnalysisWave>(sp =>
+        {
+            var sceneService = sp.GetRequiredService<SceneDetectionService>();
+            var logger = sp.GetService<Microsoft.Extensions.Logging.ILogger<SceneDetectionWave>>();
+            return new SceneDetectionWave(sceneService, logger);
+        });
+
         // ColorWave requires ColorAnalyzer and ImageStreamProcessor
         services.AddSingleton<IAnalysisWave>(sp =>
         {
@@ -380,8 +396,9 @@ public static class ServiceCollectionExtensions
         {
             var config = sp.GetRequiredService<IOptions<ImageConfig>>();
             var colorAnalyzer = sp.GetRequiredService<ColorAnalyzer>();
+            var sceneService = sp.GetRequiredService<SceneDetectionService>();
             var logger = sp.GetService<Microsoft.Extensions.Logging.ILogger<Florence2CaptionService>>();
-            return new Florence2CaptionService(config, colorAnalyzer, logger);
+            return new Florence2CaptionService(config, colorAnalyzer, sceneService, logger);
         });
 
         // Florence-2 Wave (fast local captioning/OCR using ONNX, uses OpenCV for complexity assessment)

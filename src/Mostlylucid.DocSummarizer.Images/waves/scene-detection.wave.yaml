@@ -1,0 +1,92 @@
+# SceneDetectionWave - Early scene boundary detection for animated images
+name: SceneDetectionWave
+priority: 15
+enabled: true
+
+scope:
+  sink: docsummarizer.images
+  coordinator: analysis
+  atom: scene
+
+triggers:
+  requires:
+    - signal: identity.is_animated
+      condition: "== true"
+    - signal: identity.frame_count
+      condition: "> 1"
+  skip_when:
+    - wave.skipped.SceneDetectionWave
+
+emits:
+  on_start:
+    - scene.detection.started
+
+  on_complete:
+    - key: scene.count
+      type: int
+      description: Number of distinct scenes detected
+      confidence_range: [1.0, 1.0]
+
+    - key: scene.frame_indices
+      type: List<int>
+      description: Frame indices at end of each scene (best for OCR/captions)
+      confidence_range: [1.0, 1.0]
+
+    - key: scene.last_frame
+      type: int
+      description: Index of last scene's end frame (best for captioning)
+
+    - key: scene.avg_motion
+      type: double
+      description: Average motion across frames (0-1 scale)
+
+    - key: scene.suggest_escalation
+      type: bool
+      description: Whether LLM escalation is suggested based on scene complexity
+
+  on_failure:
+    - scene.detection.failed
+
+listens:
+  required:
+    - identity.is_animated
+    - identity.frame_count
+
+  optional: []
+
+# Scene detection runs very early - no dependencies
+# Other waves can use scene.frame_indices to select which frames to process
+lane:
+  name: metadata
+  max_concurrency: 4  # Fast histogram comparison
+
+tags:
+  - scene
+  - animation
+  - motion
+  - frames
+  - early
+
+defaults:
+  weights:
+    base: 1.0
+
+  confidence:
+    neutral: 0.5
+    high: 1.0
+
+  timing:
+    timeout_ms: 5000  # 5 seconds max for scene detection
+    cache_ttl_sec: 3600
+
+  features:
+    detailed_logging: false
+    enable_cache: true
+    can_early_exit: false
+    can_escalate: false  # Scene detection doesn't escalate, it informs escalation
+
+  parameters:
+    max_scenes: 4                    # Maximum scenes to return
+    sample_interval_threshold: 100   # Sample frames if > this many
+    motion_threshold: 0.15           # Threshold for significant scene change
+    dedup_threshold: 0.08            # Threshold for frame deduplication
