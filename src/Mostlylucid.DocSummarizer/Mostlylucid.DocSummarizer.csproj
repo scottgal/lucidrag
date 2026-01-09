@@ -33,14 +33,14 @@
     <!-- CLI-specific dependencies only -->
     <ItemGroup>
         <PackageReference Include="System.CommandLine" Version="2.0.1" />
-        <PackageReference Include="Spectre.Console" Version="0.54.0" />
+        <PackageReference Include="Spectre.Console" Version="0.54.1-alpha.0.29" />
         <PackageReference Include="Microsoft.Extensions.Hosting" Version="10.0.1" />
         
         <!-- OpenTelemetry exporters for observability -->
-        <PackageReference Include="OpenTelemetry" Version="1.12.0" />
-        <PackageReference Include="OpenTelemetry.Exporter.Console" Version="1.12.0" />
-        <PackageReference Include="OpenTelemetry.Exporter.OpenTelemetryProtocol" Version="1.12.0" />
-        <PackageReference Include="OpenTelemetry.Extensions.Hosting" Version="1.12.0" />
+        <PackageReference Include="OpenTelemetry" Version="1.14.0" />
+        <PackageReference Include="OpenTelemetry.Exporter.Console" Version="1.14.0" />
+        <PackageReference Include="OpenTelemetry.Exporter.OpenTelemetryProtocol" Version="1.14.0" />
+        <PackageReference Include="OpenTelemetry.Extensions.Hosting" Version="1.14.0" />
     </ItemGroup>
 
     <!-- Copy configuration and documentation to output (excluded from single-file bundle) -->

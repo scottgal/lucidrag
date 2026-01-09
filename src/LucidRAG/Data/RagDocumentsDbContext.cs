@@ -14,6 +14,10 @@ public class RagDocumentsDbContext(DbContextOptions<RagDocumentsDbContext> optio
     public DbSet<ConversationEntity> Conversations => Set<ConversationEntity>();
     public DbSet<ConversationMessage> ConversationMessages => Set<ConversationMessage>();
 
+    // Cross-modal retrieval entities
+    public DbSet<RetrievalEntityRecord> RetrievalEntities => Set<RetrievalEntityRecord>();
+    public DbSet<EntityEmbedding> EntityEmbeddings => Set<EntityEmbedding>();
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);
@@ -141,6 +145,63 @@ public class RagDocumentsDbContext(DbContextOptions<RagDocumentsDbContext> optio
             entity.HasOne(e => e.Conversation)
                 .WithMany(c => c.Messages)
                 .HasForeignKey(e => e.ConversationId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        // RetrievalEntityRecord - Cross-modal entities (document, image, audio, video, data)
+        modelBuilder.Entity<RetrievalEntityRecord>(entity =>
+        {
+            entity.ToTable("retrieval_entities");
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.ContentType).HasMaxLength(32).IsRequired();
+            entity.Property(e => e.Source).HasMaxLength(2048).IsRequired();
+            entity.Property(e => e.ContentHash).HasMaxLength(64);
+            entity.Property(e => e.Title).HasMaxLength(512);
+            entity.Property(e => e.Summary).HasMaxLength(4000);
+            entity.Property(e => e.EmbeddingModel).HasMaxLength(128);
+            entity.Property(e => e.ReviewReason).HasMaxLength(1000);
+
+            // JSON columns (PostgreSQL: jsonb, SQLite: text)
+            if (!isSqlite)
+            {
+                entity.Property(e => e.Tags).HasColumnType("jsonb");
+                entity.Property(e => e.Metadata).HasColumnType("jsonb");
+                entity.Property(e => e.CustomMetadata).HasColumnType("jsonb");
+                entity.Property(e => e.Signals).HasColumnType("jsonb");
+                entity.Property(e => e.ExtractedEntities).HasColumnType("jsonb");
+                entity.Property(e => e.Relationships).HasColumnType("jsonb");
+            }
+
+            // Indexes for common queries
+            entity.HasIndex(e => e.ContentType);
+            entity.HasIndex(e => e.CollectionId);
+            entity.HasIndex(e => e.ContentHash);
+            entity.HasIndex(e => e.NeedsReview);
+            entity.HasIndex(e => e.CreatedAt);
+            entity.HasIndex(e => new { e.CollectionId, e.ContentType });
+
+            entity.HasOne(e => e.Collection)
+                .WithMany()
+                .HasForeignKey(e => e.CollectionId)
+                .OnDelete(DeleteBehavior.SetNull);
+        });
+
+        // EntityEmbedding - Multi-vector storage for cross-modal search
+        modelBuilder.Entity<EntityEmbedding>(entity =>
+        {
+            entity.ToTable("entity_embeddings");
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.Name).HasMaxLength(64).IsRequired();
+            entity.Property(e => e.Model).HasMaxLength(128);
+            if (!isSqlite) entity.Property(e => e.Vector).HasColumnType("jsonb");
+
+            // Indexes
+            entity.HasIndex(e => e.EntityId);
+            entity.HasIndex(e => new { e.EntityId, e.Name }).IsUnique();
+
+            entity.HasOne(e => e.Entity)
+                .WithMany(e => e.Embeddings)
+                .HasForeignKey(e => e.EntityId)
                 .OnDelete(DeleteBehavior.Cascade);
         });
     }
