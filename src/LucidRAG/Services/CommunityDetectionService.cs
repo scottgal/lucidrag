@@ -8,7 +8,7 @@ namespace LucidRAG.Services;
 
 /// <summary>
 /// Service for detecting communities in the entity graph and extracting their features.
-/// Uses Louvain algorithm for community detection and LLM for summary generation.
+/// Uses Leiden algorithm for community detection and LLM for summary generation.
 /// </summary>
 public interface ICommunityDetectionService
 {
@@ -79,10 +79,10 @@ public class CommunityDetectionService : ICommunityDetectionService
             return new CommunityDetectionResult(0, 0, 0, sw.Elapsed);
         }
 
-        _logger.LogInformation("Running Louvain on {NodeCount} nodes, {EdgeCount} edges",
+        _logger.LogInformation("Running Leiden on {NodeCount} nodes, {EdgeCount} edges",
             graphData.Nodes.Count, graphData.Edges.Count);
 
-        // Build adjacency structure for Louvain
+        // Build adjacency structure for Leiden
         var nodeIndex = graphData.Nodes.Select((n, i) => (n.Id, Index: i)).ToDictionary(x => x.Id, x => x.Index);
         var nodeIds = graphData.Nodes.Select(n => n.Id).ToArray();
 
@@ -287,10 +287,13 @@ public class CommunityDetectionService : ICommunityDetectionService
     {
         var moved = false;
         var changed = true;
+        var maxPasses = 10; // Limit passes to prevent slow convergence
+        var passes = 0;
 
-        while (changed)
+        while (changed && passes < maxPasses)
         {
             changed = false;
+            passes++;
             foreach (var node in Enumerable.Range(0, nodeCount).OrderBy(_ => Random.Shared.Next()))
             {
                 if (!adjacency.ContainsKey(node)) continue;
@@ -640,8 +643,9 @@ SUMMARY: [one sentence description]";
                 _logger.LogDebug("LLM response for community {Id}: {Response}", community.Id, response);
 
                 // Parse response - handle multiple formats
+                // First strip markdown from each line for consistent parsing
                 var lines = response.Split('\n', StringSplitOptions.RemoveEmptyEntries)
-                    .Select(l => l.Trim())
+                    .Select(l => StripMarkdownPrefix(l.Trim()))
                     .Where(l => !string.IsNullOrWhiteSpace(l))
                     .ToArray();
 
@@ -652,11 +656,11 @@ SUMMARY: [one sentence description]";
                 var nameLine = lines.FirstOrDefault(l => l.StartsWith("NAME:", StringComparison.OrdinalIgnoreCase));
                 var summaryLine = lines.FirstOrDefault(l => l.StartsWith("SUMMARY:", StringComparison.OrdinalIgnoreCase));
 
-                if (nameLine != null)
+                if (nameLine != null && nameLine.Length > 5)
                 {
                     parsedName = CleanLlmText(nameLine.Substring(5));
                 }
-                if (summaryLine != null)
+                if (summaryLine != null && summaryLine.Length > 8)
                 {
                     parsedSummary = CleanLlmText(summaryLine.Substring(8));
                 }
@@ -696,6 +700,21 @@ SUMMARY: [one sentence description]";
 
         await _db.SaveChangesAsync(ct);
         _logger.LogInformation("Community summary generation complete");
+    }
+
+    /// <summary>
+    /// Strips markdown prefix characters from a line (**, *, #, etc.) to normalize for parsing
+    /// </summary>
+    private static string StripMarkdownPrefix(string line)
+    {
+        if (string.IsNullOrWhiteSpace(line)) return string.Empty;
+
+        var result = line;
+        // Strip leading markdown characters
+        while (result.Length > 0 && (result[0] == '*' || result[0] == '#' || result[0] == '-' || result[0] == '_' || result[0] == ' '))
+            result = result[1..];
+
+        return result;
     }
 
     private static string CleanLlmText(string text)

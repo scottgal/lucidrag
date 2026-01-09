@@ -64,6 +64,12 @@ public record QueryPlan
     public ExecutionMode Mode { get; init; } = ExecutionMode.Hybrid;
 
     /// <summary>
+    /// Type of query - determines if synthesis is needed.
+    /// Keyword queries skip synthesis, Semantic queries need it.
+    /// </summary>
+    public QueryType QueryType { get; init; } = QueryType.Semantic;
+
+    /// <summary>
     /// Model that produced this plan.
     /// </summary>
     public string? ProducerModel { get; init; }
@@ -321,6 +327,42 @@ public enum ValidationType
 
     /// <summary>Quick embedding search to verify results exist.</summary>
     ResultsExist
+}
+
+/// <summary>
+/// Type of query - determines if synthesis is needed
+/// </summary>
+public enum QueryType
+{
+    /// <summary>
+    /// Simple keyword search - just show matching documents
+    /// Example: "ASP.NET", "Entity Framework"
+    /// </summary>
+    Keyword,
+
+    /// <summary>
+    /// Semantic question requiring synthesis/answer
+    /// Example: "How does ASP.NET middleware work?"
+    /// </summary>
+    Semantic,
+
+    /// <summary>
+    /// Navigation query - list/browse documents
+    /// Example: "Show all documents about Docker"
+    /// </summary>
+    Navigation,
+
+    /// <summary>
+    /// Comparison query - compare multiple things
+    /// Example: "Compare EF Core vs Dapper"
+    /// </summary>
+    Comparison,
+
+    /// <summary>
+    /// Aggregation query - count/summarize
+    /// Example: "How many articles about testing?"
+    /// </summary>
+    Aggregation
 }
 
 /// <summary>

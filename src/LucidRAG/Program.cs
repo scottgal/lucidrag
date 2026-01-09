@@ -88,6 +88,9 @@ switch (llmBackend.ToLowerInvariant())
     // Default: Ollama is already registered by AddDocSummarizer
 }
 
+// LFU cache for synthesis results
+builder.Services.AddSingleton<SynthesisCacheService>();
+
 // Application services
 builder.Services.AddScoped<IDocumentProcessingService, DocumentProcessingService>();
 builder.Services.AddScoped<IConversationService, ConversationService>();

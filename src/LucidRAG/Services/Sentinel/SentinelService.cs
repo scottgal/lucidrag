@@ -56,6 +56,16 @@ public class SentinelService : ISentinelService
         @"""([^""]+)""|'([^']+)'",
         RegexOptions.Compiled);
 
+    // Pattern to detect question words (semantic queries)
+    private static readonly Regex QuestionPattern = new(
+        @"\b(what|how|why|explain|describe|tell me|can you|could you|would you|is it|are there|do|does|did|will|should)\b",
+        RegexOptions.IgnoreCase | RegexOptions.Compiled);
+
+    // Pattern for short keyword-only queries (no verbs, no question words)
+    private static readonly Regex KeywordOnlyPattern = new(
+        @"^[\w\s\.\-#\+]+$",
+        RegexOptions.Compiled);
+
     public SentinelService(
         RagDocumentsDbContext db,
         IVectorStore vectorStore,
@@ -297,6 +307,9 @@ public class SentinelService : ISentinelService
         if (isList) intentParts.Add("listing");
         if (intentParts.Count == 0) intentParts.Add("information retrieval");
 
+        // Classify query type
+        var queryType = ClassifyQueryType(query, isComparison, isAggregation, isList);
+
         return new QueryPlan
         {
             OriginalQuery = query,
@@ -307,8 +320,39 @@ public class SentinelService : ISentinelService
             Operations = operations,
             Assumptions = assumptions,
             Mode = ExecutionMode.Traditional,
+            QueryType = queryType,
             ProducerModel = "pattern-based"
         };
+    }
+
+    /// <summary>
+    /// Classify the query type to determine if synthesis is needed.
+    /// Keyword queries skip synthesis and just show matching documents.
+    /// </summary>
+    private QueryType ClassifyQueryType(string query, bool isComparison, bool isAggregation, bool isList)
+    {
+        // Comparisons need synthesis
+        if (isComparison) return QueryType.Comparison;
+
+        // Aggregations need synthesis
+        if (isAggregation) return QueryType.Aggregation;
+
+        // List/navigation queries don't need synthesis
+        if (isList) return QueryType.Navigation;
+
+        // Check for question words - semantic queries need synthesis
+        if (QuestionPattern.IsMatch(query)) return QueryType.Semantic;
+
+        // Short keyword-only queries (no question marks, no verbs)
+        var words = query.Trim().Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        if (words.Length <= 3 && KeywordOnlyPattern.IsMatch(query) && !query.Contains('?'))
+        {
+            _logger.LogDebug("Query '{Query}' classified as keyword (short, no question words)", query);
+            return QueryType.Keyword;
+        }
+
+        // Default to semantic for longer or complex queries
+        return QueryType.Semantic;
     }
 
     /// <inheritdoc />
@@ -571,6 +615,12 @@ JSON only, no explanation:";
                 Validation = new AssumptionValidation { Type = ValidationType.ResultsExist }
             }).ToList() ?? [];
 
+            // Classify query type using the same logic as traditional mode
+            var isComparison = ComparisonPattern.IsMatch(originalQuery);
+            var isAggregation = AggregationPattern.IsMatch(originalQuery);
+            var isList = ListPattern.IsMatch(originalQuery);
+            var queryType = ClassifyQueryType(originalQuery, isComparison, isAggregation, isList);
+
             return new QueryPlan
             {
                 OriginalQuery = originalQuery,
@@ -581,7 +631,8 @@ JSON only, no explanation:";
                 Assumptions = assumptions,
                 NeedsClarification = parsed.NeedsClarification,
                 ClarificationQuestion = parsed.ClarificationQuestion,
-                Mode = ExecutionMode.Hybrid
+                Mode = ExecutionMode.Hybrid,
+                QueryType = queryType
             };
         }
         catch (JsonException ex)

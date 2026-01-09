@@ -8,6 +8,52 @@
 /* Chat bubble */
 .chat-bubble { max-width: 85%; }
 
+/* Markdown prose styling in chat bubbles */
+.chat-bubble .prose {
+    color: inherit;
+}
+.chat-bubble .prose p {
+    margin: 0.25em 0;
+}
+.chat-bubble .prose p:first-child {
+    margin-top: 0;
+}
+.chat-bubble .prose p:last-child {
+    margin-bottom: 0;
+}
+.chat-bubble .prose strong {
+    color: inherit;
+    font-weight: 600;
+}
+.chat-bubble .prose em {
+    font-style: italic;
+    opacity: 0.9;
+}
+.chat-bubble .prose ul, .chat-bubble .prose ol {
+    margin: 0.5em 0;
+    padding-left: 1.25em;
+}
+.chat-bubble .prose li {
+    margin: 0.125em 0;
+}
+.chat-bubble .prose code {
+    background: rgba(0,0,0,0.1);
+    padding: 0.125em 0.25em;
+    border-radius: 0.25em;
+    font-size: 0.875em;
+}
+.chat-bubble .prose pre {
+    background: rgba(0,0,0,0.15);
+    padding: 0.5em;
+    border-radius: 0.25em;
+    overflow-x: auto;
+    margin: 0.5em 0;
+}
+.chat-bubble .prose pre code {
+    background: transparent;
+    padding: 0;
+}
+
 /* Typing indicator */
 .typing-indicator::after {
     content: '...';

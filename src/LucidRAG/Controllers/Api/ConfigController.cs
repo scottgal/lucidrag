@@ -6,6 +6,7 @@ using Mostlylucid.DocSummarizer.Services;
 using Mostlylucid.GraphRag;
 using LucidRAG.Config;
 using LucidRAG.Models;
+using LucidRAG.Services;
 
 namespace LucidRAG.Controllers.Api;
 
@@ -19,6 +20,7 @@ public class ConfigController(
     IOptions<RagDocumentsConfig> ragConfig,
     IOptions<DocSummarizerConfig> summarizerConfig,
     IMemoryCache cache,
+    SynthesisCacheService synthesisCache,
     ILogger<ConfigController> logger) : ControllerBase
 {
     private const string ServicesCacheKey = "DetectedServices";
@@ -133,6 +135,31 @@ public class ConfigController(
         logger.LogInformation("Extraction mode changed to {Mode}", mode);
 
         return Ok(new { mode = mode.ToString().ToLowerInvariant(), message = "Extraction mode updated for new documents" });
+    }
+
+    /// <summary>
+    /// Get synthesis cache statistics
+    /// </summary>
+    [HttpGet("cache/stats")]
+    public IActionResult GetCacheStats()
+    {
+        var stats = synthesisCache.GetStats();
+        return Ok(stats);
+    }
+
+    /// <summary>
+    /// Clear the synthesis cache
+    /// </summary>
+    [HttpDelete("cache")]
+    public IActionResult ClearCache()
+    {
+        if (ragConfig.Value.DemoMode.Enabled)
+        {
+            return StatusCode(403, new { error = "Cache operations disabled in demo mode" });
+        }
+
+        synthesisCache.Clear();
+        return Ok(new { message = "Synthesis cache cleared" });
     }
 
     private async Task<DetectedServices> GetDetectedServicesAsync()

@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Runtime.CompilerServices;
+using System.Text;
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
@@ -20,6 +21,7 @@ public class AgenticSearchService(
     IConversationService conversationService,
     ISentinelService sentinelService,
     ILlmService llmService,
+    SynthesisCacheService synthesisCache,
     IOptions<PromptsConfig> promptsConfig,
     IOptions<DocSummarizerConfig> docSummarizerConfig,
     IOptions<RagDocumentsConfig> ragDocumentsConfig,
@@ -72,9 +74,11 @@ public class AgenticSearchService(
         var allResults = new List<SearchResultItem>();
         var collectionName = _docSummarizerConfig.BertRag.CollectionName;
 
-        // Build lookup for VectorStoreDocId -> DocumentEntity
+        // Build lookup for VectorStoreDocId -> DocumentEntity (handle duplicates by taking most recent)
         var documentLookup = await db.Documents
             .Where(d => d.VectorStoreDocId != null)
+            .GroupBy(d => d.VectorStoreDocId!)
+            .Select(g => g.OrderByDescending(d => d.CreatedAt).First())
             .ToDictionaryAsync(d => d.VectorStoreDocId!, d => d, ct);
 
         foreach (var subQuery in queryPlan.SubQueries.OrderBy(sq => sq.Priority))
@@ -209,9 +213,21 @@ public class AgenticSearchService(
             }
         }
 
-        // Build sources for response
-        var sources = searchResult.Results
+        // Build sources for response - filter by minimum relevance score
+        const double minRelevanceScore = 0.4; // Minimum cosine similarity to include as evidence
+        var relevantResults = searchResult.Results
+            .Where(r => r.Score >= minRelevanceScore)
             .Take(5)
+            .ToList();
+
+        // Log if we filtered out low-relevance results
+        if (searchResult.Results.Count > relevantResults.Count)
+        {
+            logger.LogDebug("Filtered {Removed} low-relevance results (below {Threshold})",
+                searchResult.Results.Count - relevantResults.Count, minRelevanceScore);
+        }
+
+        var sources = relevantResults
             .Select((r, i) => new SourceCitation(
                 Number: i + 1,
                 DocumentId: r.DocumentId,
@@ -221,8 +237,25 @@ public class AgenticSearchService(
                 PageOrSection: r.SectionTitle))
             .ToList();
 
-        // Build answer using LLM synthesis
-        var answer = await BuildAnswerAsync(request.Query, sources, systemPrompt, ct);
+        // Build thinking/transparency output
+        var thinking = BuildThinkingOutput(request.Query, searchResult);
+
+        // Check if this is a keyword query - skip synthesis
+        var queryType = searchResult.QueryPlan?.QueryType ?? Sentinel.QueryType.Semantic;
+        string answer;
+
+        if (queryType == Sentinel.QueryType.Keyword || queryType == Sentinel.QueryType.Navigation)
+        {
+            // Keyword/navigation query - just list matching documents without synthesis
+            logger.LogInformation("Query '{Query}' is {Type} - skipping synthesis", request.Query, queryType);
+            answer = BuildKeywordResponse(sources, thinking);
+        }
+        else
+        {
+            // Semantic/comparison/aggregation - use LLM synthesis
+            answer = await BuildAnswerAsync(request.Query, sources, systemPrompt, ct);
+            answer = thinking + "\n\n" + answer;
+        }
 
         // Save assistant message
         var metadata = JsonSerializer.Serialize(new { sources = sources.Select(s => s.SegmentId) });
@@ -284,32 +317,47 @@ public class AgenticSearchService(
         // Build context from sources
         var sourceTexts = string.Join("\n\n", sources.Select(s => $"[{s.Number}] ({s.DocumentName}): {s.Text}"));
 
-        // Create prompt for LLM synthesis
+        // Create prompt for LLM synthesis - with strict anti-leak rules
         var prompt = $@"{systemPrompt}
 
-You are answering a user's question based on the following document excerpts.
-Synthesize a clear, comprehensive answer using the information from the sources.
-Cite sources using [N] notation where N is the source number.
+Answer the question using ONLY directly relevant evidence below.
 
-USER QUESTION: {query}
+QUESTION: {query}
 
-SOURCES:
+EVIDENCE:
 {sourceTexts}
 
-INSTRUCTIONS:
-- Provide a direct, helpful answer based on the sources
-- Cite relevant sources using [N] notation
-- If the sources don't fully answer the question, acknowledge limitations
-- Be concise but thorough
-- Do not make up information not present in the sources
+STRICT RULES:
+1. If evidence DIRECTLY answers the question: give bullet points with [N] citations
+2. If evidence is NOT relevant: say ""I don't have information about [topic] in the documents.""
+3. NEVER describe evidence that doesn't answer the question
+4. NO meta phrases: ""based on"", ""according to"", ""sources show"", ""can be inferred""
+5. NO system words: models, tools, pipelines, RAG, embeddings, vectors, Ollama
+6. Use the user's exact terms - don't correct spelling
 
 ANSWER:";
 
         try
         {
+            // Compute evidence hash and get source document IDs
+            var evidenceHash = SynthesisCacheService.ComputeHash(sourceTexts);
+            var sourceDocumentIds = sources.Select(s => s.DocumentId).Distinct().ToArray();
+
+            // Check synthesis cache first
+            if (synthesisCache.TryGetSynthesis(query, evidenceHash, out var cachedAnswer))
+            {
+                logger.LogDebug("Returning cached synthesis for query: {Query}", query);
+                return cachedAnswer!;
+            }
+
             logger.LogDebug("Generating LLM answer for query: {Query}", query);
             var answer = await llmService.GenerateAsync(prompt, new LlmOptions { Temperature = 0.3 }, ct);
-            return answer.Trim();
+            var trimmedAnswer = answer.Trim();
+
+            // Store in cache with document IDs for invalidation tracking
+            synthesisCache.SetSynthesis(query, sourceTexts, trimmedAnswer, sourceDocumentIds);
+
+            return trimmedAnswer;
         }
         catch (Exception ex)
         {
@@ -333,5 +381,63 @@ ANSWER:";
             return string.Join("_", parts.Take(parts.Length - 2));
         }
         return null;
+    }
+
+    /// <summary>
+    /// Build thinking/transparency output showing what the system is doing.
+    /// </summary>
+    private static string BuildThinkingOutput(string query, SearchResult searchResult)
+    {
+        var plan = searchResult.QueryPlan;
+        if (plan == null) return "";
+
+        var thinking = new StringBuilder();
+        thinking.AppendLine("*Thinking...*");
+        thinking.AppendLine($"- Query type: **{plan.QueryType}** ({plan.Mode})");
+        thinking.AppendLine($"- Interpreted as: {plan.Intent}");
+        thinking.AppendLine($"- Confidence: {plan.Confidence:P0}");
+
+        if (plan.SubQueries.Count > 0)
+        {
+            thinking.AppendLine($"- Searching with {plan.SubQueries.Count} sub-queries");
+        }
+
+        thinking.AppendLine($"- Found **{searchResult.Results.Count}** relevant segments");
+
+        if (searchResult.ResponseTimeMs > 0)
+        {
+            thinking.AppendLine($"- Search completed in {searchResult.ResponseTimeMs}ms");
+        }
+
+        return thinking.ToString();
+    }
+
+    /// <summary>
+    /// Build response for keyword/navigation queries (no synthesis needed).
+    /// </summary>
+    private static string BuildKeywordResponse(List<SourceCitation> sources, string thinking)
+    {
+        if (sources.Count == 0)
+        {
+            return thinking + "\n\nNo documents found matching your search.";
+        }
+
+        var response = new StringBuilder(thinking);
+        response.AppendLine();
+        response.AppendLine($"Found **{sources.Count}** matching documents:");
+        response.AppendLine();
+
+        foreach (var source in sources)
+        {
+            response.AppendLine($"**[{source.Number}] {source.DocumentName}**");
+            if (!string.IsNullOrEmpty(source.PageOrSection))
+            {
+                response.AppendLine($"   *{source.PageOrSection}*");
+            }
+            response.AppendLine($"   {source.Text}");
+            response.AppendLine();
+        }
+
+        return response.ToString();
     }
 }

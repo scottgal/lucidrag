@@ -37,6 +37,21 @@
     <!-- D3.js for graph visualization -->
     <script src="https://d3js.org/d3.v7.min.js"></script>
 
+    <!-- Marked.js for markdown rendering -->
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <script>
+        // Configure marked for safe rendering
+        marked.setOptions({
+            breaks: true,
+            gfm: true
+        });
+        // Helper function for safe markdown rendering
+        window.renderMarkdown = function(text) {
+            if (!text) return '';
+            return marked.parse(text);
+        };
+    </script>
+
     <style>
         /* Brand font - extending Tailwind */
         .font-brand {

@@ -1,5 +1,13 @@
 {
   "mcpServers": {
+    "lucidrag-api": {
+      "command": "npx",
+      "args": ["-y", "@anthropic-ai/mcp-server-fetch@latest"],
+      "description": "LucidRAG API Testing - Use fetch tool to call localhost:5080/api/* endpoints",
+      "env": {
+        "LUCIDRAG_BASE_URL": "http://localhost:5080"
+      }
+    },
     "lucidrag-ocr": {
       "command": "dotnet",
       "args": [
