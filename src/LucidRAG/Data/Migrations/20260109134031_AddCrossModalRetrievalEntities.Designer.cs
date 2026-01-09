@@ -3,6 +3,7 @@ using System;
 using LucidRAG.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -11,9 +12,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace LucidRAG.Data.Migrations
 {
     [DbContext(typeof(RagDocumentsDbContext))]
-    partial class RagDocumentsDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260109134031_AddCrossModalRetrievalEntities")]
+    partial class AddCrossModalRetrievalEntities
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -289,75 +292,6 @@ namespace LucidRAG.Data.Migrations
                     b.ToTable("entity_relationships", (string)null);
                 });
 
-            modelBuilder.Entity("LucidRAG.Entities.EvidenceArtifact", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
-
-                    b.Property<string>("ArtifactType")
-                        .IsRequired()
-                        .HasMaxLength(64)
-                        .HasColumnType("character varying(64)");
-
-                    b.Property<double?>("Confidence")
-                        .HasColumnType("double precision");
-
-                    b.Property<string>("ContentHash")
-                        .HasMaxLength(64)
-                        .HasColumnType("character varying(64)");
-
-                    b.Property<DateTimeOffset>("CreatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<Guid>("EntityId")
-                        .HasColumnType("uuid");
-
-                    b.Property<DateTimeOffset?>("ExpiresAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<long>("FileSizeBytes")
-                        .HasColumnType("bigint");
-
-                    b.Property<string>("Metadata")
-                        .HasColumnType("jsonb");
-
-                    b.Property<string>("MimeType")
-                        .IsRequired()
-                        .HasMaxLength(128)
-                        .HasColumnType("character varying(128)");
-
-                    b.Property<string>("ProducerSource")
-                        .HasMaxLength(128)
-                        .HasColumnType("character varying(128)");
-
-                    b.Property<string>("ProducerVersion")
-                        .HasMaxLength(32)
-                        .HasColumnType("character varying(32)");
-
-                    b.Property<string>("StorageBackend")
-                        .IsRequired()
-                        .HasMaxLength(32)
-                        .HasColumnType("character varying(32)");
-
-                    b.Property<string>("StoragePath")
-                        .IsRequired()
-                        .HasMaxLength(2048)
-                        .HasColumnType("character varying(2048)");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("ArtifactType");
-
-                    b.HasIndex("ContentHash");
-
-                    b.HasIndex("EntityId");
-
-                    b.HasIndex("EntityId", "ArtifactType");
-
-                    b.ToTable("evidence_artifacts", (string)null);
-                });
-
             modelBuilder.Entity("LucidRAG.Entities.ExtractedEntity", b =>
                 {
                     b.Property<Guid>("Id")
@@ -437,9 +371,6 @@ namespace LucidRAG.Data.Migrations
                     b.Property<bool>("NeedsReview")
                         .HasColumnType("boolean");
 
-                    b.Property<string>("ProcessingState")
-                        .HasColumnType("jsonb");
-
                     b.Property<double>("QualityScore")
                         .HasColumnType("double precision");
 
@@ -457,9 +388,6 @@ namespace LucidRAG.Data.Migrations
                         .IsRequired()
                         .HasMaxLength(2048)
                         .HasColumnType("character varying(2048)");
-
-                    b.Property<string>("SourceModalities")
-                        .HasColumnType("jsonb");
 
                     b.Property<string>("Summary")
                         .HasMaxLength(4000)
@@ -493,76 +421,6 @@ namespace LucidRAG.Data.Migrations
                     b.HasIndex("CollectionId", "ContentType");
 
                     b.ToTable("retrieval_entities", (string)null);
-                });
-
-            modelBuilder.Entity("LucidRAG.Entities.ScannedPageGroup", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
-
-                    b.Property<Guid?>("CollectionId")
-                        .HasColumnType("uuid");
-
-                    b.Property<DateTimeOffset>("CreatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<string>("DirectoryPath")
-                        .HasMaxLength(1024)
-                        .HasColumnType("character varying(1024)");
-
-                    b.Property<string>("FilenamePattern")
-                        .HasMaxLength(256)
-                        .HasColumnType("character varying(256)");
-
-                    b.Property<string>("GroupName")
-                        .IsRequired()
-                        .HasMaxLength(512)
-                        .HasColumnType("character varying(512)");
-
-                    b.Property<string>("GroupingStrategy")
-                        .IsRequired()
-                        .HasMaxLength(32)
-                        .HasColumnType("character varying(32)");
-
-                    b.Property<string>("Metadata")
-                        .HasColumnType("jsonb");
-
-                    b.Property<DateTimeOffset>("UpdatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("CollectionId");
-
-                    b.HasIndex("GroupingStrategy");
-
-                    b.ToTable("scanned_page_groups", (string)null);
-                });
-
-            modelBuilder.Entity("LucidRAG.Entities.ScannedPageMembership", b =>
-                {
-                    b.Property<Guid>("GroupId")
-                        .HasColumnType("uuid");
-
-                    b.Property<Guid>("EntityId")
-                        .HasColumnType("uuid");
-
-                    b.Property<DateTimeOffset>("CreatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<string>("OriginalFilename")
-                        .HasMaxLength(512)
-                        .HasColumnType("character varying(512)");
-
-                    b.Property<int>("PageNumber")
-                        .HasColumnType("integer");
-
-                    b.HasKey("GroupId", "EntityId");
-
-                    b.HasIndex("EntityId");
-
-                    b.ToTable("scanned_page_memberships", (string)null);
                 });
 
             modelBuilder.Entity("LucidRAG.Entities.ConversationEntity", b =>
@@ -645,17 +503,6 @@ namespace LucidRAG.Data.Migrations
                     b.Navigation("TargetEntity");
                 });
 
-            modelBuilder.Entity("LucidRAG.Entities.EvidenceArtifact", b =>
-                {
-                    b.HasOne("LucidRAG.Entities.RetrievalEntityRecord", "Entity")
-                        .WithMany("EvidenceArtifacts")
-                        .HasForeignKey("EntityId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("Entity");
-                });
-
             modelBuilder.Entity("LucidRAG.Entities.RetrievalEntityRecord", b =>
                 {
                     b.HasOne("LucidRAG.Entities.CollectionEntity", "Collection")
@@ -664,35 +511,6 @@ namespace LucidRAG.Data.Migrations
                         .OnDelete(DeleteBehavior.SetNull);
 
                     b.Navigation("Collection");
-                });
-
-            modelBuilder.Entity("LucidRAG.Entities.ScannedPageGroup", b =>
-                {
-                    b.HasOne("LucidRAG.Entities.CollectionEntity", "Collection")
-                        .WithMany()
-                        .HasForeignKey("CollectionId")
-                        .OnDelete(DeleteBehavior.Cascade);
-
-                    b.Navigation("Collection");
-                });
-
-            modelBuilder.Entity("LucidRAG.Entities.ScannedPageMembership", b =>
-                {
-                    b.HasOne("LucidRAG.Entities.RetrievalEntityRecord", "Entity")
-                        .WithMany("PageMemberships")
-                        .HasForeignKey("EntityId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.HasOne("LucidRAG.Entities.ScannedPageGroup", "Group")
-                        .WithMany("Pages")
-                        .HasForeignKey("GroupId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("Entity");
-
-                    b.Navigation("Group");
                 });
 
             modelBuilder.Entity("LucidRAG.Entities.CollectionEntity", b =>
@@ -724,15 +542,6 @@ namespace LucidRAG.Data.Migrations
             modelBuilder.Entity("LucidRAG.Entities.RetrievalEntityRecord", b =>
                 {
                     b.Navigation("Embeddings");
-
-                    b.Navigation("EvidenceArtifacts");
-
-                    b.Navigation("PageMemberships");
-                });
-
-            modelBuilder.Entity("LucidRAG.Entities.ScannedPageGroup", b =>
-                {
-                    b.Navigation("Pages");
                 });
 #pragma warning restore 612, 618
         }

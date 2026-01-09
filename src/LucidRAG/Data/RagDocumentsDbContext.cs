@@ -18,6 +18,13 @@ public class RagDocumentsDbContext(DbContextOptions<RagDocumentsDbContext> optio
     public DbSet<RetrievalEntityRecord> RetrievalEntities => Set<RetrievalEntityRecord>();
     public DbSet<EntityEmbedding> EntityEmbeddings => Set<EntityEmbedding>();
 
+    // Evidence repository
+    public DbSet<EvidenceArtifact> EvidenceArtifacts => Set<EvidenceArtifact>();
+
+    // Scanned page grouping
+    public DbSet<ScannedPageGroup> ScannedPageGroups => Set<ScannedPageGroup>();
+    public DbSet<ScannedPageMembership> ScannedPageMemberships => Set<ScannedPageMembership>();
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);
@@ -170,6 +177,8 @@ public class RagDocumentsDbContext(DbContextOptions<RagDocumentsDbContext> optio
                 entity.Property(e => e.Signals).HasColumnType("jsonb");
                 entity.Property(e => e.ExtractedEntities).HasColumnType("jsonb");
                 entity.Property(e => e.Relationships).HasColumnType("jsonb");
+                entity.Property(e => e.SourceModalities).HasColumnType("jsonb");
+                entity.Property(e => e.ProcessingState).HasColumnType("jsonb");
             }
 
             // Indexes for common queries
@@ -201,6 +210,74 @@ public class RagDocumentsDbContext(DbContextOptions<RagDocumentsDbContext> optio
 
             entity.HasOne(e => e.Entity)
                 .WithMany(e => e.Embeddings)
+                .HasForeignKey(e => e.EntityId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        // EvidenceArtifact - Evidence storage for entities
+        modelBuilder.Entity<EvidenceArtifact>(entity =>
+        {
+            entity.ToTable("evidence_artifacts");
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.ArtifactType).HasMaxLength(64).IsRequired();
+            entity.Property(e => e.MimeType).HasMaxLength(128).IsRequired();
+            entity.Property(e => e.StorageBackend).HasMaxLength(32).IsRequired();
+            entity.Property(e => e.StoragePath).HasMaxLength(2048).IsRequired();
+            entity.Property(e => e.ContentHash).HasMaxLength(64);
+            entity.Property(e => e.ProducerSource).HasMaxLength(128);
+            entity.Property(e => e.ProducerVersion).HasMaxLength(32);
+            if (!isSqlite) entity.Property(e => e.Metadata).HasColumnType("jsonb");
+
+            // Indexes
+            entity.HasIndex(e => e.EntityId);
+            entity.HasIndex(e => e.ArtifactType);
+            entity.HasIndex(e => e.ContentHash);
+            entity.HasIndex(e => new { e.EntityId, e.ArtifactType });
+
+            entity.HasOne(e => e.Entity)
+                .WithMany(e => e.EvidenceArtifacts)
+                .HasForeignKey(e => e.EntityId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        // ScannedPageGroup - Groups scanned pages into documents
+        modelBuilder.Entity<ScannedPageGroup>(entity =>
+        {
+            entity.ToTable("scanned_page_groups");
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.GroupName).HasMaxLength(512).IsRequired();
+            entity.Property(e => e.GroupingStrategy).HasMaxLength(32).IsRequired();
+            entity.Property(e => e.FilenamePattern).HasMaxLength(256);
+            entity.Property(e => e.DirectoryPath).HasMaxLength(1024);
+            if (!isSqlite) entity.Property(e => e.Metadata).HasColumnType("jsonb");
+
+            // Indexes
+            entity.HasIndex(e => e.CollectionId);
+            entity.HasIndex(e => e.GroupingStrategy);
+
+            entity.HasOne(e => e.Collection)
+                .WithMany()
+                .HasForeignKey(e => e.CollectionId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        // ScannedPageMembership - Junction table for page groupings
+        modelBuilder.Entity<ScannedPageMembership>(entity =>
+        {
+            entity.ToTable("scanned_page_memberships");
+            entity.HasKey(e => new { e.GroupId, e.EntityId });
+            entity.Property(e => e.OriginalFilename).HasMaxLength(512);
+
+            // Indexes
+            entity.HasIndex(e => e.EntityId);
+
+            entity.HasOne(e => e.Group)
+                .WithMany(g => g.Pages)
+                .HasForeignKey(e => e.GroupId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne(e => e.Entity)
+                .WithMany(e => e.PageMemberships)
                 .HasForeignKey(e => e.EntityId)
                 .OnDelete(DeleteBehavior.Cascade);
         });

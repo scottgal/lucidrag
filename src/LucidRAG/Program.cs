@@ -11,6 +11,7 @@ using LucidRAG.Config;
 using LucidRAG.Data;
 using LucidRAG.Services;
 using LucidRAG.Services.Background;
+using LucidRAG.Services.Storage;
 using Scalar.AspNetCore;
 using Serilog;
 
@@ -95,6 +96,12 @@ builder.Services.AddSingleton<DocumentProcessingQueue>();
 builder.Services.AddHostedService<DocumentQueueProcessor>();
 builder.Services.AddHostedService<DemoContentSeeder>();
 builder.Services.AddSingleton<IWebCrawlerService, WebCrawlerService>();
+
+// Evidence storage for multimodal artifacts
+builder.Services.Configure<EvidenceStorageOptions>(
+    builder.Configuration.GetSection(EvidenceStorageOptions.SectionName));
+builder.Services.AddSingleton<IEvidenceStorage, FilesystemEvidenceStorage>();
+builder.Services.AddScoped<IEvidenceRepository, EvidenceRepository>();
 
 // HttpClient for external API calls (RSS feeds, etc.)
 builder.Services.AddHttpClient();
@@ -184,6 +191,16 @@ var uploadPath = standaloneMode
     ? Path.Combine(AppContext.BaseDirectory, "uploads")
     : ragConfig.UploadPath;
 Directory.CreateDirectory(uploadPath);
+
+// Ensure evidence storage directory exists
+var evidenceConfig = builder.Configuration
+    .GetSection(EvidenceStorageOptions.SectionName)
+    .Get<EvidenceStorageOptions>() ?? new EvidenceStorageOptions();
+var evidencePath = evidenceConfig.BasePath
+    ?? (standaloneMode
+        ? Path.Combine(AppContext.BaseDirectory, "evidence")
+        : Path.Combine(uploadPath, "evidence"));
+Directory.CreateDirectory(evidencePath);
 
 // Open browser in standalone mode
 if (standaloneMode)

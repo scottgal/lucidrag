@@ -120,6 +120,18 @@ public class RetrievalEntityRecord
     [Column(TypeName = "jsonb")]
     public string? Relationships { get; set; }
 
+    /// <summary>
+    /// Modalities present in this entity (e.g., ["visual", "text", "audio"]).
+    /// </summary>
+    [Column(TypeName = "jsonb")]
+    public string? SourceModalities { get; set; }
+
+    /// <summary>
+    /// Processing state tracking which modalities have been processed (JSON).
+    /// </summary>
+    [Column(TypeName = "jsonb")]
+    public string? ProcessingState { get; set; }
+
     public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.UtcNow;
     public DateTimeOffset UpdatedAt { get; set; } = DateTimeOffset.UtcNow;
 
@@ -130,6 +142,16 @@ public class RetrievalEntityRecord
     /// Multi-vector embeddings for cross-modal search.
     /// </summary>
     public ICollection<EntityEmbedding> Embeddings { get; set; } = [];
+
+    /// <summary>
+    /// Evidence artifacts for this entity.
+    /// </summary>
+    public ICollection<EvidenceArtifact> EvidenceArtifacts { get; set; } = [];
+
+    /// <summary>
+    /// Page group memberships (for scanned page entities).
+    /// </summary>
+    public ICollection<ScannedPageMembership> PageMemberships { get; set; } = [];
 }
 
 /// <summary>
