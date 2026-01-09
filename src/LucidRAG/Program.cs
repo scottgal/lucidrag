@@ -9,6 +9,7 @@ using Mostlylucid.DocSummarizer.OpenAI.Extensions;
 using Mostlylucid.DocSummarizer.Config;
 using LucidRAG.Config;
 using LucidRAG.Data;
+using LucidRAG.Multitenancy;
 using LucidRAG.Services;
 using LucidRAG.Services.Background;
 using LucidRAG.Services.Storage;
@@ -103,6 +104,13 @@ builder.Services.Configure<EvidenceStorageOptions>(
 builder.Services.AddSingleton<IEvidenceStorage, FilesystemEvidenceStorage>();
 builder.Services.AddScoped<IEvidenceRepository, EvidenceRepository>();
 
+// Multi-tenancy services (always register for API, middleware only when enabled)
+var multitenancyEnabled = builder.Configuration.GetValue<bool>("Multitenancy:Enabled");
+if (!standaloneMode)
+{
+    builder.Services.AddMultitenancy(builder.Configuration);
+}
+
 // HttpClient for external API calls (RSS feeds, etc.)
 builder.Services.AddHttpClient();
 
@@ -157,6 +165,12 @@ app.UseStaticFiles();
 // Routing
 app.UseRouting();
 
+// Multi-tenancy middleware (if enabled)
+if (multitenancyEnabled)
+{
+    app.UseMultitenancy();
+}
+
 // Antiforgery
 app.UseAntiforgery();
 
@@ -183,6 +197,13 @@ using (var scope = app.Services.CreateScope())
     else
     {
         await db.Database.MigrateAsync();
+
+        // Also migrate tenant management tables (PostgreSQL only)
+        var tenantDb = scope.ServiceProvider.GetService<TenantDbContext>();
+        if (tenantDb != null)
+        {
+            await tenantDb.Database.MigrateAsync();
+        }
     }
 }
 

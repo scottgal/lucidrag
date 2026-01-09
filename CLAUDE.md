@@ -84,3 +84,7 @@ Primary configuration in `src/LucidRAG/appsettings.json`:
 ## Testing Notes
 
 Tests use Testcontainers.PostgreSql for integration tests. Browser tests (PuppeteerSharp) are excluded in CI with `--filter "Category!=Browser"`.
+
+## Test Data Paths
+
+- **Markdown test corpus**: `C:\Blog\mostlylucidweb\Mostlylucid\Markdown` - Great for RAG/bulk ingestion testing
