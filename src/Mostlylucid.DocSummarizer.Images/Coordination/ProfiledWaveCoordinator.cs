@@ -8,6 +8,10 @@ using Microsoft.Extensions.Logging;
 using Mostlylucid.DocSummarizer.Images.Models;
 using Mostlylucid.DocSummarizer.Images.Models.Dynamic;
 using Mostlylucid.DocSummarizer.Images.Services.Analysis;
+// Orchestration types (using aliases to avoid conflict with Signal class)
+using WaveManifest = Mostlylucid.DocSummarizer.Images.Orchestration.WaveManifest;
+using LaneConfig = Mostlylucid.DocSummarizer.Images.Orchestration.LaneConfig;
+using SignalScope = Mostlylucid.DocSummarizer.Images.Orchestration.SignalScope;
 
 namespace Mostlylucid.DocSummarizer.Images.Coordination;
 

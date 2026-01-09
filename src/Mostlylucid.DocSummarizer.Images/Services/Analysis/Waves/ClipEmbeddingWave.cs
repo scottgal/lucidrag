@@ -22,6 +22,7 @@ public class ClipEmbeddingWave : IAnalysisWave
 {
     private readonly ImageConfig _config;
     private readonly ModelDownloader? _modelDownloader;
+    private readonly OnnxSessionFactory? _sessionFactory;
     private readonly ILogger<ClipEmbeddingWave>? _logger;
     private static InferenceSession? _clipSession;
     private static readonly object _modelLock = new();
@@ -53,10 +54,12 @@ public class ClipEmbeddingWave : IAnalysisWave
     public ClipEmbeddingWave(
         IOptions<ImageConfig> config,
         ModelDownloader? modelDownloader = null,
+        OnnxSessionFactory? sessionFactory = null,
         ILogger<ClipEmbeddingWave>? logger = null)
     {
         _config = config.Value;
         _modelDownloader = modelDownloader;
+        _sessionFactory = sessionFactory;
         _logger = logger;
     }
 
@@ -177,12 +180,22 @@ public class ClipEmbeddingWave : IAnalysisWave
             {
                 _logger?.LogInformation("Loading CLIP model from {Path}", modelPath);
 
-                var sessionOptions = new SessionOptions
+                // Use OnnxSessionFactory for GPU acceleration if available
+                if (_sessionFactory != null)
                 {
-                    GraphOptimizationLevel = GraphOptimizationLevel.ORT_ENABLE_ALL
-                };
-
-                _clipSession = new InferenceSession(modelPath, sessionOptions);
+                    var provider = _sessionFactory.GetEffectiveProvider();
+                    _logger?.LogInformation("CLIP using ONNX execution provider: {Provider}", provider);
+                    _clipSession = _sessionFactory.CreateSession(modelPath);
+                }
+                else
+                {
+                    // Fallback to CPU-only
+                    var sessionOptions = new SessionOptions
+                    {
+                        GraphOptimizationLevel = GraphOptimizationLevel.ORT_ENABLE_ALL
+                    };
+                    _clipSession = new InferenceSession(modelPath, sessionOptions);
+                }
 
                 _logger?.LogInformation("CLIP model loaded successfully");
                 return _clipSession;

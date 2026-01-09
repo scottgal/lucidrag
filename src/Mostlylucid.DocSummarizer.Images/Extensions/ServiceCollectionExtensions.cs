@@ -66,6 +66,14 @@ public static class ServiceCollectionExtensions
 
     private static void RegisterCoreServices(IServiceCollection services)
     {
+        // ONNX Session Factory for GPU-accelerated inference (DirectML/CUDA/CoreML)
+        services.TryAddSingleton<OnnxSessionFactory>(sp =>
+        {
+            var imageConfig = sp.GetRequiredService<IOptions<ImageConfig>>();
+            var logger = sp.GetService<Microsoft.Extensions.Logging.ILogger<OnnxSessionFactory>>();
+            return new OnnxSessionFactory(imageConfig, logger);
+        });
+
         // Sub-analyzers
         services.TryAddSingleton<ColorAnalyzer>();
         services.TryAddSingleton<EdgeAnalyzer>();
@@ -152,12 +160,14 @@ public static class ServiceCollectionExtensions
         });
 
         // TextDetectionService - EAST/CRAFT ONNX text region detection
+        // Uses OnnxSessionFactory for GPU acceleration (CUDA/DirectML)
         services.TryAddSingleton<TextDetectionService>(sp =>
         {
             var modelDownloader = sp.GetRequiredService<ModelDownloader>();
             var imageConfig = sp.GetRequiredService<IOptions<ImageConfig>>();
+            var sessionFactory = sp.GetRequiredService<OnnxSessionFactory>();
             var logger = sp.GetService<Microsoft.Extensions.Logging.ILogger<TextDetectionService>>();
-            return new TextDetectionService(modelDownloader, imageConfig.Value.Ocr, logger);
+            return new TextDetectionService(modelDownloader, imageConfig.Value.Ocr, sessionFactory, logger);
         });
 
         // TextDetectionWave - Fast ML-based text region detection (EAST/CRAFT)
@@ -249,12 +259,14 @@ public static class ServiceCollectionExtensions
         });
 
         // ClipEmbeddingWave - Semantic image embeddings for similarity search (auto-downloads model)
+        // Uses OnnxSessionFactory for GPU acceleration (DirectML/CUDA/CoreML)
         services.AddSingleton<IAnalysisWave>(sp =>
         {
             var imageConfig = sp.GetRequiredService<IOptions<ImageConfig>>();
             var modelDownloader = sp.GetRequiredService<ModelDownloader>();
+            var sessionFactory = sp.GetRequiredService<OnnxSessionFactory>();
             var logger = sp.GetService<Microsoft.Extensions.Logging.ILogger<ClipEmbeddingWave>>();
-            return new ClipEmbeddingWave(imageConfig, modelDownloader, logger);
+            return new ClipEmbeddingWave(imageConfig, modelDownloader, sessionFactory, logger);
         });
 
         // MotionAnalyzer - Optical flow analysis for animated GIFs

@@ -22,7 +22,7 @@ public static class ChatCommand
 
     public static Command Create()
     {
-        var command = new Command("chat", "Interactive chat with documents");
+        var command = new Command("rag-chat", "Interactive RAG chat with documents (legacy)");
         command.Options.Add(CollectionOpt);
         command.Options.Add(ModelOpt);
         command.Options.Add(TopKOpt);

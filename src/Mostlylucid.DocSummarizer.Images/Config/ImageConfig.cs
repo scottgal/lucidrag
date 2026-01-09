@@ -165,6 +165,12 @@ public class ImageConfig
     public string? ClipModelPath { get; set; }
 
     /// <summary>
+    /// ONNX execution provider configuration.
+    /// Controls GPU acceleration for CLIP, EAST, and other ONNX models.
+    /// </summary>
+    public OnnxExecutionConfig OnnxExecution { get; set; } = new();
+
+    /// <summary>
     /// Contradiction detection configuration for signal validation
     /// </summary>
     public ContradictionConfig Contradiction { get; set; } = new();
@@ -405,4 +411,68 @@ public enum ImageSummaryMode
     /// Profile + OCR-focused (for screenshots/documents)
     /// </summary>
     DocImage
+}
+
+/// <summary>
+/// ONNX execution provider configuration for GPU acceleration.
+/// Supports cross-platform GPU: DirectML (Windows), CUDA (Linux), CoreML (macOS).
+/// </summary>
+public class OnnxExecutionConfig
+{
+    /// <summary>
+    /// Preferred execution provider. Auto = best available, CPU = force CPU.
+    /// Options: Auto, CPU, DirectML, CUDA, CoreML
+    /// </summary>
+    public OnnxExecutionProvider PreferredProvider { get; set; } = OnnxExecutionProvider.Auto;
+
+    /// <summary>
+    /// Device ID for GPU execution (0 = first GPU, 1 = second GPU, etc.)
+    /// </summary>
+    public int DeviceId { get; set; } = 0;
+
+    /// <summary>
+    /// Enable graph optimization for better performance
+    /// </summary>
+    public bool EnableGraphOptimization { get; set; } = true;
+
+    /// <summary>
+    /// Number of threads for CPU execution (0 = auto based on CPU cores)
+    /// </summary>
+    public int CpuThreads { get; set; } = 0;
+
+    /// <summary>
+    /// Log performance metrics when loading/running models
+    /// </summary>
+    public bool LogPerformanceMetrics { get; set; } = false;
+}
+
+/// <summary>
+/// ONNX execution provider type
+/// </summary>
+public enum OnnxExecutionProvider
+{
+    /// <summary>
+    /// Auto-detect best available provider (GPU if available, fallback to CPU)
+    /// </summary>
+    Auto,
+
+    /// <summary>
+    /// Force CPU execution
+    /// </summary>
+    CPU,
+
+    /// <summary>
+    /// DirectML (Windows GPU - works with AMD, Intel, NVIDIA)
+    /// </summary>
+    DirectML,
+
+    /// <summary>
+    /// CUDA (Linux/Windows NVIDIA GPU)
+    /// </summary>
+    CUDA,
+
+    /// <summary>
+    /// CoreML (macOS GPU/Neural Engine)
+    /// </summary>
+    CoreML
 }

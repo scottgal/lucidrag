@@ -1,5 +1,8 @@
 using System.Collections.Generic;
 using System.Linq;
+// Orchestration types
+using LaneConfig = Mostlylucid.DocSummarizer.Images.Orchestration.LaneConfig;
+using WaveManifest = Mostlylucid.DocSummarizer.Images.Orchestration.WaveManifest;
 
 namespace Mostlylucid.DocSummarizer.Images.Coordination;
 

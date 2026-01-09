@@ -25,7 +25,15 @@
 
   <ItemGroup>
     <!-- ONNX Runtime for Florence-2 and CLIP -->
+    <!-- Base ONNX Runtime (CPU, always included) - 1.23.2 required by Florence2 -->
     <PackageReference Include="Microsoft.ML.OnnxRuntime" Version="1.23.2" />
+
+    <!-- CUDA for NVIDIA GPU acceleration (Windows/Linux) - preferred for NVIDIA GPUs -->
+    <!-- Note: 1.23.0 is compatible with 1.23.2 base runtime, just minor version difference -->
+    <PackageReference Include="Microsoft.ML.OnnxRuntime.Gpu" Version="1.23.0" Condition="('$(RuntimeIdentifier)' == 'win-x64' OR '$(RuntimeIdentifier)' == 'linux-x64') OR (('$(RuntimeIdentifier)' == '') AND ($([MSBuild]::IsOSPlatform('Windows')) OR $([MSBuild]::IsOSPlatform('Linux'))))" NoWarn="NU1605" />
+
+    <!-- DirectML for Windows GPU acceleration (AMD, Intel as fallback) -->
+    <PackageReference Include="Microsoft.ML.OnnxRuntime.DirectML" Version="1.23.0" Condition="('$(RuntimeIdentifier)' == 'win-x64') OR (('$(RuntimeIdentifier)' == '') AND $([MSBuild]::IsOSPlatform('Windows')))" NoWarn="NU1605" />
 
     <!-- Florence-2 for fast local image captioning -->
     <PackageReference Include="Florence2" Version="25.12.63049" />

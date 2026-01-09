@@ -8,6 +8,10 @@ using Microsoft.Extensions.Logging;
 using Mostlylucid.DocSummarizer.Images.Models;
 using Mostlylucid.DocSummarizer.Images.Models.Dynamic;
 using Mostlylucid.DocSummarizer.Images.Services.Analysis;
+// Orchestration types (using aliases to avoid conflict with Signal class)
+using WaveManifest = Mostlylucid.DocSummarizer.Images.Orchestration.WaveManifest;
+using LaneConfig = Mostlylucid.DocSummarizer.Images.Orchestration.LaneConfig;
+using EscalationCondition = Mostlylucid.DocSummarizer.Images.Orchestration.EscalationCondition;
 
 namespace Mostlylucid.DocSummarizer.Images.Coordination;
 
@@ -170,13 +174,11 @@ public sealed class WaveSignalCoordinator : IDisposable
     /// </summary>
     public bool ShouldEscalate(WaveManifest manifest, string escalationType, AnalysisContext context)
     {
-        if (manifest.Escalation == null) return false;
+        if (manifest.Escalation?.Targets == null) return false;
 
-        var rule = escalationType switch
-        {
-            "text_extraction" => manifest.Escalation.TextExtraction,
-            _ => null
-        };
+        // Look up the escalation rule by name in the Targets dictionary
+        if (!manifest.Escalation.Targets.TryGetValue(escalationType, out var rule))
+            return false;
 
         if (rule == null) return false;
 

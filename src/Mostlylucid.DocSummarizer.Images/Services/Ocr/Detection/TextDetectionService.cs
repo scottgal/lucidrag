@@ -24,6 +24,7 @@ public class TextDetectionService : ITextDetectionService
 {
     private readonly ILogger<TextDetectionService>? _logger;
     private readonly ModelDownloader _modelDownloader;
+    private readonly OnnxSessionFactory? _sessionFactory;
     private readonly OcrConfig _config;
     private readonly bool _verbose;
 
@@ -39,10 +40,12 @@ public class TextDetectionService : ITextDetectionService
     public TextDetectionService(
         ModelDownloader modelDownloader,
         OcrConfig config,
+        OnnxSessionFactory? sessionFactory = null,
         ILogger<TextDetectionService>? logger = null)
     {
         _modelDownloader = modelDownloader;
         _config = config;
+        _sessionFactory = sessionFactory;
         _verbose = config.EmitPerformanceMetrics;
         _logger = logger;
     }
@@ -255,11 +258,23 @@ public class TextDetectionService : ITextDetectionService
             try
             {
                 _logger?.LogInformation("Loading EAST model from {Path}", modelPath);
-                var sessionOptions = new SessionOptions
+
+                // Use OnnxSessionFactory for GPU acceleration if available
+                if (_sessionFactory != null)
                 {
-                    GraphOptimizationLevel = GraphOptimizationLevel.ORT_ENABLE_ALL
-                };
-                _eastSession = new InferenceSession(modelPath, sessionOptions);
+                    var provider = _sessionFactory.GetEffectiveProvider();
+                    _logger?.LogInformation("EAST using ONNX execution provider: {Provider}", provider);
+                    _eastSession = _sessionFactory.CreateSession(modelPath);
+                }
+                else
+                {
+                    var sessionOptions = new SessionOptions
+                    {
+                        GraphOptimizationLevel = GraphOptimizationLevel.ORT_ENABLE_ALL
+                    };
+                    _eastSession = new InferenceSession(modelPath, sessionOptions);
+                }
+
                 _logger?.LogInformation("EAST model loaded successfully");
                 return _eastSession;
             }
@@ -433,11 +448,23 @@ public class TextDetectionService : ITextDetectionService
             try
             {
                 _logger?.LogInformation("Loading CRAFT model from {Path}", modelPath);
-                var sessionOptions = new SessionOptions
+
+                // Use OnnxSessionFactory for GPU acceleration if available
+                if (_sessionFactory != null)
                 {
-                    GraphOptimizationLevel = GraphOptimizationLevel.ORT_ENABLE_ALL
-                };
-                _craftSession = new InferenceSession(modelPath, sessionOptions);
+                    var provider = _sessionFactory.GetEffectiveProvider();
+                    _logger?.LogInformation("CRAFT using ONNX execution provider: {Provider}", provider);
+                    _craftSession = _sessionFactory.CreateSession(modelPath);
+                }
+                else
+                {
+                    var sessionOptions = new SessionOptions
+                    {
+                        GraphOptimizationLevel = GraphOptimizationLevel.ORT_ENABLE_ALL
+                    };
+                    _craftSession = new InferenceSession(modelPath, sessionOptions);
+                }
+
                 _logger?.LogInformation("CRAFT model loaded successfully");
                 return _craftSession;
             }

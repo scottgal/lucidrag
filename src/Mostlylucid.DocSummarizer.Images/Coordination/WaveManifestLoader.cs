@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Reflection;
+using Mostlylucid.DocSummarizer.Images.Orchestration;
 using YamlDotNet.Serialization;
 using YamlDotNet.Serialization.NamingConventions;
 
@@ -10,6 +11,7 @@ namespace Mostlylucid.DocSummarizer.Images.Coordination;
 
 /// <summary>
 /// Loads wave manifests from YAML files for dynamic composition.
+/// Uses Orchestration.WaveManifest as the canonical manifest type.
 /// </summary>
 public sealed class WaveManifestLoader
 {

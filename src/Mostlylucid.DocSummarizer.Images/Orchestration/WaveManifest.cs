@@ -19,6 +19,7 @@ public sealed class WaveManifest
     public ListenConfig Listens { get; init; } = new();
     public EscalationConfig? Escalation { get; init; }
     public LaneConfig Lane { get; init; } = new();
+    public CacheConfig Cache { get; init; } = new();
     public BudgetConfig? Budget { get; init; }
     public ConfigBindings Config { get; init; } = new();
     public List<string> Tags { get; init; } = new();
@@ -171,6 +172,32 @@ public sealed class LaneConfig
     public string Name { get; init; } = "fast";
     public int MaxConcurrency { get; init; } = 4;
     public int Priority { get; init; } = 0;
+}
+
+/// <summary>
+///     Cache configuration for wave results.
+/// </summary>
+public sealed class CacheConfig
+{
+    /// <summary>
+    ///     Signals to use for cache key generation.
+    /// </summary>
+    public List<string> Uses { get; init; } = new();
+
+    /// <summary>
+    ///     Signals emitted for cache operations.
+    /// </summary>
+    public List<SignalDefinition> Emits { get; init; } = new();
+
+    /// <summary>
+    ///     Signals to invalidate when this wave's results change.
+    /// </summary>
+    public List<string> Invalidates { get; init; } = new();
+
+    /// <summary>
+    ///     Cache TTL in seconds (overrides default).
+    /// </summary>
+    public int? TtlSeconds { get; init; }
 }
 
 /// <summary>
