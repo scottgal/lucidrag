@@ -93,6 +93,7 @@ builder.Services.AddScoped<IDocumentProcessingService, DocumentProcessingService
 builder.Services.AddScoped<IConversationService, ConversationService>();
 builder.Services.AddScoped<IAgenticSearchService, AgenticSearchService>();
 builder.Services.AddScoped<IEntityGraphService, EntityGraphService>();
+builder.Services.AddScoped<ICommunityDetectionService, CommunityDetectionService>();
 builder.Services.AddScoped<IRetrievalEntityService, RetrievalEntityService>();
 builder.Services.AddSingleton<DocumentProcessingQueue>();
 builder.Services.AddHostedService<DocumentQueueProcessor>();

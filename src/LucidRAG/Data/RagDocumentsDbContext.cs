@@ -29,6 +29,10 @@ public class RagDocumentsDbContext(DbContextOptions<RagDocumentsDbContext> optio
     public DbSet<IngestionSourceEntity> IngestionSources => Set<IngestionSourceEntity>();
     public DbSet<IngestionJobEntity> IngestionJobs => Set<IngestionJobEntity>();
 
+    // Community detection
+    public DbSet<CommunityEntity> Communities => Set<CommunityEntity>();
+    public DbSet<CommunityMembership> CommunityMemberships => Set<CommunityMembership>();
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);
@@ -331,6 +335,52 @@ public class RagDocumentsDbContext(DbContextOptions<RagDocumentsDbContext> optio
             entity.HasOne(e => e.Source)
                 .WithMany(s => s.Jobs)
                 .HasForeignKey(e => e.SourceId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        // CommunityEntity - Detected communities in the knowledge graph
+        modelBuilder.Entity<CommunityEntity>(entity =>
+        {
+            entity.ToTable("communities");
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.Name).HasMaxLength(512).IsRequired();
+            entity.Property(e => e.Algorithm).HasMaxLength(64);
+            if (!isSqlite)
+            {
+                entity.Property(e => e.Features).HasColumnType("jsonb");
+                entity.Property(e => e.Embedding).HasColumnType("jsonb");
+            }
+
+            // Indexes
+            entity.HasIndex(e => e.Level);
+            entity.HasIndex(e => e.ParentCommunityId);
+            entity.HasIndex(e => e.EntityCount);
+
+            // Self-referencing hierarchy
+            entity.HasOne(e => e.ParentCommunity)
+                .WithMany(e => e.ChildCommunities)
+                .HasForeignKey(e => e.ParentCommunityId)
+                .OnDelete(DeleteBehavior.SetNull);
+        });
+
+        // CommunityMembership - Entity membership in communities
+        modelBuilder.Entity<CommunityMembership>(entity =>
+        {
+            entity.ToTable("community_memberships");
+            entity.HasKey(e => new { e.CommunityId, e.EntityId });
+
+            // Indexes
+            entity.HasIndex(e => e.EntityId);
+            entity.HasIndex(e => e.Centrality);
+
+            entity.HasOne(e => e.Community)
+                .WithMany(c => c.Members)
+                .HasForeignKey(e => e.CommunityId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne(e => e.Entity)
+                .WithMany()
+                .HasForeignKey(e => e.EntityId)
                 .OnDelete(DeleteBehavior.Cascade);
         });
     }
