@@ -187,6 +187,11 @@ app.MapHealthChecks("/healthz");
 // Controllers
 app.MapControllers();
 
+// Tenant-scoped routes: /t/{tenantId}/...
+app.MapControllerRoute(
+    name: "tenant-default",
+    pattern: "t/{tenantId}/{controller=Home}/{action=Index}/{id?}");
+
 // Default route
 app.MapControllerRoute(
     name: "default",

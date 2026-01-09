@@ -430,11 +430,12 @@ public class BertRagSummarizer : IDisposable, IAsyncDisposable
         stopwatch.Stop();
         
         // Build trace with citation map
+        // IMPORTANT: Use stableDocId so downstream code can find segments in vector store
         var coverage = extraction.AllSegments.Count == 0
             ? 0
             : (double)retrieved.Count / extraction.AllSegments.Count;
         var trace = new SummarizationTrace(
-            docId,
+            stableDocId,  // Use stableDocId to match vector store document IDs
             extraction.AllSegments.Count,
             retrieved.Count,
             extraction.AllSegments

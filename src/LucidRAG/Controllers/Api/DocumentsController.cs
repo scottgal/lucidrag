@@ -299,4 +299,29 @@ public class DocumentsController(
             _ => $"Evidence artifact ({artifactType})"
         };
     }
+
+    /// <summary>
+    /// Clear all documents, vectors, and related data (DEV/TESTING ONLY).
+    /// </summary>
+    [HttpDelete("clear-all")]
+    public async Task<IActionResult> ClearAll([FromQuery] bool clearVectors = true, CancellationToken ct = default)
+    {
+        try
+        {
+            var count = await documentService.ClearAllAsync(clearVectors, ct);
+            logger.LogWarning("CLEAR ALL: Deleted {Count} documents and all related data", count);
+            return Ok(new
+            {
+                success = true,
+                message = $"Cleared {count} documents and all related data",
+                documentsDeleted = count,
+                vectorsCleared = clearVectors
+            });
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Failed to clear all data");
+            return StatusCode(500, new { error = "Failed to clear all data", details = ex.Message });
+        }
+    }
 }

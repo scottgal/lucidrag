@@ -49,7 +49,15 @@ public class SubdomainTenantResolver : ITenantResolver
             return await GetOrCreateTenantContextAsync(tenantId, ct);
         }
 
-        // 3. Extract from subdomain
+        // 3. Check path-based tenant: /t/{tenantId}
+        var tenantFromPath = ExtractTenantFromPath(context.Request.Path);
+        if (!string.IsNullOrEmpty(tenantFromPath))
+        {
+            _logger.LogDebug("Tenant resolved from path: {TenantId}", tenantFromPath);
+            return await GetOrCreateTenantContextAsync(tenantFromPath, ct);
+        }
+
+        // 4. Extract from subdomain
         var host = context.Request.Host.Host;
         var tenantFromSubdomain = ExtractTenantFromHost(host);
 
@@ -60,7 +68,7 @@ public class SubdomainTenantResolver : ITenantResolver
             return await GetOrCreateTenantContextAsync(tenantFromSubdomain, ct);
         }
 
-        // 4. Fall back to default tenant if enabled
+        // 5. Fall back to default tenant if enabled
         if (_options.AllowDefaultTenant)
         {
             _logger.LogDebug("Using default tenant");
@@ -68,6 +76,35 @@ public class SubdomainTenantResolver : ITenantResolver
         }
 
         _logger.LogWarning("Could not resolve tenant from host: {Host}", host);
+        return null;
+    }
+
+    /// <summary>
+    /// Extract tenant ID from path: /t/{tenantId}/...
+    /// Examples:
+    ///   /t/mostlylucid -> mostlylucid
+    ///   /t/acme/api/docs -> acme
+    ///   /api/docs -> null
+    /// </summary>
+    private static string? ExtractTenantFromPath(PathString path)
+    {
+        var pathValue = path.Value;
+        if (string.IsNullOrEmpty(pathValue))
+            return null;
+
+        // Check for /t/{tenantId} pattern
+        if (pathValue.StartsWith("/t/", StringComparison.OrdinalIgnoreCase))
+        {
+            var remaining = pathValue[3..]; // Skip "/t/"
+            var nextSlash = remaining.IndexOf('/');
+            var tenantId = nextSlash >= 0 ? remaining[..nextSlash] : remaining;
+
+            if (!string.IsNullOrWhiteSpace(tenantId) && tenantId.Length >= 2)
+            {
+                return tenantId.ToLowerInvariant();
+            }
+        }
+
         return null;
     }
 

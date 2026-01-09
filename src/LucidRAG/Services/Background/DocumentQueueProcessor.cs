@@ -122,9 +122,11 @@ public class DocumentQueueProcessor(
             var db = scope.ServiceProvider.GetRequiredService<RagDocumentsDbContext>();
 
             // Find all failed documents and documents stuck in processing
+            // Compute cutoff time before query to avoid LINQ translation issues
+            var cutoffTime = DateTimeOffset.UtcNow.AddHours(-1);
             var failedDocs = await db.Documents
                 .Where(d => d.Status == DocumentStatus.Failed ||
-                           (d.Status == DocumentStatus.Processing && d.CreatedAt < DateTimeOffset.UtcNow.AddHours(-1)))
+                           (d.Status == DocumentStatus.Processing && d.CreatedAt < cutoffTime))
                 .ToListAsync(ct);
 
             if (failedDocs.Count == 0)
@@ -204,6 +206,7 @@ public class DocumentQueueProcessor(
 
             // Update document with initial results
             document.SegmentCount = result.Trace.TotalChunks;
+            document.VectorStoreDocId = result.Trace.DocumentId; // Store the stableDocId for segment retrieval
             document.ProcessingProgress = 80;
             await db.SaveChangesAsync(ct);
 
@@ -215,7 +218,7 @@ public class DocumentQueueProcessor(
             try
             {
                 var segments = await vectorStore.GetDocumentSegmentsAsync(
-                    "ragdocuments", // Collection name used by DocSummarizer
+                    "ragdocs", // Collection name from config
                     result.Trace.DocumentId,
                     ct);
 

@@ -8,6 +8,88 @@
 <div class="flex w-full h-full" x-data="ragApp()">
     <!-- Left Sidebar: Documents -->
     <aside class="w-80 bg-base-100 border-r border-base-300 flex flex-col">
+        <!-- Collection Selector -->
+        <div class="p-3 border-b border-base-300 bg-base-200/30">
+            <div class="flex items-center gap-2">
+                <div class="dropdown dropdown-end flex-1">
+                    <label tabindex="0" class="btn btn-sm btn-ghost w-full justify-between">
+                        <span class="flex items-center gap-2 truncate">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-primary" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
+                            </svg>
+                            <span x-text="currentCollectionName" class="truncate"></span>
+                        </span>
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 opacity-50" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+                        </svg>
+                    </label>
+                    <ul tabindex="0" class="dropdown-content z-50 menu p-2 shadow-lg bg-base-100 rounded-box w-64 max-h-64 overflow-y-auto">
+                        <li>
+                            <a @@click="currentCollectionId = null; filterByCollection()" :class="!currentCollectionId ? 'active' : ''">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
+                                </svg>
+                                All Documents
+                            </a>
+                        </li>
+                        <template x-if="collections.length > 0">
+                            <li class="menu-title"><span>Collections</span></li>
+                        </template>
+                        <template x-for="col in collections" :key="col.id">
+                            <li>
+                                <a @@click="currentCollectionId = col.id; filterByCollection()"
+                                   :class="currentCollectionId === col.id ? 'active' : ''"
+                                   class="flex justify-between">
+                                    <span class="flex items-center gap-2 truncate">
+                                        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-accent" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
+                                        </svg>
+                                        <span x-text="col.name" class="truncate"></span>
+                                    </span>
+                                    <span class="badge badge-sm badge-ghost" x-text="col.documentCount || 0"></span>
+                                </a>
+                            </li>
+                        </template>
+                        <li class="mt-2 border-t border-base-300 pt-2">
+                            <a @@click.stop="showCreateCollection = true" class="text-primary">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
+                                </svg>
+                                New Collection
+                            </a>
+                        </li>
+                    </ul>
+                </div>
+                <!-- Delete collection button -->
+                <template x-if="currentCollectionId">
+                    <button class="btn btn-ghost btn-sm btn-square" @@click="deleteCollection(currentCollectionId)" title="Delete collection">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-error" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                        </svg>
+                    </button>
+                </template>
+            </div>
+            <!-- Create collection inline form -->
+            <template x-if="showCreateCollection">
+                <div class="mt-2 flex gap-2">
+                    <input type="text" x-model="newCollectionName" placeholder="Collection name..."
+                           class="input input-sm input-bordered flex-1"
+                           @@keyup.enter="createCollection()"
+                           @@keyup.escape="showCreateCollection = false; newCollectionName = ''" />
+                    <button class="btn btn-sm btn-primary" @@click="createCollection()" :disabled="!newCollectionName.trim()">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+                        </svg>
+                    </button>
+                    <button class="btn btn-sm btn-ghost" @@click="showCreateCollection = false; newCollectionName = ''">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                        </svg>
+                    </button>
+                </div>
+            </template>
+        </div>
+
         <div class="p-4 border-b border-base-300">
             <h2 class="font-semibold mb-3 flex items-center gap-2">
                 <span>📁</span> Add Content
@@ -194,10 +276,28 @@
         </div>
 
         <!-- Stats Footer -->
-        <div class="p-3 border-t border-base-300 text-sm text-base-content/60">
-            <span>📊 <span x-text="documentCount">@documents.Count</span> documents</span>
-            <span class="mx-2">•</span>
-            <span>🔢 <span x-text="segmentCount">@totalSegments</span> segments</span>
+        <div class="p-3 border-t border-base-300 text-sm text-base-content/60 flex items-center justify-between">
+            <div>
+                <span>📊 <span x-text="documentCount">@documents.Count</span> docs</span>
+                <span class="mx-1">•</span>
+                <span>🔢 <span x-text="segmentCount">@totalSegments</span> segs</span>
+            </div>
+            <!-- Dev: Clear All Button -->
+            <template x-if="!demoMode">
+                <button class="btn btn-ghost btn-xs text-error hover:bg-error/10"
+                        @@click="clearAll()"
+                        :disabled="clearingAll"
+                        title="Clear all data (DEV)">
+                    <template x-if="!clearingAll">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                        </svg>
+                    </template>
+                    <template x-if="clearingAll">
+                        <span class="loading loading-spinner loading-xs"></span>
+                    </template>
+                </button>
+            </template>
         </div>
     </aside>
 
@@ -920,6 +1020,12 @@ function ragApp() {
         selectedDocIds: new Set(),
         isDragging: false,
 
+        // Collection state
+        collections: [],
+        currentCollectionId: null,
+        newCollectionName: '',
+        showCreateCollection: false,
+
         // Demo mode state
         demoMode: false,
         demoBannerMessage: '',
@@ -976,9 +1082,13 @@ function ragApp() {
         // Debug state
         debugInfo: null,
 
+        // Clear all state
+        clearingAll: false,
+
         async init() {
             await this.checkDemoMode();
             await this.loadExtractionModes();
+            await this.loadCollections();
             this.loadGraphStats();
             if (!this.demoMode) {
                 // Wait for Alpine to render the input element after x-if evaluates
@@ -1006,6 +1116,130 @@ function ragApp() {
                 // Fallback to heuristic only
                 this.extractionModes = [{ value: 'heuristic', label: 'Heuristic (Fast)', available: true, isDefault: true }];
             }
+        },
+
+        // Collection management
+        async loadCollections() {
+            try {
+                const response = await fetch('/api/collections');
+                if (response.ok) {
+                    const data = await response.json();
+                    this.collections = data.collections || [];
+                }
+            } catch (e) {
+                console.warn('Could not load collections:', e);
+            }
+        },
+
+        async createCollection() {
+            if (!this.newCollectionName.trim()) return;
+            try {
+                const response = await fetch('/api/collections', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ name: this.newCollectionName.trim() })
+                });
+                if (response.ok) {
+                    const data = await response.json();
+                    await this.loadCollections();
+                    this.currentCollectionId = data.id;
+                    this.newCollectionName = '';
+                    this.showCreateCollection = false;
+                    this.filterByCollection();
+                }
+            } catch (e) {
+                console.error('Failed to create collection:', e);
+            }
+        },
+
+        async filterByCollection() {
+            // Reload document list filtered by collection
+            const url = this.currentCollectionId
+                ? `/documents?collectionId=${this.currentCollectionId}`
+                : '/documents';
+            try {
+                const response = await fetch(url);
+                if (response.ok) {
+                    const html = await response.text();
+                    document.getElementById('document-list').innerHTML = html;
+                }
+            } catch (e) {
+                console.error('Failed to filter documents:', e);
+            }
+        },
+
+        async addSelectedToCollection(collectionId) {
+            if (this.selectedDocIds.size === 0) return;
+            try {
+                const response = await fetch(`/api/collections/${collectionId}/documents`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ documentIds: Array.from(this.selectedDocIds) })
+                });
+                if (response.ok) {
+                    await this.loadCollections();
+                    this.filterByCollection();
+                }
+            } catch (e) {
+                console.error('Failed to add documents to collection:', e);
+            }
+        },
+
+        async deleteCollection(collectionId) {
+            if (!confirm('Delete this collection? Documents will be unassigned but not deleted.')) return;
+            try {
+                const response = await fetch(`/api/collections/${collectionId}`, { method: 'DELETE' });
+                if (response.ok) {
+                    if (this.currentCollectionId === collectionId) {
+                        this.currentCollectionId = null;
+                    }
+                    await this.loadCollections();
+                    this.filterByCollection();
+                }
+            } catch (e) {
+                console.error('Failed to delete collection:', e);
+            }
+        },
+
+        async clearAll() {
+            if (!confirm('⚠️ CLEAR ALL DATA?\n\nThis will permanently delete:\n• All documents\n• All collections\n• All vectors\n• All entities\n\nThis cannot be undone!')) return;
+            if (!confirm('Are you REALLY sure? Type "yes" in your mind and click OK.')) return;
+
+            this.clearingAll = true;
+            try {
+                const response = await fetch('/api/documents/clear-all', { method: 'DELETE' });
+                if (response.ok) {
+                    const data = await response.json();
+                    console.log('Cleared:', data);
+                    // Reset state
+                    this.documents = [];
+                    this.documentCount = 0;
+                    this.segmentCount = 0;
+                    this.currentCollectionId = null;
+                    this.collections = [];
+                    this.messages = [];
+                    this.graphStats = { nodes: 0, edges: 0, entityCoverage: '0%', orphans: 0 };
+                    // Refresh document list
+                    htmx.trigger(document.body, 'documentUploaded');
+                    await this.loadCollections();
+                    this.loadGraphStats();
+                    alert(`✓ Cleared ${data.documentsDeleted} documents and all related data`);
+                } else {
+                    const err = await response.json();
+                    alert('Failed to clear: ' + (err.error || 'Unknown error'));
+                }
+            } catch (e) {
+                console.error('Failed to clear all:', e);
+                alert('Failed to clear all data: ' + e.message);
+            } finally {
+                this.clearingAll = false;
+            }
+        },
+
+        get currentCollectionName() {
+            if (!this.currentCollectionId) return 'All Documents';
+            const col = this.collections.find(c => c.id === this.currentCollectionId);
+            return col?.name || 'All Documents';
         },
 
         async setExtractionMode(mode) {

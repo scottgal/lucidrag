@@ -20,7 +20,7 @@ public class DocumentProcessingService(
     ILogger<DocumentProcessingService> logger) : IDocumentProcessingService
 {
     private readonly RagDocumentsConfig _config = config.Value;
-    private const string CollectionName = "ragdocuments";
+    private const string CollectionName = "ragdocs";
 
     public async Task<Guid> QueueDocumentAsync(Stream fileStream, string filename, Guid? collectionId, CancellationToken ct = default)
     {
@@ -31,10 +31,12 @@ public class DocumentProcessingService(
             throw new ArgumentException($"File type '{extension}' is not allowed. Allowed types: {string.Join(", ", _config.AllowedExtensions)}");
         }
 
-        // Compute content hash
+        // Compute content hash - NOTE: This hash is for deduplication based on raw file bytes,
+        // NOT for matching with vector store (which uses canonicalized markdown content)
+        // The stableDocId format in vector store is: {filename}_{BertRagSummarizer.ComputeContentHash(markdown)}
         using var sha = SHA256.Create();
         var hashBytes = await sha.ComputeHashAsync(fileStream, ct);
-        var contentHash = Convert.ToHexString(hashBytes[..16]).ToLowerInvariant();
+        var contentHash = Convert.ToHexString(hashBytes).ToLowerInvariant()[..32]; // First 32 hex chars for deduplication
         fileStream.Position = 0;
 
         // Check for duplicate
@@ -183,12 +185,16 @@ public class DocumentProcessingService(
         var document = await db.Documents.FindAsync([documentId], ct);
         if (document is null) return [];
 
-        var collectionName = "ragdocs"; // Collection name from DocSummarizer config
-        var docId = document.ContentHash ?? documentId.ToString();
+        // Use the VectorStoreDocId if available (set after processing)
+        // Otherwise fall back to trying to construct it from Name/ContentHash
+        var stableDocId = document.VectorStoreDocId;
+        if (string.IsNullOrEmpty(stableDocId))
+        {
+            logger.LogWarning("Document {DocumentId} has no VectorStoreDocId - may not have been fully processed", documentId);
+            return [];
+        }
 
         // Use search with docId filter to get all segments
-        // Create a dummy embedding to search (we're filtering by docId)
-        // Note: This is a workaround - ideally vector store would have GetDocumentSegmentsAsync
         try
         {
             // Get segment count from document
@@ -196,12 +202,12 @@ public class DocumentProcessingService(
 
             // Search with a high topK and filter by docId
             var embedding = new float[384]; // ONNX embedding dimension
-            var segments = await vectorStore.SearchAsync(collectionName, embedding, Math.Max(document.SegmentCount, 100), docId, ct);
+            var segments = await vectorStore.SearchAsync(CollectionName, embedding, Math.Max(document.SegmentCount, 100), stableDocId, ct);
             return segments;
         }
         catch (Exception ex)
         {
-            logger.LogWarning(ex, "Failed to get segments for document {DocumentId}", documentId);
+            logger.LogWarning(ex, "Failed to get segments for document {DocumentId} (VectorStoreDocId: {StableDocId})", documentId, stableDocId);
             return [];
         }
     }
@@ -249,5 +255,71 @@ public class DocumentProcessingService(
         await queue.EnqueueAsync(new DocumentProcessingJob(documentId, document.FilePath!, document.CollectionId), ct);
 
         logger.LogInformation("Document {DocumentId} queued for {Mode}", documentId, fullReprocess ? "full reprocessing" : "signal recovery");
+    }
+
+    public async Task<int> ClearAllAsync(bool clearVectors = true, CancellationToken ct = default)
+    {
+        // Get all documents first
+        var documents = await db.Documents.ToListAsync(ct);
+        var count = documents.Count;
+
+        // Delete files from disk
+        foreach (var doc in documents)
+        {
+            try
+            {
+                if (!string.IsNullOrEmpty(doc.FilePath) && File.Exists(doc.FilePath))
+                {
+                    var dir = Path.GetDirectoryName(doc.FilePath);
+                    if (!string.IsNullOrEmpty(dir) && Directory.Exists(dir))
+                    {
+                        Directory.Delete(dir, recursive: true);
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                logger.LogWarning(ex, "Failed to delete files for document {DocumentId}", doc.Id);
+            }
+        }
+
+        // Clear vectors from vector store by deleting and recreating collection
+        if (clearVectors)
+        {
+            try
+            {
+                await vectorStore.DeleteCollectionAsync(CollectionName, ct);
+                await vectorStore.InitializeAsync(CollectionName, 384, ct); // Reinitialize empty collection
+                logger.LogInformation("Cleared vectors from collection {CollectionName}", CollectionName);
+            }
+            catch (Exception ex)
+            {
+                logger.LogWarning(ex, "Failed to clear vectors from collection {CollectionName}", CollectionName);
+            }
+        }
+
+        // Clear database (cascade deletes entity links, etc.)
+        db.Documents.RemoveRange(documents);
+
+        // Also clear extracted entities not linked to any documents
+        var orphanedEntities = await db.Entities.ToListAsync(ct);
+        db.Entities.RemoveRange(orphanedEntities);
+
+        // Clear collections
+        var collections = await db.Collections.ToListAsync(ct);
+        db.Collections.RemoveRange(collections);
+
+        // Clear retrieval entities
+        var retrievalEntities = await db.RetrievalEntities.ToListAsync(ct);
+        db.RetrievalEntities.RemoveRange(retrievalEntities);
+
+        // Clear evidence artifacts
+        var evidence = await db.EvidenceArtifacts.ToListAsync(ct);
+        db.EvidenceArtifacts.RemoveRange(evidence);
+
+        await db.SaveChangesAsync(ct);
+
+        logger.LogInformation("Cleared {Count} documents and all related data", count);
+        return count;
     }
 }

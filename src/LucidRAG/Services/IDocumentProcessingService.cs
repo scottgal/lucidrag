@@ -32,4 +32,9 @@ public interface IDocumentProcessingService
     /// Retry processing for a specific document (reprocess missing signals).
     /// </summary>
     Task RetryProcessingAsync(Guid documentId, bool fullReprocess = false, CancellationToken ct = default);
+
+    /// <summary>
+    /// Clear all documents and optionally vectors (dev/testing only).
+    /// </summary>
+    Task<int> ClearAllAsync(bool clearVectors = true, CancellationToken ct = default);
 }
