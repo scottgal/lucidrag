@@ -1,7 +1,8 @@
+extern alias EphemeralComplete;
 using Microsoft.Extensions.Logging;
-using Mostlylucid.Ephemeral;
-using Mostlylucid.Ephemeral.Atoms.Batching;
 using Mostlylucid.DocSummarizer.Images.Models.Dynamic;
+using EphemeralComplete::Mostlylucid.Ephemeral;
+using EphemeralComplete::Mostlylucid.Ephemeral.Atoms.Batching;
 
 namespace Mostlylucid.DocSummarizer.Images.Services.Coordinators;
 

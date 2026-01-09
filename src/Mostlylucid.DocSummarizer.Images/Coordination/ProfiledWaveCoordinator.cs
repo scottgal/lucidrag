@@ -49,9 +49,208 @@ public sealed class ProfiledWaveCoordinator : IDisposable
     }
 
     /// <summary>
-    /// Execute analysis using a specific profile.
+    /// Execute analysis using a specific profile with parallel wave execution.
+    /// Waves without dependencies run first in parallel, then dependent waves.
     /// </summary>
     public async Task<AnalysisResult> ExecuteAsync(
+        string imagePath,
+        CoordinatorProfile profile,
+        AnalysisContext context,
+        CancellationToken ct = default)
+    {
+        var signals = new ConcurrentBag<Signal>();
+        var executionLog = new ConcurrentBag<WaveExecutionLog>();
+        var startTime = DateTimeOffset.UtcNow;
+
+        _logger?.LogInformation(
+            "Starting {Profile} analysis for {Image}",
+            profile.Name, Path.GetFileName(imagePath));
+
+        // Get waves in execution order, filtered by profile
+        var allManifests = _manifestLoader.GetOrderedManifests()
+            .Where(m => IsWaveEnabledForProfile(m, profile))
+            .ToList();
+
+        var availableSignals = new ConcurrentDictionary<string, bool>();
+        var completedWaves = new ConcurrentDictionary<string, bool>();
+
+        // Initialize lane semaphores for this profile
+        InitializeLanes(profile);
+
+        // Separate waves into groups: no dependencies (can run immediately) vs has dependencies
+        var wavesWithoutDeps = allManifests
+            .Where(m => !m.Listens.Required.Any() && !m.Triggers.Requires.Any())
+            .ToList();
+        var wavesWithDeps = allManifests
+            .Except(wavesWithoutDeps)
+            .ToList();
+
+        _logger?.LogDebug("Running {NoDeps} waves in parallel (no deps), {WithDeps} waves sequentially",
+            wavesWithoutDeps.Count, wavesWithDeps.Count);
+
+        // Run waves without dependencies in parallel first
+        var parallelOptions = new ParallelOptions
+        {
+            MaxDegreeOfParallelism = profile.Lanes.Values.Sum(l => l.MaxConcurrency),
+            CancellationToken = ct
+        };
+
+        await Parallel.ForEachAsync(wavesWithoutDeps, parallelOptions, async (manifest, token) =>
+        {
+            await ExecuteWaveAsync(manifest, imagePath, context, profile, signals, executionLog, availableSignals, token);
+            completedWaves[manifest.Name] = true;
+        });
+
+        // Run waves with dependencies - batch by satisfied dependencies
+        var remainingWaves = new List<WaveManifest>(wavesWithDeps);
+        var maxIterations = 10;
+
+        for (var iteration = 0; iteration < maxIterations && remainingWaves.Count > 0; iteration++)
+        {
+            if (ct.IsCancellationRequested) break;
+
+            // Find waves whose dependencies are now satisfied
+            var currentSignals = availableSignals.Keys.ToHashSet();
+            var runnableWaves = remainingWaves
+                .Where(m => _manifestLoader.CanRun(m, currentSignals))
+                .ToList();
+
+            if (runnableWaves.Count == 0)
+            {
+                _logger?.LogDebug("No more waves can run, {Remaining} waves skipped", remainingWaves.Count);
+                break;
+            }
+
+            // Remove runnable from remaining
+            foreach (var wave in runnableWaves)
+                remainingWaves.Remove(wave);
+
+            // Run this batch in parallel
+            await Parallel.ForEachAsync(runnableWaves, parallelOptions, async (manifest, token) =>
+            {
+                await ExecuteWaveAsync(manifest, imagePath, context, profile, signals, executionLog, availableSignals, token);
+                completedWaves[manifest.Name] = true;
+            });
+        }
+
+        var totalDuration = DateTimeOffset.UtcNow - startTime;
+
+        _logger?.LogInformation(
+            "{Profile} analysis complete: {WaveCount} waves, {SignalCount} signals, {Duration}ms",
+            profile.Name, executionLog.Count, signals.Count, totalDuration.TotalMilliseconds);
+
+        return new AnalysisResult(
+            Profile: profile.Name,
+            Signals: signals.ToList(),
+            ExecutionLog: executionLog.ToList(),
+            TotalDuration: totalDuration);
+    }
+
+    private async Task ExecuteWaveAsync(
+        WaveManifest manifest,
+        string imagePath,
+        AnalysisContext context,
+        CoordinatorProfile profile,
+        ConcurrentBag<Signal> signals,
+        ConcurrentBag<WaveExecutionLog> executionLog,
+        ConcurrentDictionary<string, bool> availableSignals,
+        CancellationToken ct)
+    {
+        if (!_waves.TryGetValue(manifest.Name, out var wave))
+        {
+            _logger?.LogTrace("No implementation for wave: {Wave}", manifest.Name);
+            return;
+        }
+
+        // Get lane semaphore
+        var lane = GetLaneForWave(manifest, profile);
+        var semaphore = GetLaneSemaphore(lane);
+
+        try
+        {
+            // Acquire lane slot
+            var acquired = await semaphore.WaitAsync(profile.DefaultTimeout, ct);
+            if (!acquired)
+            {
+                _logger?.LogWarning("Timeout acquiring lane {Lane} for {Wave}", lane.Name, manifest.Name);
+                EmitSignal($"wave.timeout.{manifest.Name}", true, manifest.Name, signals, profile.Scope);
+                return;
+            }
+
+            try
+            {
+                // Emit start signal
+                foreach (var startSignal in manifest.Emits.OnStart)
+                {
+                    EmitSignal(startSignal, true, manifest.Name, signals, profile.Scope);
+                }
+
+                var waveStart = DateTimeOffset.UtcNow;
+
+                // Execute wave with timeout
+                using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+                cts.CancelAfter(profile.DefaultTimeout);
+
+                var waveSignals = await wave.AnalyzeAsync(imagePath, context, cts.Token);
+
+                var duration = DateTimeOffset.UtcNow - waveStart;
+                var signalCount = 0;
+
+                // Process emitted signals
+                foreach (var signal in waveSignals)
+                {
+                    signals.Add(signal);
+                    availableSignals[signal.Key] = true;
+                    signalCount++;
+
+                    // Notify subscribers
+                    OnSignalEmitted?.Invoke(new SignalEvent(
+                        Signal: signal.Key,
+                        Value: signal.Value,
+                        Source: signal.Source,
+                        Confidence: signal.Confidence,
+                        Timestamp: DateTimeOffset.UtcNow
+                    ));
+                }
+
+                executionLog.Add(new WaveExecutionLog(
+                    manifest.Name,
+                    duration,
+                    signalCount,
+                    Success: true,
+                    Error: null));
+
+                _logger?.LogDebug("{Wave} completed in {Duration}ms ({Signals} signals)",
+                    manifest.Name, duration.TotalMilliseconds, signalCount);
+            }
+            catch (OperationCanceledException)
+            {
+                _logger?.LogWarning("{Wave} timed out", manifest.Name);
+                EmitSignal($"wave.timeout.{manifest.Name}", true, manifest.Name, signals, profile.Scope);
+                executionLog.Add(new WaveExecutionLog(manifest.Name, TimeSpan.Zero, 0, Success: false, Error: "Timeout"));
+            }
+            catch (Exception ex)
+            {
+                _logger?.LogError(ex, "{Wave} failed", manifest.Name);
+                foreach (var failSignal in manifest.Emits.OnFailure)
+                {
+                    EmitSignal(failSignal, true, manifest.Name, signals, profile.Scope);
+                }
+                executionLog.Add(new WaveExecutionLog(manifest.Name, TimeSpan.Zero, 0, Success: false, Error: ex.Message));
+            }
+            finally
+            {
+                semaphore.Release();
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger?.LogError(ex, "Failed to execute {Wave}", manifest.Name);
+        }
+    }
+
+    [Obsolete("Use ExecuteAsync which supports parallel execution")]
+    private async Task<AnalysisResult> ExecuteSequentialAsync(
         string imagePath,
         CoordinatorProfile profile,
         AnalysisContext context,
@@ -61,18 +260,12 @@ public sealed class ProfiledWaveCoordinator : IDisposable
         var executionLog = new List<WaveExecutionLog>();
         var startTime = DateTimeOffset.UtcNow;
 
-        _logger?.LogInformation(
-            "Starting {Profile} analysis for {Image}",
-            profile.Name, Path.GetFileName(imagePath));
-
-        // Get waves in execution order, filtered by profile
         var manifests = _manifestLoader.GetOrderedManifests()
             .Where(m => IsWaveEnabledForProfile(m, profile))
             .ToList();
 
         var availableSignals = new HashSet<string>();
 
-        // Initialize lane semaphores for this profile
         InitializeLanes(profile);
 
         foreach (var manifest in manifests)
@@ -309,6 +502,33 @@ public sealed class ProfiledWaveCoordinator : IDisposable
         object value,
         string source,
         List<Signal> signals,
+        SignalScope scope)
+    {
+        var signal = new Signal
+        {
+            Key = key,
+            Value = value,
+            Source = source,
+            Confidence = 1.0,
+            Tags = new List<string> { "coordinator", scope.Coordinator }
+        };
+
+        signals.Add(signal);
+
+        OnSignalEmitted?.Invoke(new SignalEvent(
+            Signal: key,
+            Value: value,
+            Source: source,
+            Confidence: 1.0,
+            Timestamp: DateTimeOffset.UtcNow
+        ));
+    }
+
+    private void EmitSignal(
+        string key,
+        object value,
+        string source,
+        ConcurrentBag<Signal> signals,
         SignalScope scope)
     {
         var signal = new Signal

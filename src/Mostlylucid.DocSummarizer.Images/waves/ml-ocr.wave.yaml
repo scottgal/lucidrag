@@ -13,8 +13,8 @@ triggers:
     - signal: identity.width
       condition: "> 0"
   skip_when:
-    - signal: wave.skipped.MlOcrWave
-    - signal: route.skip.MlOcrWave
+    - wave.skipped.MlOcrWave
+    - route.skip.MlOcrWave
 
 emits:
   on_start:

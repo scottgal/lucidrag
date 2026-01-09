@@ -13,9 +13,9 @@ triggers:
     - signal: identity.width
       condition: "> 0"
   skip_when:
-    - signal: wave.skipped.ClipEmbeddingWave
-    - signal: route.skip.ClipEmbeddingWave
-    - signal: vision.clip.disabled
+    - wave.skipped.ClipEmbeddingWave
+    - route.skip.ClipEmbeddingWave
+    - vision.clip.disabled
 
 emits:
   on_complete:

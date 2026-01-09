@@ -13,8 +13,13 @@ triggers:
     - signal: identity.width
       condition: "> 0"
   skip_when:
-    - signal: wave.skipped.VisionLlmWave
-    - signal: route.skip.VisionLlmWave
+    - wave.skipped.VisionLlmWave
+    - route.skip.VisionLlmWave
+    # Skip if Florence-2 or OCR already produced confident results
+    - florence2.early_exit
+    - ocr.early_exit
+    # Skip if florence2 explicitly said not to escalate
+    - florence2.no_escalate
 
 emits:
   on_start:
@@ -103,3 +108,42 @@ tags:
   - caption
   - ocr
   - escalation
+
+# ============================================
+# DEFAULT CONFIGURATION - NO MAGIC NUMBERS
+# Override via appsettings.json: DocSummarizer:Images:Waves:VisionLlmWave:*
+# ============================================
+defaults:
+  weights:
+    base: 1.0
+    high_confidence: 2.0
+    low_confidence: 0.5
+    verified: 3.0
+
+  confidence:
+    neutral: 0.5
+    high: 0.9
+    medium: 0.75
+    low: 0.6
+    high_threshold: 0.85
+    escalation_threshold: 0.5
+
+  timing:
+    timeout_ms: 60000  # 60 seconds - LLM calls can be slow
+    cache_ttl_sec: 3600
+
+  features:
+    detailed_logging: false
+    enable_cache: true
+    can_early_exit: false  # VisionLLM is already the escalation target
+    can_escalate: false
+
+  # Wave-specific parameters
+  parameters:
+    skip_if_florence2_confident: true     # Skip if Florence-2 was confident
+    skip_if_ocr_confident: true           # Skip if OCR extracted good text
+    min_ocr_words_to_skip: 10             # Skip if OCR has this many words
+    min_caption_length_to_skip: 50        # Skip if caption is this long
+    require_escalation_signal: false      # Only run if explicitly escalated
+    max_tokens: 500                        # Max tokens for LLM response
+    filmstrip_frames: 4                    # Frames to extract for animated

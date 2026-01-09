@@ -113,11 +113,36 @@ public class AutoRoutingWave : IAnalysisWave
             }
         }
 
+        // Detect scanned documents: grayscale/tinted + high text coverage
+        var isScannedDocument = DetectScannedDocument(
+            isGrayscale, textCoverage, textRegionCount, context);
+
+        if (isScannedDocument)
+        {
+            signals.Add(new Signal
+            {
+                Key = "route.is_scanned_document",
+                Value = true,
+                Confidence = 0.9,
+                Source = Name,
+                Tags = new List<string> { "routing", "document", "ocr" },
+                Metadata = new Dictionary<string, object>
+                {
+                    ["grayscale"] = isGrayscale,
+                    ["text_coverage"] = textCoverage,
+                    ["ocr_priority"] = "tesseract" // For scanned docs, Tesseract first
+                }
+            });
+
+            _logger?.LogDebug("Detected scanned document: grayscale={Grayscale}, text={Coverage:P1}",
+                isGrayscale, textCoverage);
+        }
+
         // Route selection logic based on fast signals + text detection
         var (route, reasons) = SelectRoute(
             isAnimated, frameCount, pixelCount, format,
             textLikeliness, edgeDensity, isGrayscale, contentType,
-            textCoverage, textRegionCount, hasSubtitles);
+            textCoverage, textRegionCount, hasSubtitles, isScannedDocument);
 
         _logger?.LogInformation(
             "Auto-routing: {Route} ({Reasons}) for {Path}",
@@ -133,6 +158,50 @@ public class AutoRoutingWave : IAnalysisWave
     }
 
     /// <summary>
+    /// Detect scanned documents by their characteristics:
+    /// - Grayscale or tinted (sepia, aged)
+    /// - High text coverage (lots of text blocks)
+    /// - Low color saturation
+    /// For scanned documents, Tesseract OCR is preferred over vision models.
+    /// </summary>
+    private bool DetectScannedDocument(
+        bool isGrayscale, double textCoverage, int textRegionCount, AnalysisContext context)
+    {
+        // Get color signals from context
+        var meanSaturation = context.GetValue<double>("color.mean_saturation");
+        var tintType = context.GetValue<string>("color.tint_type") ?? "";
+        var colorTemperature = context.GetValue<string>("color.temperature") ?? "";
+
+        // Scanned document indicators:
+        // 1. Grayscale OR very low saturation OR sepia/aged tint
+        var isLimitedColor = isGrayscale ||
+                             meanSaturation < 0.1 ||
+                             tintType is "sepia" or "aged" or "blue_tint";
+
+        // 2. High text coverage (>20%) - documents have lots of text
+        var hasHighTextContent = textCoverage > 0.20 || textRegionCount > 8;
+
+        // 3. Multiple text regions arranged in blocks (typical of documents)
+        var hasDocumentLayout = textRegionCount > 5;
+
+        // Score-based detection
+        var score = 0;
+        if (isGrayscale) score += 3;
+        else if (meanSaturation < 0.1) score += 2;
+        else if (!string.IsNullOrEmpty(tintType)) score += 1;
+
+        if (textCoverage > 0.40) score += 3;
+        else if (textCoverage > 0.20) score += 2;
+        else if (textCoverage > 0.10) score += 1;
+
+        if (textRegionCount > 10) score += 2;
+        else if (textRegionCount > 5) score += 1;
+
+        // Threshold: need limited color + significant text
+        return isLimitedColor && hasHighTextContent && score >= 4;
+    }
+
+    /// <summary>
     /// Select optimal route based on fast signals + OpenCV text detection.
     /// Uses text coverage to determine OCR complexity needs:
     /// - Low coverage (&lt;10%): FAST - Florence-2 sufficient for captions
@@ -142,12 +211,20 @@ public class AutoRoutingWave : IAnalysisWave
     private (Route route, List<string> reasons) SelectRoute(
         bool isAnimated, int frameCount, int pixelCount, string format,
         double textLikeliness, double edgeDensity, bool isGrayscale, string contentType,
-        double textCoverage, int textRegionCount, bool hasSubtitles)
+        double textCoverage, int textRegionCount, bool hasSubtitles, bool isScannedDocument = false)
     {
         var reasons = new List<string>();
 
         // Quality indicators (any of these → quality path)
         var qualityIndicators = 0;
+
+        // SCANNED DOCUMENT = grayscale + lots of text → Quality path with Tesseract priority
+        // For scanned documents, Tesseract OCR is more reliable than vision models
+        if (isScannedDocument)
+        {
+            qualityIndicators += 4; // Very strong indicator - force Quality route
+            reasons.Add("scanned_document:tesseract_priority");
+        }
 
         // HIGH TEXT COVERAGE = Document/Screenshot → needs quality OCR pipeline
         if (textCoverage > 0.40)
@@ -326,6 +403,28 @@ public class AutoRoutingWave : IAnalysisWave
                 ["ocr_recommended"] = textTier != "caption" // True if Tesseract recommended
             }
         });
+
+        // For documents (scanned or otherwise), configure OCR to keep all text
+        // and return the best version (Tesseract for scanned, Florence-2 for others)
+        var isScannedDocument = reason.Contains("scanned_document");
+        if (textTier == "document" || textTier == "substantial" || isScannedDocument)
+        {
+            signals.Add(new Signal
+            {
+                Key = "route.ocr_config",
+                Value = new Dictionary<string, object>
+                {
+                    ["keep_all_text"] = true,                    // Don't truncate OCR output
+                    ["return_best_version"] = true,              // Return highest quality OCR
+                    ["tesseract_priority"] = isScannedDocument,  // Prefer Tesseract for scanned
+                    ["spellcheck_quality"] = true,               // Use spellcheck to pick best
+                    ["min_word_count_threshold"] = 5             // Minimum words to consider valid
+                },
+                Confidence = 1.0,
+                Source = Name,
+                Tags = new List<string> { "routing", "ocr", "config" }
+            });
+        }
 
         // Check if this is an animated GIF - for animated GIFs we run multi-frame OCR
         // Florence-2 now processes all frames in parallel, but Tesseract voting adds accuracy

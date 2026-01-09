@@ -13,7 +13,7 @@ triggers:
     - signal: identity.width
       condition: "> 0"
   skip_when:
-    - signal: wave.skipped.ColorWave
+    - wave.skipped.ColorWave
 
 emits:
   on_complete:
@@ -98,3 +98,40 @@ tags:
   - visual
   - palette
   - foundation
+
+# ============================================
+# DEFAULT CONFIGURATION - NO MAGIC NUMBERS
+# Override via appsettings.json: DocSummarizer:Images:Waves:ColorWave:*
+# ============================================
+defaults:
+  weights:
+    base: 1.0
+    high_confidence: 1.5
+    low_confidence: 0.5
+    verified: 2.0
+
+  confidence:
+    neutral: 0.5
+    high: 0.95
+    medium: 0.8
+    low: 0.6
+    high_threshold: 0.9
+    escalation_threshold: 0.5
+
+  timing:
+    timeout_ms: 5000  # 5 seconds - color analysis is fast
+    cache_ttl_sec: 3600
+
+  features:
+    detailed_logging: false
+    enable_cache: true
+    can_early_exit: false
+    can_escalate: false
+
+  # Wave-specific parameters
+  parameters:
+    dominant_color_count: 5          # Number of dominant colors to extract
+    grayscale_saturation_threshold: 0.02  # Below this = grayscale
+    min_color_percentage: 1.0        # Minimum percentage for a color to be reported
+    color_grid_rows: 3               # Grid rows for spatial color analysis
+    color_grid_cols: 3               # Grid columns for spatial color analysis

@@ -15,8 +15,8 @@ triggers:
     - signal: identity.frame_count
       condition: "> 1"
   skip_when:
-    - signal: wave.skipped.MotionWave
-    - signal: motion.disabled
+    - wave.skipped.MotionWave
+    - motion.disabled
 
 emits:
   on_start:

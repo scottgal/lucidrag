@@ -290,7 +290,8 @@ public class Florence2CaptionService
         try
         {
             // Florence-2 CANNOT understand filmstrips - process each unique text frame individually
-            // Extract ALL unique text frames and process in parallel for complete OCR coverage
+            // Use motion detection to find scene changes and select LAST frame of each scene
+            // (where subtitles are most complete)
             using var image = await Image.LoadAsync<Rgba32>(gifPath, ct);
 
             if (image.Frames.Count < 2)
@@ -299,23 +300,44 @@ public class Florence2CaptionService
                 return await GetStaticCaptionAsync(gifPath, detailed, enhanceWithColors, sw, ct);
             }
 
-            // Extract unique frames (sample up to 10 frames for efficiency)
-            var maxFrames = Math.Min(10, image.Frames.Count);
-            var step = Math.Max(1, image.Frames.Count / maxFrames);
+            // Extract scene-end frames using motion detection (max 4 frames)
+            var sceneFrameIndices = ExtractSceneEndFrameIndices(image, maxFrames: 4);
+
+            _logger?.LogDebug(
+                "Motion detection found {SceneCount} scenes from {TotalFrames} frames: [{Indices}]",
+                sceneFrameIndices.Count, image.Frames.Count, string.Join(", ", sceneFrameIndices));
+
             var framePaths = new List<string>();
 
             try
             {
-                // Extract and save unique frames
-                for (int i = 0; i < image.Frames.Count && framePaths.Count < maxFrames; i += step)
+                // Extract and save scene-end frames (already deduplicated by motion detection)
+                foreach (var frameIdx in sceneFrameIndices)
                 {
-                    using var frame = image.Frames.CloneFrame(i);
-                    var tempPath = Path.Combine(Path.GetTempPath(), $"florence2_frame_{i}_{Guid.NewGuid():N}.png");
+                    using var frame = image.Frames.CloneFrame(frameIdx);
+                    var tempPath = Path.Combine(Path.GetTempPath(), $"florence2_scene_{frameIdx}_{Guid.NewGuid():N}.png");
                     await frame.SaveAsPngAsync(tempPath, ct);
                     framePaths.Add(tempPath);
                 }
 
-                _logger?.LogDebug("Extracted {Count} frames from animated GIF for parallel Florence-2 OCR", framePaths.Count);
+                if (framePaths.Count == 0)
+                {
+                    // Fallback to first and last frame
+                    using var firstFrame = image.Frames.CloneFrame(0);
+                    var firstPath = Path.Combine(Path.GetTempPath(), $"florence2_first_{Guid.NewGuid():N}.png");
+                    await firstFrame.SaveAsPngAsync(firstPath, ct);
+                    framePaths.Add(firstPath);
+
+                    if (image.Frames.Count > 1)
+                    {
+                        using var lastFrame = image.Frames.CloneFrame(image.Frames.Count - 1);
+                        var lastPath = Path.Combine(Path.GetTempPath(), $"florence2_last_{Guid.NewGuid():N}.png");
+                        await lastFrame.SaveAsPngAsync(lastPath, ct);
+                        framePaths.Add(lastPath);
+                    }
+                }
+
+                _logger?.LogDebug("Extracted {Count} scene-end frames for parallel Florence-2 OCR", framePaths.Count);
 
                 // Process ALL frames in parallel with Florence-2 OCR
                 var ocrTasks = framePaths.Select(path => ProcessFrameOcrAsync(path, ct));
@@ -326,16 +348,16 @@ public class Florence2CaptionService
                 var combinedOcrText = string.Join("\n", uniqueTexts);
 
                 _logger?.LogInformation(
-                    "Florence-2 multi-frame OCR: {FrameCount} frames → {UniqueCount} unique text results",
+                    "Florence-2 scene-based OCR: {FrameCount} scenes → {UniqueCount} unique text results",
                     framePaths.Count, uniqueTexts.Count);
 
-                // Get caption from FIRST frame only (caption is same across frames)
+                // Get caption from LAST frame (most complete scene, likely has most text/context)
                 string? caption = null;
                 bool wasEnhanced = false;
 
                 try
                 {
-                    using var imgStream = File.OpenRead(framePaths[0]);
+                    using var imgStream = File.OpenRead(framePaths[^1]); // Last scene frame
                     var task = detailed ? TaskTypes.DETAILED_CAPTION : TaskTypes.CAPTION;
                     var captionResult = _model!.Run(task, new[] { imgStream }, textInput: null, cancellationToken: ct);
                     caption = ExtractText(captionResult);
@@ -350,7 +372,7 @@ public class Florence2CaptionService
                 }
                 catch (Exception ex)
                 {
-                    _logger?.LogWarning(ex, "Caption generation failed for first frame");
+                    _logger?.LogWarning(ex, "Caption generation failed for scene frame");
                 }
 
                 return new Florence2CaptionResult(
@@ -378,6 +400,169 @@ public class Florence2CaptionService
             _logger?.LogWarning(ex, "GIF multi-frame processing failed, falling back to first frame");
             return await GetStaticCaptionAsync(gifPath, detailed, enhanceWithColors, sw, ct);
         }
+    }
+
+    /// <summary>
+    /// Extract frame indices at the END of each scene using motion detection.
+    /// Scene changes are detected when motion between frames exceeds a threshold.
+    /// We want the LAST frame before the scene change (where subtitles are complete).
+    /// </summary>
+    private List<int> ExtractSceneEndFrameIndices(Image<Rgba32> image, int maxFrames = 4)
+    {
+        var frameCount = image.Frames.Count;
+
+        if (frameCount <= maxFrames)
+        {
+            // Few frames - just return all frame indices
+            return Enumerable.Range(0, frameCount).ToList();
+        }
+
+        // Calculate motion scores between consecutive frames
+        var motionScores = new List<(int frameIdx, double score)>();
+        Image<Rgba32>? prevFrame = null;
+
+        try
+        {
+            for (int i = 0; i < frameCount; i++)
+            {
+                using var currentFrame = image.Frames.CloneFrame(i);
+
+                if (prevFrame != null)
+                {
+                    var motionScore = CalculateFrameDifference(prevFrame, currentFrame);
+                    motionScores.Add((i - 1, motionScore)); // Score for frame BEFORE the change
+                }
+
+                prevFrame?.Dispose();
+                prevFrame = currentFrame.Clone();
+            }
+        }
+        finally
+        {
+            prevFrame?.Dispose();
+        }
+
+        if (motionScores.Count == 0)
+        {
+            return new List<int> { 0, Math.Max(0, frameCount - 1) };
+        }
+
+        // Find scene boundaries (frames with high motion = scene change)
+        var avgMotion = motionScores.Average(m => m.score);
+        var stdDev = Math.Sqrt(motionScores.Average(m => Math.Pow(m.score - avgMotion, 2)));
+        var threshold = avgMotion + stdDev; // Scene change = above average + 1 std dev
+
+        // Find frames at the END of each scene (just before high motion)
+        var sceneEndFrames = new List<int>();
+
+        // Always include first frame as start of first scene
+        sceneEndFrames.Add(0);
+
+        for (int i = 0; i < motionScores.Count; i++)
+        {
+            var (frameIdx, score) = motionScores[i];
+
+            // High motion detected = this is end of a scene
+            if (score > threshold)
+            {
+                // Add the frame BEFORE the scene change (end of current scene)
+                if (!sceneEndFrames.Contains(frameIdx))
+                {
+                    sceneEndFrames.Add(frameIdx);
+                }
+            }
+        }
+
+        // Always include the last frame
+        var lastFrame = frameCount - 1;
+        if (!sceneEndFrames.Contains(lastFrame))
+        {
+            sceneEndFrames.Add(lastFrame);
+        }
+
+        // If we have too many scenes, select the most significant ones
+        if (sceneEndFrames.Count > maxFrames)
+        {
+            // Keep first, last, and highest motion changes
+            var sorted = sceneEndFrames
+                .Select(idx => (idx, score: motionScores.FirstOrDefault(m => m.frameIdx == idx).score))
+                .OrderByDescending(x => x.score)
+                .Take(maxFrames - 2) // Reserve spots for first and last
+                .Select(x => x.idx)
+                .ToList();
+
+            sorted.Add(0);
+            sorted.Add(lastFrame);
+            sceneEndFrames = sorted.Distinct().OrderBy(x => x).ToList();
+        }
+
+        // Ensure unique frames that are visually different
+        return DeduplicateSceneFrames(image, sceneEndFrames);
+    }
+
+    /// <summary>
+    /// Remove visually similar frames from the scene list.
+    /// </summary>
+    private List<int> DeduplicateSceneFrames(Image<Rgba32> image, List<int> frameIndices)
+    {
+        if (frameIndices.Count <= 2)
+            return frameIndices;
+
+        var uniqueIndices = new List<int> { frameIndices[0] };
+        Image<Rgba32>? lastUniqueFrame = image.Frames.CloneFrame(frameIndices[0]);
+
+        try
+        {
+            for (int i = 1; i < frameIndices.Count; i++)
+            {
+                using var currentFrame = image.Frames.CloneFrame(frameIndices[i]);
+
+                // Check if visually different from last unique frame
+                if (!AreFramesSimilar(lastUniqueFrame!, currentFrame, 0.92))
+                {
+                    uniqueIndices.Add(frameIndices[i]);
+                    lastUniqueFrame?.Dispose();
+                    lastUniqueFrame = currentFrame.Clone();
+                }
+            }
+        }
+        finally
+        {
+            lastUniqueFrame?.Dispose();
+        }
+
+        return uniqueIndices;
+    }
+
+    /// <summary>
+    /// Calculate motion/difference between two frames (0 = identical, 1 = completely different).
+    /// Uses fast pixel sampling for performance.
+    /// </summary>
+    private static double CalculateFrameDifference(Image<Rgba32> frame1, Image<Rgba32> frame2)
+    {
+        if (frame1.Width != frame2.Width || frame1.Height != frame2.Height)
+            return 1.0; // Different sizes = completely different
+
+        var sampleStep = Math.Max(4, Math.Min(frame1.Width, frame1.Height) / 32);
+        long totalDiff = 0;
+        int sampledPixels = 0;
+
+        for (int y = 0; y < frame1.Height; y += sampleStep)
+        {
+            for (int x = 0; x < frame1.Width; x += sampleStep)
+            {
+                var p1 = frame1[x, y];
+                var p2 = frame2[x, y];
+
+                totalDiff += Math.Abs(p1.R - p2.R) + Math.Abs(p1.G - p2.G) + Math.Abs(p1.B - p2.B);
+                sampledPixels++;
+            }
+        }
+
+        if (sampledPixels == 0) return 0;
+
+        // Max diff per pixel is 255*3 = 765
+        return (double)totalDiff / (sampledPixels * 765);
     }
 
     /// <summary>

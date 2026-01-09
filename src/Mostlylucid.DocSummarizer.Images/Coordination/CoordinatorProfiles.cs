@@ -165,6 +165,175 @@ public static class CoordinatorProfiles
             Atom = "full"
         }
     };
+
+    /// <summary>
+    /// Stats only - ultra-fast, identity and color analysis only.
+    /// Use for: Quick metadata extraction, thumbnailing, sorting
+    /// </summary>
+    public static CoordinatorProfile Stats => new()
+    {
+        Name = "stats",
+        Description = "Ultra-fast stats extraction (identity + color only)",
+        Lanes = new Dictionary<string, LaneConfig>
+        {
+            ["metadata"] = new() { Name = "metadata", MaxConcurrency = 8 }
+        },
+        DefaultTimeout = TimeSpan.FromSeconds(2),
+        EnabledWaves = new HashSet<string>
+        {
+            "IdentityWave",
+            "ColorWave"
+        },
+        Scope = new SignalScope
+        {
+            Sink = "docsummarizer.images",
+            Coordinator = "stats",
+            Atom = "quick"
+        },
+        SkipCaching = true,
+        LowLatencyMode = true
+    };
+
+    /// <summary>
+    /// Motion only - fast GIF/animation analysis.
+    /// Use for: Quick motion detection, animation characterization
+    /// </summary>
+    public static CoordinatorProfile Motion => new()
+    {
+        Name = "motion",
+        Description = "Fast motion/animation analysis",
+        Lanes = new Dictionary<string, LaneConfig>
+        {
+            ["metadata"] = new() { Name = "metadata", MaxConcurrency = 4 },
+            ["motion"] = new() { Name = "motion", MaxConcurrency = 2 }
+        },
+        DefaultTimeout = TimeSpan.FromSeconds(5),
+        EnabledWaves = new HashSet<string>
+        {
+            "IdentityWave",
+            "ColorWave",
+            "MotionWave"
+        },
+        Scope = new SignalScope
+        {
+            Sink = "docsummarizer.images",
+            Coordinator = "motion",
+            Atom = "animation"
+        },
+        LowLatencyMode = true
+    };
+
+    /// <summary>
+    /// Florence2 only - fast local ONNX captioning/OCR.
+    /// Use for: Quick captions without external API calls
+    /// </summary>
+    public static CoordinatorProfile Florence2 => new()
+    {
+        Name = "florence2",
+        Description = "Fast local Florence-2 captioning/OCR",
+        Lanes = new Dictionary<string, LaneConfig>
+        {
+            ["metadata"] = new() { Name = "metadata", MaxConcurrency = 4 },
+            ["gpu"] = new() { Name = "gpu", MaxConcurrency = 1 }
+        },
+        DefaultTimeout = TimeSpan.FromSeconds(10),
+        EnabledWaves = new HashSet<string>
+        {
+            "IdentityWave",
+            "ColorWave",
+            "Florence2Wave"
+        },
+        Scope = new SignalScope
+        {
+            Sink = "docsummarizer.images",
+            Coordinator = "florence2",
+            Atom = "local"
+        },
+        LowLatencyMode = true
+    };
+
+    /// <summary>
+    /// Auto pipeline - fast and good, balanced approach.
+    /// Default pipeline that gives good results without being slow.
+    /// Use for: Most common use cases, quick analysis with quality
+    /// </summary>
+    /// <summary>
+    /// Fast analysis - quick metadata, color, motion without slow ML.
+    /// Use for: Quick sorting, thumbnailing, basic categorization
+    /// </summary>
+    public static CoordinatorProfile Fast => new()
+    {
+        Name = "fast",
+        Description = "Ultra-fast analysis (identity + color + motion + routing)",
+        Lanes = new Dictionary<string, LaneConfig>
+        {
+            ["metadata"] = new() { Name = "metadata", MaxConcurrency = 8 }
+        },
+        DefaultTimeout = TimeSpan.FromSeconds(5),
+        EnabledWaves = new HashSet<string>
+        {
+            "IdentityWave",
+            "ColorWave",
+            "AutoRoutingWave",
+            "MotionWave"
+        },
+        Scope = new SignalScope
+        {
+            Sink = "docsummarizer.images",
+            Coordinator = "fast",
+            Atom = "quick"
+        },
+        LowLatencyMode = true
+    };
+
+    public static CoordinatorProfile Auto => new()
+    {
+        Name = "auto",
+        Description = "Default - fast first, escalate to ML if needed",
+        Lanes = new Dictionary<string, LaneConfig>
+        {
+            ["metadata"] = new() { Name = "metadata", MaxConcurrency = 4 },
+            ["gpu"] = new() { Name = "gpu", MaxConcurrency = 1 }
+        },
+        DefaultTimeout = TimeSpan.FromSeconds(30),
+        EnabledWaves = new HashSet<string>
+        {
+            "IdentityWave",
+            "ColorWave",
+            "AutoRoutingWave",
+            "MotionWave"
+            // Note: Florence2Wave NOT included by default
+            // Use 'florence2' or 'caption' pipeline for ML analysis
+        },
+        Scope = new SignalScope
+        {
+            Sink = "docsummarizer.images",
+            Coordinator = "auto",
+            Atom = "balanced"
+        },
+        LowLatencyMode = true
+    };
+
+    /// <summary>
+    /// Get profile by name (pipeline name mapping).
+    /// </summary>
+    public static CoordinatorProfile GetByName(string name)
+    {
+        return name.ToLowerInvariant() switch
+        {
+            "stats" => Stats,
+            "motion" => Motion,
+            "fast" => Fast,
+            "florence2" => Florence2,
+            "streaming" => Streaming,
+            "batch" => Batch,
+            "quality" => Quality,
+            "background-learning" or "learning" => BackgroundLearning,
+            "auto" => Auto,  // Fast without ML by default
+            "caption" or "alttext" or "socialmediaalt" or "vision" => SingleRequest, // Full analysis for caption tasks
+            _ => Auto // Default to Auto for best experience
+        };
+    }
 }
 
 /// <summary>

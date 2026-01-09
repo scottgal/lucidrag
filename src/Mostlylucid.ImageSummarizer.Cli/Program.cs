@@ -11,6 +11,7 @@ using Mostlylucid.DocSummarizer.Images.Services;
 using Mostlylucid.DocSummarizer.Images.Services.Analysis;
 using Mostlylucid.DocSummarizer.Images.Models.Dynamic;
 using Mostlylucid.DocSummarizer.Images.Services.Pipelines;
+using Mostlylucid.DocSummarizer.Images.Coordination;
 using SixLabors.ImageSharp.Processing;
 using SixLabors.ImageSharp.Formats.Png;
 using Spectre.Console;
@@ -690,51 +691,50 @@ class Program
         });
 
         var provider = services.BuildServiceProvider();
-        var orchestrator = provider.GetRequiredService<WaveOrchestrator>();
+
+        // Use ProfiledWaveCoordinator for wave filtering based on pipeline
+        var coordinator = provider.GetRequiredService<ProfiledWaveCoordinator>();
+        var coordProfile = CoordinatorProfiles.GetByName(pipeline);
 
         try
         {
             DynamicImageProfile profile;
+            var context = new AnalysisContext();
 
-            // Signal-driven execution: only run waves that emit requested signals
-            // This is the key ephemeral pattern - waves listen for signals they need
+            // Use profiled coordinator for wave filtering
+            var result = await coordinator.ExecuteAsync(imagePath, coordProfile, context);
+
+            // Convert AnalysisResult signals to DynamicImageProfile
+            profile = new DynamicImageProfile { ImagePath = imagePath };
+            profile.AddSignals(result.Signals);
+            profile.AnalysisDurationMs = (long)result.TotalDuration.TotalMilliseconds;
+
+            // Signal-driven post-filtering if requested
             if (!string.IsNullOrWhiteSpace(signalGlobs) || dynamicPipeline?.UsesSignalSelection == true)
             {
-                var signalPattern = signalGlobs ?? dynamicPipeline?.GetSignalPattern() ?? "*";
-                var requiredTags = SignalGlobMatcher.GetRequiredWaveTags(signalPattern);
-
-                if (requiredTags.Contains("*"))
-                {
-                    // Full pipeline requested
-                    profile = await orchestrator.AnalyzeAsync(imagePath);
-                }
-                else
-                {
-                    // Selective wave execution based on signal dependencies
-                    profile = await orchestrator.AnalyzeByTagsAsync(imagePath, requiredTags);
-                }
-            }
-            else
-            {
-                // Standard full analysis
-                profile = await orchestrator.AnalyzeAsync(imagePath);
+                // Signals already captured from profiled execution
             }
 
             // For caption/alttext pipelines, always escalate to LLM
-            // For others, escalate if auto-escalation conditions are met
+            // For fast pipelines, check signals for smart escalation
             string? llmCaption = null;
-            if (enableLlm)
+            var neverEscalate = pipeline is "stats" or "motion" or "streaming";
+            var forceEscalate = pipeline is "caption" or "alttext" or "socialmediaalt" or "vision";
+
+            // For auto/florence2: escalate only if florence2 signals suggest it
+            var smartEscalate = pipeline is "auto" or "florence2" or "advancedocr" or "simpleocr";
+            var shouldEscalate = profile.GetValue<bool>("florence2.should_escalate");
+
+            if (enableLlm && !neverEscalate && (forceEscalate || (smartEscalate && shouldEscalate)))
             {
                 var escalationService = provider.GetService<Mostlylucid.DocSummarizer.Images.Services.EscalationService>();
                 if (escalationService != null)
                 {
-                    // Force escalation for caption/alttext/socialmediaalt, auto-escalate for others
-                    var forceEscalate = pipeline is "caption" or "alttext" or "socialmediaalt" or "vision";
-                    var result = await escalationService.AnalyzeWithEscalationAsync(
+                    var escalationResult = await escalationService.AnalyzeWithEscalationAsync(
                         imagePath,
                         forceEscalate: forceEscalate,
                         enableOcr: pipeline != "stats");
-                    llmCaption = result.LlmCaption;
+                    llmCaption = escalationResult.LlmCaption;
                 }
             }
 

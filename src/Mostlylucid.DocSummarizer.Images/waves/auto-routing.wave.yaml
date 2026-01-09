@@ -14,7 +14,7 @@ triggers:
       condition: "> 0"
     - signal: identity.is_animated
   skip_when:
-    - signal: wave.skipped.AutoRoutingWave
+    - wave.skipped.AutoRoutingWave
 
 emits:
   on_complete:
