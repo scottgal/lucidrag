@@ -19,6 +19,7 @@ public class AgenticSearchService(
     IEmbeddingService embeddingService,
     IConversationService conversationService,
     ISentinelService sentinelService,
+    ILlmService llmService,
     IOptions<PromptsConfig> promptsConfig,
     IOptions<DocSummarizerConfig> docSummarizerConfig,
     IOptions<RagDocumentsConfig> ragDocumentsConfig,
@@ -89,7 +90,7 @@ public class AgenticSearchService(
                     DocumentName: s.SectionTitle ?? s.HeadingPath ?? "Unknown",
                     SegmentId: s.Id,
                     Text: s.Text,
-                    Score: s.RetrievalScore * (1.0 / subQuery.Priority), // Weight by priority
+                    Score: s.QuerySimilarity * (1.0 / subQuery.Priority), // Weight by priority (use QuerySimilarity from vector search)
                     SectionTitle: s.SectionTitle))
                 .ToList();
 
@@ -208,14 +209,28 @@ public class AgenticSearchService(
                 PageOrSection: r.SectionTitle))
             .ToList();
 
-        // Build answer (simplified - in production would use LLM)
-        var answer = BuildAnswer(request.Query, sources, systemPrompt);
+        // Build answer using LLM synthesis
+        var answer = await BuildAnswerAsync(request.Query, sources, systemPrompt, ct);
 
         // Save assistant message
         var metadata = JsonSerializer.Serialize(new { sources = sources.Select(s => s.SegmentId) });
         await conversationService.AddMessageAsync(conversationId.Value, "assistant", answer, metadata, ct);
 
-        return new ChatResponse(answer, sources, conversationId.Value);
+        // Build decomposition info for UI
+        var decomposition = searchResult.QueryPlan != null
+            ? new DecompositionInfo(
+                Confidence: searchResult.QueryPlan.Confidence,
+                SubQueries: searchResult.QueryPlan.SubQueries
+                    .Select(sq => new SubQueryInfo(sq.Query, sq.Purpose ?? "", sq.Priority))
+                    .ToList(),
+                NeedsApproval: searchResult.QueryPlan.Confidence < 0.7)
+            : null;
+
+        return new ChatResponse(answer, sources, conversationId.Value)
+        {
+            QueryPlan = searchResult.QueryPlan,
+            Decomposition = decomposition
+        };
     }
 
     public async IAsyncEnumerable<string> ChatStreamAsync(ChatRequest request, [EnumeratorCancellation] CancellationToken ct = default)
@@ -247,22 +262,49 @@ public class AgenticSearchService(
         }
     }
 
-    private string BuildAnswer(string query, List<SourceCitation> sources, string systemPrompt)
+    private async Task<string> BuildAnswerAsync(string query, List<SourceCitation> sources, string systemPrompt, CancellationToken ct)
     {
         if (sources.Count == 0)
         {
             return "I couldn't find relevant information in the uploaded documents to answer your question. Please try rephrasing or upload more documents.";
         }
 
-        // Simple answer builder - in production would use LLM
-        var sourceTexts = string.Join("\n\n", sources.Select(s => $"[{s.Number}]: {s.Text}"));
+        // Build context from sources
+        var sourceTexts = string.Join("\n\n", sources.Select(s => $"[{s.Number}] ({s.DocumentName}): {s.Text}"));
 
-        return $"""
-Based on the documents, here's what I found:
+        // Create prompt for LLM synthesis
+        var prompt = $@"{systemPrompt}
 
-{sources[0].Text}
+You are answering a user's question based on the following document excerpts.
+Synthesize a clear, comprehensive answer using the information from the sources.
+Cite sources using [N] notation where N is the source number.
 
-{(sources.Count > 1 ? $"Additional context from sources [{string.Join(", ", sources.Skip(1).Select(s => s.Number))}] provides more details on this topic." : "")}
-""";
+USER QUESTION: {query}
+
+SOURCES:
+{sourceTexts}
+
+INSTRUCTIONS:
+- Provide a direct, helpful answer based on the sources
+- Cite relevant sources using [N] notation
+- If the sources don't fully answer the question, acknowledge limitations
+- Be concise but thorough
+- Do not make up information not present in the sources
+
+ANSWER:";
+
+        try
+        {
+            logger.LogDebug("Generating LLM answer for query: {Query}", query);
+            var answer = await llmService.GenerateAsync(prompt, new LlmOptions { Temperature = 0.3 }, ct);
+            return answer.Trim();
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "Failed to generate LLM answer, falling back to simple response");
+            // Fallback to simple response if LLM fails
+            return $"Based on the documents:\n\n{sources[0].Text}\n\n" +
+                   (sources.Count > 1 ? $"Additional context from sources [{string.Join(", ", sources.Skip(1).Select(s => s.Number))}]." : "");
+        }
     }
 }

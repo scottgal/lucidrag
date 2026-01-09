@@ -44,7 +44,19 @@ public class ChatController(
                 conversationId = response.ConversationId,
                 askedForClarification = response.AskedForClarification,
                 clarificationQuestion = response.ClarificationQuestion,
-                isOffTopic = response.IsOffTopic
+                isOffTopic = response.IsOffTopic,
+                // Query decomposition for UI display
+                decomposition = response.Decomposition != null ? new
+                {
+                    confidence = response.Decomposition.Confidence,
+                    needsApproval = response.Decomposition.NeedsApproval,
+                    subQueries = response.Decomposition.SubQueries.Select(sq => new
+                    {
+                        query = sq.Query,
+                        purpose = sq.Purpose,
+                        priority = sq.Priority
+                    })
+                } : null
             });
         }
         catch (Exception ex)

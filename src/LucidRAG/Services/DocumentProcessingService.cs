@@ -2,6 +2,8 @@ using System.Runtime.CompilerServices;
 using System.Security.Cryptography;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
+using Mostlylucid.DocSummarizer;
+using Mostlylucid.DocSummarizer.Models;
 using Mostlylucid.DocSummarizer.Services;
 using LucidRAG.Config;
 using LucidRAG.Data;
@@ -175,4 +177,77 @@ public class DocumentProcessingService(
         ".html" => "text/html",
         _ => "application/octet-stream"
     };
+
+    public async Task<List<Segment>> GetSegmentsAsync(Guid documentId, CancellationToken ct = default)
+    {
+        var document = await db.Documents.FindAsync([documentId], ct);
+        if (document is null) return [];
+
+        var collectionName = "ragdocs"; // Collection name from DocSummarizer config
+        var docId = document.ContentHash ?? documentId.ToString();
+
+        // Use search with docId filter to get all segments
+        // Create a dummy embedding to search (we're filtering by docId)
+        // Note: This is a workaround - ideally vector store would have GetDocumentSegmentsAsync
+        try
+        {
+            // Get segment count from document
+            if (document.SegmentCount == 0) return [];
+
+            // Search with a high topK and filter by docId
+            var embedding = new float[384]; // ONNX embedding dimension
+            var segments = await vectorStore.SearchAsync(collectionName, embedding, Math.Max(document.SegmentCount, 100), docId, ct);
+            return segments;
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "Failed to get segments for document {DocumentId}", documentId);
+            return [];
+        }
+    }
+
+    public async Task<List<ExtractedEntity>> GetEntitiesAsync(Guid documentId, CancellationToken ct = default)
+    {
+        // Get entities linked to this document through DocumentEntityLink
+        return await db.DocumentEntityLinks
+            .Where(link => link.DocumentId == documentId)
+            .Select(link => link.Entity)
+            .Distinct()
+            .OrderByDescending(e => e.UpdatedAt)
+            .ToListAsync(ct);
+    }
+
+    public async Task<List<EvidenceArtifact>> GetEvidenceAsync(Guid documentId, CancellationToken ct = default)
+    {
+        // Get evidence artifacts linked to retrieval entities for this collection
+        var document = await db.Documents.FindAsync([documentId], ct);
+        if (document?.CollectionId == null) return [];
+
+        return await db.EvidenceArtifacts
+            .Where(e => db.RetrievalEntities
+                .Any(ent => ent.Id == e.EntityId && ent.CollectionId == document.CollectionId))
+            .OrderByDescending(e => e.CreatedAt)
+            .ToListAsync(ct);
+    }
+
+    public async Task RetryProcessingAsync(Guid documentId, bool fullReprocess = false, CancellationToken ct = default)
+    {
+        var document = await db.Documents.FindAsync([documentId], ct);
+        if (document is null)
+        {
+            throw new ArgumentException($"Document {documentId} not found");
+        }
+
+        // Reset status to pending for reprocessing
+        document.Status = DocumentStatus.Pending;
+        document.ProcessingProgress = 0;
+        document.StatusMessage = fullReprocess ? "Queued for full reprocessing" : "Queued for signal recovery";
+
+        await db.SaveChangesAsync(ct);
+
+        // Re-queue for processing
+        await queue.EnqueueAsync(new DocumentProcessingJob(documentId, document.FilePath!, document.CollectionId), ct);
+
+        logger.LogInformation("Document {DocumentId} queued for {Mode}", documentId, fullReprocess ? "full reprocessing" : "signal recovery");
+    }
 }

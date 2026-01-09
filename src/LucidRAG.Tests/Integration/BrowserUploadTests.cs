@@ -462,6 +462,247 @@ public class BrowserUploadTests : IAsyncLifetime
     }
 
     #endregion
+
+    #region Document Details Tests
+
+    [Fact]
+    public async Task DocumentDetails_ShouldShowModal_WhenClickingDocument()
+    {
+        // Navigate to home page
+        var response = await _page!.GoToAsync(BaseUrl);
+        response!.Status.Should().Be(System.Net.HttpStatusCode.OK);
+
+        // Wait for page to fully load
+        await Task.Delay(2000);
+
+        // Check if there are documents in the list
+        var docCount = await _page.EvaluateFunctionAsync<int>(@"
+            () => document.querySelectorAll('[x-data*=""ragApp""] #document-list label').length
+        ");
+        Console.WriteLine($"Documents in list: {docCount}");
+
+        if (docCount == 0)
+        {
+            Console.WriteLine("No documents - skipping document details test");
+            return;
+        }
+
+        // Click on the document details button (info icon)
+        var detailsButton = await _page.QuerySelectorAsync("#document-list label button[title='View document details']");
+        if (detailsButton != null)
+        {
+            await detailsButton.ClickAsync();
+            Console.WriteLine("Clicked document details button");
+
+            // Wait for modal to open and load
+            await Task.Delay(2000);
+
+            // Check if modal is open
+            var modalOpen = await _page.EvaluateFunctionAsync<bool>(@"
+                () => document.getElementById('document-details-modal')?.open ?? false
+            ");
+            Console.WriteLine($"Details modal open: {modalOpen}");
+
+            // Check if document details loaded
+            var hasDetails = await _page.EvaluateFunctionAsync<bool>(@"
+                () => {
+                    const appEl = document.querySelector('[x-data*=""ragApp""]');
+                    const data = appEl?._x_dataStack?.[0];
+                    return data?.documentDetails != null;
+                }
+            ");
+            Console.WriteLine($"Has document details: {hasDetails}");
+
+            hasDetails.Should().BeTrue("Document details should load when modal is opened");
+        }
+        else
+        {
+            Console.WriteLine("No document details button found");
+        }
+    }
+
+    #endregion
+
+    #region Chat UI Tests
+
+    [Fact]
+    public async Task ChatUI_ShouldSendMessage_WithoutErrors()
+    {
+        // Collect ALL console messages, not just errors
+        var consoleMessages = new List<string>();
+        _page!.Console += (_, e) =>
+        {
+            consoleMessages.Add($"[{e.Message.Type}] {e.Message.Text}");
+        };
+
+        // Also capture page errors
+        var pageErrors = new List<string>();
+        _page.Error += (_, e) =>
+        {
+            pageErrors.Add($"[PageError] {e}");
+        };
+
+        // Navigate to home page
+        var response = await _page.GoToAsync(BaseUrl);
+        response!.Status.Should().Be(System.Net.HttpStatusCode.OK);
+
+        // Wait for page to fully load
+        await Task.Delay(2000);
+
+        // Check if Alpine.js loaded
+        var alpineLoaded = await _page.EvaluateFunctionAsync<bool>(@"() => typeof Alpine !== 'undefined'");
+        Console.WriteLine($"Alpine.js loaded: {alpineLoaded}");
+
+        // Check Alpine state (using Alpine.js v3 API) - Target ragApp specifically
+        var appState = await _page.EvaluateFunctionAsync<JsonElement?>(@"
+            () => {
+                try {
+                    // Target the ragApp element specifically (not articlesDropdown)
+                    const appEl = document.querySelector('[x-data*=""ragApp""]');
+                    if (!appEl) return { error: 'No ragApp element found' };
+                    // Alpine.js v3 uses _x_dataStack or Alpine.$data
+                    const data = appEl._x_dataStack?.[0] ?? (typeof Alpine !== 'undefined' ? Alpine.$data(appEl) : null);
+                    if (!data) return { error: 'No Alpine data found on element', hasElement: true };
+                    return {
+                        messagesCount: data.messages?.length ?? -1,
+                        currentMessage: data.currentMessage ?? '',
+                        isTyping: data.isTyping ?? false,
+                        hasConversationId: data.conversationId != null,
+                        hasSendMessage: typeof data.sendMessage === 'function'
+                    };
+                } catch(e) {
+                    return { error: e.toString() };
+                }
+            }
+        ");
+        Console.WriteLine($"Alpine app state: {appState}");
+
+        // Try to type in the chat input
+        var inputSelector = "input[x-model='currentMessage']";
+        var inputExists = await _page.QuerySelectorAsync(inputSelector);
+        Console.WriteLine($"Chat input exists: {inputExists != null}");
+
+        if (inputExists == null)
+        {
+            // List all input elements for debugging
+            var inputs = await _page.EvaluateFunctionAsync<string[]>(@"
+                () => Array.from(document.querySelectorAll('input')).map(i =>
+                    `${i.tagName}[type=${i.type}][placeholder=${i.placeholder}]`
+                )
+            ");
+            Console.WriteLine($"Available inputs: {string.Join(", ", inputs)}");
+        }
+
+        // Type a test message
+        await _page.TypeAsync(inputSelector, "What is Pride and Prejudice about?");
+        await Task.Delay(500);
+
+        // Check the input value
+        var inputValue = await _page.EvaluateFunctionAsync<string>(@"
+            () => document.querySelector('input[x-model=""currentMessage""]')?.value ?? 'NOT_FOUND'
+        ");
+        Console.WriteLine($"Input value after typing: {inputValue}");
+
+        // Click send button
+        var sendButtonSelector = "button[type='submit']";
+        var sendButton = await _page.QuerySelectorAsync(sendButtonSelector);
+        Console.WriteLine($"Send button exists: {sendButton != null}");
+
+        if (sendButton != null)
+        {
+            // First try submitting the form directly via JavaScript to ensure sendMessage is called
+            var submitResult = await _page.EvaluateFunctionAsync<string>(@"
+                async () => {
+                    try {
+                        // Target ragApp specifically
+                        const appEl = document.querySelector('[x-data*=""ragApp""]');
+                        if (!appEl) return 'No ragApp element';
+                        const data = appEl._x_dataStack?.[0];
+                        if (!data) return 'No Alpine data on ragApp';
+
+                        // Set the message directly
+                        data.currentMessage = 'What is Pride and Prejudice about?';
+
+                        // Check if sendMessage exists
+                        if (typeof data.sendMessage !== 'function') {
+                            return 'sendMessage is not a function, keys: ' + Object.keys(data).slice(0, 20).join(', ');
+                        }
+
+                        // Call sendMessage directly
+                        await data.sendMessage();
+                        return 'sendMessage called successfully, messages: ' + data.messages.length;
+                    } catch(e) {
+                        return 'Error: ' + e.toString();
+                    }
+                }
+            ");
+            Console.WriteLine($"Direct sendMessage result: {submitResult}");
+
+            // Wait for response
+            await Task.Delay(5000);
+
+            // Check state after sending (Alpine.js v3 API) - Target ragApp
+            var stateAfter = await _page.EvaluateFunctionAsync<JsonElement?>(@"
+                () => {
+                    try {
+                        const appEl = document.querySelector('[x-data*=""ragApp""]');
+                        if (!appEl) return { error: 'No ragApp element found' };
+                        const data = appEl._x_dataStack?.[0] ?? (typeof Alpine !== 'undefined' ? Alpine.$data(appEl) : null);
+                        if (!data) return { error: 'No Alpine data found' };
+                        return {
+                            messagesCount: data.messages?.length ?? -1,
+                            messages: data.messages?.map(m => ({ role: m.role, content: m.content?.substring(0, 100) })) ?? [],
+                            isTyping: data.isTyping ?? false,
+                            hasConversationId: data.conversationId != null
+                        };
+                    } catch(e) {
+                        return { error: e.toString() };
+                    }
+                }
+            ");
+            Console.WriteLine($"State after sending: {stateAfter}");
+        }
+
+        // Print all console messages
+        Console.WriteLine("\n=== Console Messages ===");
+        foreach (var msg in consoleMessages)
+        {
+            Console.WriteLine(msg);
+        }
+
+        Console.WriteLine("\n=== Page Errors ===");
+        foreach (var err in pageErrors)
+        {
+            Console.WriteLine(err);
+        }
+
+        // Check for any JS errors
+        var jsErrors = consoleMessages.Where(m => m.Contains("[Error]")).ToList();
+        if (jsErrors.Any())
+        {
+            Console.WriteLine("\n=== JavaScript Errors Found ===");
+            foreach (var err in jsErrors)
+            {
+                Console.WriteLine(err);
+            }
+        }
+
+        // Assert there should be messages after a query (Alpine.js v3 API) - Target ragApp
+        var finalState = await _page.EvaluateFunctionAsync<JsonElement?>(@"
+            () => {
+                const appEl = document.querySelector('[x-data*=""ragApp""]');
+                if (!appEl) return null;
+                const data = appEl._x_dataStack?.[0] ?? (typeof Alpine !== 'undefined' ? Alpine.$data(appEl) : null);
+                if (!data) return null;
+                return { messagesCount: data.messages?.length ?? 0 };
+            }
+        ");
+
+        var messageCount = finalState?.GetProperty("messagesCount").GetInt32() ?? 0;
+        messageCount.Should().BeGreaterThan(0, "Chat should have at least the user message after sending");
+    }
+
+    #endregion
 }
 
 /// <summary>

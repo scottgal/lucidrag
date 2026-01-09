@@ -191,4 +191,112 @@ public class DocumentsController(
         await documentService.DeleteDocumentAsync(id, ct);
         return Ok(new { success = true });
     }
+
+    /// <summary>
+    /// Retry processing a stuck or failed document.
+    /// </summary>
+    [HttpPost("{id:guid}/retry")]
+    public async Task<IActionResult> Retry(Guid id, [FromQuery] bool fullReprocess = false, CancellationToken ct = default)
+    {
+        try
+        {
+            await documentService.RetryProcessingAsync(id, fullReprocess, ct);
+            return Ok(new { success = true, message = fullReprocess ? "Document queued for full reprocessing" : "Document queued for signal recovery" });
+        }
+        catch (ArgumentException ex)
+        {
+            return NotFound(new { error = ex.Message });
+        }
+    }
+
+    /// <summary>
+    /// Get detailed information about a document including segments, signals, and evidence.
+    /// </summary>
+    [HttpGet("{id:guid}/details")]
+    public async Task<IActionResult> GetDetails(Guid id, CancellationToken ct = default)
+    {
+        var document = await documentService.GetDocumentAsync(id, ct);
+        if (document is null)
+        {
+            return NotFound(new { error = "Document not found" });
+        }
+
+        // Get segments for this document
+        var segments = await documentService.GetSegmentsAsync(id, ct);
+
+        // Get retrieval entities (signals/evidence)
+        var entities = await documentService.GetEntitiesAsync(id, ct);
+
+        // Get evidence artifacts
+        var evidence = await documentService.GetEvidenceAsync(id, ct);
+
+        return Ok(new
+        {
+            document = new
+            {
+                id = document.Id,
+                name = document.Name,
+                originalFilename = document.OriginalFilename,
+                status = document.Status.ToString().ToLowerInvariant(),
+                statusMessage = document.StatusMessage,
+                progress = document.ProcessingProgress,
+                segmentCount = document.SegmentCount,
+                entityCount = document.EntityCount,
+                fileSizeBytes = document.FileSizeBytes,
+                mimeType = document.MimeType,
+                createdAt = document.CreatedAt,
+                processedAt = document.ProcessedAt,
+                collectionId = document.CollectionId,
+                collectionName = document.Collection?.Name
+            },
+            segments = segments.Take(100).Select(s => new
+            {
+                id = s.Id,
+                text = s.Text.Length > 500 ? s.Text[..500] + "..." : s.Text,
+                sectionTitle = s.SectionTitle,
+                pageNumber = s.PageNumber,
+                index = s.Index
+            }),
+            segmentsTruncated = segments.Count > 100,
+            totalSegments = segments.Count,
+            entities = entities.Take(50).Select(e => new
+            {
+                id = e.Id,
+                name = e.CanonicalName,
+                type = e.EntityType,
+                aliases = e.Aliases,
+                description = e.Description
+            }),
+            entitiesTotalCount = entities.Count,
+            evidence = evidence.Select(ev => new
+            {
+                id = ev.Id,
+                type = ev.ArtifactType,
+                description = GetEvidenceDescription(ev.ArtifactType),
+                mimeType = ev.MimeType,
+                sizeBytes = ev.FileSizeBytes,
+                producer = ev.ProducerSource,
+                confidence = ev.Confidence,
+                createdAt = ev.CreatedAt
+            }),
+            evidenceCount = evidence.Count
+        });
+    }
+
+    private static string GetEvidenceDescription(string artifactType)
+    {
+        return artifactType switch
+        {
+            "ocr_text" => "OCR extracted text from image/scan",
+            "ocr_word_boxes" => "Word-level bounding boxes from OCR",
+            "llm_summary" => "LLM-generated summary",
+            "filmstrip" => "Video filmstrip thumbnail grid",
+            "key_frame" => "Key frame extracted from video",
+            "transcript" => "Audio/video transcript",
+            "audio_waveform" => "Audio waveform visualization",
+            "signal_dump" => "Raw signal data export",
+            "embedding" => "Vector embedding representation",
+            _ => $"Evidence artifact ({artifactType})"
+        };
+    }
 }
