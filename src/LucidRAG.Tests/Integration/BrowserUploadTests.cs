@@ -466,7 +466,79 @@ public class BrowserUploadTests : IAsyncLifetime
     #region Document Details Tests
 
     [Fact]
-    public async Task DocumentDetails_ShouldShowModal_WhenClickingDocument()
+    public async Task DebugUI_CaptureState()
+    {
+        // Capture ALL console messages
+        var consoleMessages = new List<string>();
+        _page!.Console += (_, e) => consoleMessages.Add($"[{e.Message.Type}] {e.Message.Text}");
+
+        // Navigate
+        await _page.GoToAsync(BaseUrl);
+        await Task.Delay(3000);
+
+        // Take a screenshot
+        await _page.ScreenshotAsync("E:\\source\\lucidrag\\debug-ui-state.png");
+        Console.WriteLine("Screenshot saved to E:\\source\\lucidrag\\debug-ui-state.png");
+
+        // Get the full HTML of the chat input area
+        var chatAreaHtml = await _page.EvaluateFunctionAsync<string>(@"
+            () => {
+                const form = document.querySelector('form');
+                return form ? form.outerHTML.substring(0, 500) : 'No form found';
+            }
+        ");
+        Console.WriteLine($"Chat form HTML: {chatAreaHtml}");
+
+        // Try typing and submitting via keyboard
+        var input = await _page.QuerySelectorAsync("input[placeholder*='Ask about']");
+        if (input != null)
+        {
+            await input.ClickAsync();
+            await _page.Keyboard.TypeAsync("What is this about?");
+            await Task.Delay(500);
+
+            // Take screenshot before submit
+            await _page.ScreenshotAsync("E:\\source\\lucidrag\\debug-before-submit.png");
+
+            // Press Enter
+            await _page.Keyboard.PressAsync("Enter");
+            Console.WriteLine("Pressed Enter key");
+
+            await Task.Delay(5000);
+
+            // Take screenshot after submit
+            await _page.ScreenshotAsync("E:\\source\\lucidrag\\debug-after-submit.png");
+
+            // Check Alpine state
+            var state = await _page.EvaluateFunctionAsync<string>(@"
+                () => {
+                    const appEl = document.querySelector('[x-data*=""ragApp""]');
+                    const data = appEl?._x_dataStack?.[0];
+                    if (!data) return 'No Alpine data';
+                    return JSON.stringify({
+                        messagesCount: data.messages?.length,
+                        currentMessage: data.currentMessage,
+                        isTyping: data.isTyping
+                    });
+                }
+            ");
+            Console.WriteLine($"Alpine state after Enter: {state}");
+        }
+        else
+        {
+            Console.WriteLine("Could not find chat input!");
+        }
+
+        // Print console messages
+        Console.WriteLine("\n=== All Console Messages ===");
+        foreach (var msg in consoleMessages)
+        {
+            Console.WriteLine(msg);
+        }
+    }
+
+    [Fact]
+    public async Task DocumentDetails_ShouldShowTabView_WhenClickingDocument()
     {
         // Navigate to home page
         var response = await _page!.GoToAsync(BaseUrl);
@@ -515,10 +587,14 @@ public class BrowserUploadTests : IAsyncLifetime
         ");
         Console.WriteLine($"Show details result: {showDetailsResult}");
 
-        // Wait for modal to open and data to load
+        // Wait for data to load
         await Task.Delay(3000);
 
-        // Check if document details loaded
+        // Take screenshot to see details tab view
+        await _page.ScreenshotAsync("E:\\source\\lucidrag\\debug-details-tab.png");
+        Console.WriteLine("Screenshot saved to E:\\source\\lucidrag\\debug-details-tab.png");
+
+        // Check if document details loaded and viewMode changed to 'details'
         var detailsState = await _page.EvaluateFunctionAsync<JsonElement?>(@"
             () => {
                 const appEl = document.querySelector('[x-data*=""ragApp""]');
@@ -526,16 +602,21 @@ public class BrowserUploadTests : IAsyncLifetime
                 if (!data) return null;
                 return {
                     hasDetails: data.documentDetails != null,
+                    viewMode: data.viewMode,
                     documentName: data.documentDetails?.document?.name ?? 'not loaded',
                     segmentCount: data.documentDetails?.totalSegments ?? 0,
-                    entityCount: data.documentDetails?.entitiesTotalCount ?? 0
+                    entityCount: data.documentDetails?.entitiesTotalCount ?? 0,
+                    detailsTab: data.detailsTab
                 };
             }
         ");
         Console.WriteLine($"Document details state: {detailsState}");
 
         var hasDetails = detailsState?.GetProperty("hasDetails").GetBoolean() ?? false;
+        var viewMode = detailsState?.GetProperty("viewMode").GetString() ?? "";
+
         hasDetails.Should().BeTrue("Document details should load when showDocumentDetails is called");
+        viewMode.Should().Be("details", "viewMode should change to 'details' when viewing document details");
     }
 
     #endregion
