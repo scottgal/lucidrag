@@ -11,6 +11,7 @@ namespace LucidRAG.Controllers.Api;
 [DemoModeWriteBlock] // Blocks POST/PUT/DELETE when demo mode is enabled
 public class DocumentsController(
     IDocumentProcessingService documentService,
+    IRetrievalEntityService retrievalEntityService,
     IOptions<RagDocumentsConfig> config,
     ILogger<DocumentsController> logger) : ControllerBase
 {
@@ -30,6 +31,10 @@ public class DocumentsController(
         });
     }
 
+    /// <summary>
+    /// Upload a document (alias for /upload)
+    /// </summary>
+    [HttpPost]
     [HttpPost("upload")]
     [RequestSizeLimit(100 * 1024 * 1024)] // 100MB
     public async Task<IActionResult> Upload(
@@ -280,6 +285,71 @@ public class DocumentsController(
                 createdAt = ev.CreatedAt
             }),
             evidenceCount = evidence.Count
+        });
+    }
+
+    /// <summary>
+    /// Get summary for a document (executive summary, topics, entities).
+    /// </summary>
+    [HttpGet("{id:guid}/summary")]
+    public async Task<IActionResult> GetSummary(Guid id, CancellationToken ct = default)
+    {
+        // The document ID formatted as "N" is the entity ID in retrieval_entities
+        var entityId = id.ToString("N");
+        var entity = await retrievalEntityService.GetByIdAsync(entityId, ct);
+
+        if (entity is null)
+        {
+            // Document may not have been processed with retrieval entity storage
+            var document = await documentService.GetDocumentAsync(id, ct);
+            if (document is null)
+                return NotFound(new { error = "Document not found" });
+
+            return Ok(new
+            {
+                documentId = id,
+                documentName = document.Name,
+                hasSummary = false,
+                message = "Document does not have a summary yet. It may not have been fully processed."
+            });
+        }
+
+        // Parse signals for topic summaries and open questions
+        var signals = entity.Signals ?? [];
+        var topicsSignal = signals.FirstOrDefault(s => s.Key == "document.topics");
+        var questionsSignal = signals.FirstOrDefault(s => s.Key == "document.open_questions");
+
+        object? topics = null;
+        if (topicsSignal?.Value is string topicsJson && !string.IsNullOrEmpty(topicsJson))
+        {
+            try { topics = System.Text.Json.JsonSerializer.Deserialize<object>(topicsJson); }
+            catch { /* ignore parse errors */ }
+        }
+
+        object? openQuestions = null;
+        if (questionsSignal?.Value is string questionsJson && !string.IsNullOrEmpty(questionsJson))
+        {
+            try { openQuestions = System.Text.Json.JsonSerializer.Deserialize<object>(questionsJson); }
+            catch { /* ignore parse errors */ }
+        }
+
+        return Ok(new
+        {
+            documentId = id,
+            documentName = entity.Title,
+            hasSummary = !string.IsNullOrEmpty(entity.Summary),
+            executiveSummary = entity.Summary,
+            topics,
+            openQuestions,
+            entityCount = entity.Entities?.Count ?? 0,
+            extractedEntities = entity.Entities?.Take(20).Select(e => new
+            {
+                name = e.Name,
+                type = e.Type,
+                description = e.Description
+            }),
+            wordCount = entity.Metadata?.WordCount,
+            contentType = entity.ContentType.ToString()
         });
     }
 

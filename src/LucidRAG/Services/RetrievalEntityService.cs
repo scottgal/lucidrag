@@ -64,6 +64,7 @@ public interface IRetrievalEntityService
         DocumentEntity document,
         IReadOnlyList<Mostlylucid.DocSummarizer.Models.Segment> segments,
         IReadOnlyList<LucidRAG.Entities.ExtractedEntity>? entities = null,
+        Mostlylucid.DocSummarizer.Models.DocumentSummary? summary = null,
         CancellationToken ct = default);
 
     /// <summary>
@@ -253,6 +254,7 @@ public class RetrievalEntityService : IRetrievalEntityService
         DocumentEntity document,
         IReadOnlyList<Mostlylucid.DocSummarizer.Models.Segment> segments,
         IReadOnlyList<LucidRAG.Entities.ExtractedEntity>? entities = null,
+        Mostlylucid.DocSummarizer.Models.DocumentSummary? summary = null,
         CancellationToken ct = default)
     {
         var builder = new EntityBuilder()
@@ -278,10 +280,36 @@ public class RetrievalEntityService : IRetrievalEntityService
                 builder.WithEmbedding(centroid, "all-MiniLM-L6-v2");
         }
 
-        // Add summary from highest salience segment
-        var topSegment = segments.OrderByDescending(s => s.SalienceScore).FirstOrDefault();
-        if (topSegment != null)
-            builder.WithSummary(topSegment.Text.Length > 500 ? topSegment.Text[..500] + "..." : topSegment.Text);
+        // Add summary - prefer executive summary from LLM synthesis, fall back to top salient segment
+        if (!string.IsNullOrEmpty(summary?.ExecutiveSummary))
+        {
+            // Truncate to 4000 chars for database storage
+            var execSummary = summary.ExecutiveSummary.Length > 4000
+                ? summary.ExecutiveSummary[..4000] + "..."
+                : summary.ExecutiveSummary;
+            builder.WithSummary(execSummary);
+        }
+        else
+        {
+            // Fallback: use highest salience segment
+            var topSegment = segments.OrderByDescending(s => s.SalienceScore).FirstOrDefault();
+            if (topSegment != null)
+                builder.WithSummary(topSegment.Text.Length > 500 ? topSegment.Text[..500] + "..." : topSegment.Text);
+        }
+
+        // Add topic summaries to signals if available
+        if (summary?.TopicSummaries?.Count > 0)
+        {
+            var topicsJson = System.Text.Json.JsonSerializer.Serialize(summary.TopicSummaries.Select(t => new { t.Topic, t.Summary }));
+            builder.WithSignal(new StyloSignal { Key = "document.topics", Value = topicsJson, Source = "BertRAG" });
+        }
+
+        // Add open questions to signals if available
+        if (summary?.OpenQuestions?.Count > 0)
+        {
+            var questionsJson = System.Text.Json.JsonSerializer.Serialize(summary.OpenQuestions);
+            builder.WithSignal(new StyloSignal { Key = "document.open_questions", Value = questionsJson, Source = "BertRAG" });
+        }
 
         // Add signals
         builder.WithSignal(new StyloSignal { Key = "document.segment_count", Value = segments.Count, Source = "LucidRAG" });

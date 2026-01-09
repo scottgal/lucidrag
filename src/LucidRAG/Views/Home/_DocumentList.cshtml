@@ -15,11 +15,12 @@ else
     @foreach (var doc in Model)
     {
         var ext = GetFileExtension(doc.OriginalFilename);
-        <label class="flex items-center gap-2 p-2 rounded hover:bg-base-200 cursor-pointer group">
+        <label class="flex items-center gap-2 p-2 rounded hover:bg-base-200 cursor-pointer group"
+               :class="selectedDocIds.has('@doc.Id') ? 'bg-primary/10' : ''">
             <input type="checkbox"
-                   class="checkbox checkbox-sm"
-                   checked="@(doc.Status == DocumentStatus.Completed)"
-                   disabled="@(doc.Status != DocumentStatus.Completed)"
+                   class="checkbox checkbox-sm checkbox-primary"
+                   :checked="selectedDocIds.has('@doc.Id')"
+                   :disabled="@(doc.Status != DocumentStatus.Completed ? "true" : "false")"
                    x-on:change="toggleDocument('@doc.Id', $event.target.checked)" />
 
             <!-- File type icon -->

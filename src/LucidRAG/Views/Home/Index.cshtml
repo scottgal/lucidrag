@@ -244,6 +244,22 @@
             </template>
         </div>
 
+        <!-- Document Selection Header -->
+        <div class="px-3 py-2 border-b border-base-300 flex items-center gap-2 text-xs">
+            <span class="opacity-60">Select for chat:</span>
+            <button class="btn btn-ghost btn-xs"
+                    @@click="selectAllDocuments()"
+                    title="Select all completed documents">
+                All
+            </button>
+            <button class="btn btn-ghost btn-xs"
+                    @@click="selectedDocIds.clear(); htmx.trigger(document.body, 'documentUploaded');"
+                    title="Clear selection">
+                None
+            </button>
+            <span class="ml-auto badge badge-sm badge-ghost" x-text="selectedDocIds.size + ' selected'"></span>
+        </div>
+
         <!-- Document List -->
         <div id="document-list" class="flex-1 overflow-y-auto p-2 space-y-1"
              hx-get="/documents" hx-trigger="documentUploaded from:body" hx-swap="innerHTML">
@@ -361,6 +377,13 @@
                         <input type="checkbox" class="toggle toggle-sm toggle-primary" x-model="graphRagEnabled" />
                     </label>
                 </div>
+                <!-- New Chat button -->
+                <button class="btn btn-sm btn-ghost" @@click="startNewChat()" title="Start new chat" x-show="messages.length > 0">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
+                    </svg>
+                    New
+                </button>
                 <div class="btn-group">
                     <button class="btn btn-sm" :class="viewMode === 'answer' ? 'btn-active' : ''" @@click="viewMode = 'answer'">
                         Answer
@@ -391,7 +414,7 @@
                     <div id="chat-messages" class="flex-1 overflow-y-auto p-4 space-y-4" x-ref="chatMessages">
                         <template x-if="messages.length === 0">
                             <div class="text-center text-base-content/50 mt-8">
-                                <p class="text-lg mb-2 font-brand">Welcome to <span class="text-gray-400">lucid</span><span class="font-bold text-base-content">RAG</span></p>
+                                <p class="text-lg mb-2 font-brand">Welcome to <span class="italic text-gray-400">lucid</span><span class="font-bold text-base-content">RAG</span></p>
                                 <p class="text-sm">Upload documents and ask questions about them.</p>
                             </div>
                         </template>
@@ -853,6 +876,27 @@
 
         <!-- Input -->
         <div class="p-6 border-t border-base-300 bg-base-200/30">
+            <!-- Selected documents indicator -->
+            <template x-if="selectedDocIds.size > 0">
+                <div class="max-w-4xl mx-auto mb-3 flex items-center gap-2 text-sm">
+                    <span class="badge badge-primary badge-sm">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                        </svg>
+                        <span x-text="selectedDocIds.size"></span> doc<span x-show="selectedDocIds.size !== 1">s</span> selected
+                    </span>
+                    <span class="text-base-content/50">Chat will search only selected documents</span>
+                    <button type="button"
+                            class="btn btn-ghost btn-xs ml-auto"
+                            @@click="selectedDocIds.clear(); htmx.trigger(document.body, 'documentUploaded');"
+                            title="Clear selection">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                        </svg>
+                        Clear
+                    </button>
+                </div>
+            </template>
             <form x-on:submit.prevent="sendMessage" class="max-w-4xl mx-auto">
                 <div class="flex gap-3 items-center">
                     <button type="button" class="btn btn-ghost btn-circle btn-sm opacity-60 hover:opacity-100"
@@ -867,7 +911,7 @@
                     <div class="flex-1 relative">
                         <input type="text"
                                x-model="currentMessage"
-                               placeholder="Ask about your documents..."
+                               :placeholder="selectedDocIds.size > 0 ? 'Ask about ' + selectedDocIds.size + ' selected document' + (selectedDocIds.size !== 1 ? 's' : '') + '...' : 'Ask about your documents...'"
                                class="input input-bordered input-lg w-full pr-14 text-lg shadow-sm focus:shadow-md transition-shadow"
                                :disabled="isTyping" />
                         <button type="submit"
@@ -1096,6 +1140,61 @@ function ragApp() {
                     this.initFilePond();
                 });
             }
+            // Restore conversation from cookie
+            await this.restoreConversation();
+        },
+
+        // Cookie utilities
+        getCookie(name) {
+            const value = `; ${document.cookie}`;
+            const parts = value.split(`; ${name}=`);
+            if (parts.length === 2) return parts.pop().split(';').shift();
+            return null;
+        },
+
+        setCookie(name, value, days = 7) {
+            const expires = new Date(Date.now() + days * 864e5).toUTCString();
+            document.cookie = `${name}=${value}; expires=${expires}; path=/; SameSite=Lax`;
+        },
+
+        deleteCookie(name) {
+            document.cookie = `${name}=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/`;
+        },
+
+        async restoreConversation() {
+            const savedConversationId = this.getCookie('lucidrag-conversation');
+            if (!savedConversationId) return;
+
+            try {
+                const response = await fetch(`/api/chat/conversations/${savedConversationId}`);
+                if (response.ok) {
+                    const data = await response.json();
+                    this.conversationId = data.id;
+                    // Load messages
+                    this.messages = data.messages.map((m, i) => ({
+                        id: i,
+                        role: m.role,
+                        content: m.content,
+                        sources: []
+                    }));
+                    console.log(`Restored conversation ${savedConversationId} with ${this.messages.length} messages`);
+                } else {
+                    // Conversation not found, clear cookie
+                    this.deleteCookie('lucidrag-conversation');
+                }
+            } catch (e) {
+                console.warn('Could not restore conversation:', e);
+                this.deleteCookie('lucidrag-conversation');
+            }
+        },
+
+        startNewChat() {
+            this.messages = [];
+            this.conversationId = null;
+            this.lastAnswer = null;
+            this.graphData = null;
+            this.debugInfo = null;
+            this.deleteCookie('lucidrag-conversation');
         },
 
         async loadExtractionModes() {
@@ -1393,6 +1492,26 @@ function ragApp() {
             }
         },
 
+        async selectAllDocuments() {
+            try {
+                const url = this.currentCollectionId
+                    ? `/api/documents?collectionId=${this.currentCollectionId}`
+                    : '/api/documents';
+                const response = await fetch(url);
+                if (response.ok) {
+                    const data = await response.json();
+                    // Select all completed documents
+                    data.documents
+                        .filter(d => d.status === 'completed')
+                        .forEach(d => this.selectedDocIds.add(d.id));
+                    // Trigger UI refresh
+                    htmx.trigger(document.body, 'documentUploaded');
+                }
+            } catch (e) {
+                console.error('Failed to select all documents:', e);
+            }
+        },
+
         async sendMessage() {
             const query = this.currentMessage.trim();
             if (!query) return;
@@ -1437,6 +1556,8 @@ function ragApp() {
 
                 if (response.ok) {
                     this.conversationId = result.conversationId;
+                    // Save conversation ID to cookie for persistence
+                    this.setCookie('lucidrag-conversation', result.conversationId);
 
                     const assistantMsg = {
                         id: Date.now() + 1,

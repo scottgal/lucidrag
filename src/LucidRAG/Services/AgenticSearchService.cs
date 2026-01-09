@@ -72,6 +72,11 @@ public class AgenticSearchService(
         var allResults = new List<SearchResultItem>();
         var collectionName = _docSummarizerConfig.BertRag.CollectionName;
 
+        // Build lookup for VectorStoreDocId -> DocumentEntity
+        var documentLookup = await db.Documents
+            .Where(d => d.VectorStoreDocId != null)
+            .ToDictionaryAsync(d => d.VectorStoreDocId!, d => d, ct);
+
         foreach (var subQuery in queryPlan.SubQueries.OrderBy(sq => sq.Priority))
         {
             logger.LogDebug("Executing sub-query: {Query} (purpose: {Purpose})", subQuery.Query, subQuery.Purpose);
@@ -85,13 +90,20 @@ public class AgenticSearchService(
                 ct);
 
             var subResults = segments
-                .Select((s, i) => new SearchResultItem(
-                    DocumentId: Guid.Empty,
-                    DocumentName: s.SectionTitle ?? s.HeadingPath ?? "Unknown",
-                    SegmentId: s.Id,
-                    Text: s.Text,
-                    Score: s.QuerySimilarity * (1.0 / subQuery.Priority), // Weight by priority (use QuerySimilarity from vector search)
-                    SectionTitle: s.SectionTitle))
+                .Select((s, i) =>
+                {
+                    // Extract docId from segment ID (format: {docId}_{type}_{index})
+                    var segmentDocId = ExtractDocIdFromSegmentId(s.Id);
+                    var doc = segmentDocId != null && documentLookup.TryGetValue(segmentDocId, out var d) ? d : null;
+
+                    return new SearchResultItem(
+                        DocumentId: doc?.Id ?? Guid.Empty,
+                        DocumentName: doc?.Name ?? s.SectionTitle ?? s.HeadingPath ?? "Unknown",
+                        SegmentId: s.Id,
+                        Text: s.Text,
+                        Score: s.QuerySimilarity * (1.0 / subQuery.Priority), // Weight by priority
+                        SectionTitle: s.SectionTitle);
+                })
                 .ToList();
 
             allResults.AddRange(subResults);
@@ -306,5 +318,20 @@ ANSWER:";
             return $"Based on the documents:\n\n{sources[0].Text}\n\n" +
                    (sources.Count > 1 ? $"Additional context from sources [{string.Join(", ", sources.Skip(1).Select(s => s.Number))}]." : "");
         }
+    }
+
+    /// <summary>
+    /// Extract docId from segment ID (format: {docId}_{type}_{index})
+    /// Example: "10_da69a3ca5838716d_s_42" -> "10_da69a3ca5838716d"
+    /// </summary>
+    private static string? ExtractDocIdFromSegmentId(string segmentId)
+    {
+        var parts = segmentId.Split('_');
+        if (parts.Length >= 3)
+        {
+            // Take all parts except the last two (type and index)
+            return string.Join("_", parts.Take(parts.Length - 2));
+        }
+        return null;
     }
 }

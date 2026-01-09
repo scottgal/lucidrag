@@ -217,10 +217,15 @@ public class DocumentQueueProcessor(
             // Get segments from vector store and extract entities
             try
             {
+                logger.LogDebug("Fetching segments for VectorStoreDocId: {DocId}", result.Trace.DocumentId);
+
                 var segments = await vectorStore.GetDocumentSegmentsAsync(
                     "ragdocs", // Collection name from config
                     result.Trace.DocumentId,
                     ct);
+
+                logger.LogDebug("Retrieved {SegmentCount} segments from vector store for {DocId}",
+                    segments.Count, result.Trace.DocumentId);
 
                 if (segments.Count > 0)
                 {
@@ -246,8 +251,8 @@ public class DocumentQueueProcessor(
                             .Select(del => del.Entity!)
                             .ToListAsync(ct);
 
-                        await retrievalEntityService.StoreDocumentAsync(document, segments, extractedEntities, ct);
-                        logger.LogInformation("Stored document {DocumentId} as RetrievalEntity for cross-modal search", job.DocumentId);
+                        await retrievalEntityService.StoreDocumentAsync(document, segments, extractedEntities, result, ct);
+                        logger.LogInformation("Stored document {DocumentId} as RetrievalEntity with summary for cross-modal search", job.DocumentId);
                     }
                     catch (Exception ex)
                     {

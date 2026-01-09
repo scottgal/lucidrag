@@ -112,10 +112,18 @@ public class QdrantVectorStore : IVectorStore
     public async Task UpsertSegmentsAsync(string collectionName, IEnumerable<Segment> segments, CancellationToken ct = default)
     {
         var segmentList = segments.Where(s => s.Embedding != null).ToList();
-        
+
         if (segmentList.Count == 0)
             return;
-        
+
+        // Debug: log the first segment's ID and extracted docId
+        if (segmentList.Count > 0)
+        {
+            var firstSeg = segmentList[0];
+            var extractedDocId = ExtractDocId(firstSeg.Id);
+            Console.WriteLine($"[DEBUG] UpsertSegmentsAsync: collection='{collectionName}', count={segmentList.Count}, firstId='{firstSeg.Id}', extractedDocId='{extractedDocId}'");
+        }
+
         // Convert segments to Qdrant points
         var points = segmentList.Select(s => new PointStruct
         {
@@ -200,7 +208,11 @@ public class QdrantVectorStore : IVectorStore
     {
         var segments = new List<Segment>();
         PointId? offset = null;
-        
+
+        Console.WriteLine($"[DEBUG] GetDocumentSegmentsAsync: collection='{collectionName}', docId='{docId}'");
+        if (_verbose)
+            VerboseHelper.Log($"[dim]GetDocumentSegmentsAsync: collection='{VerboseHelper.Escape(collectionName)}', docId='{VerboseHelper.Escape(docId)}'[/]");
+
         // Scroll through all points for this document
         while (true)
         {
@@ -225,20 +237,27 @@ public class QdrantVectorStore : IVectorStore
                 payloadSelector: true,
                 vectorsSelector: true,
                 cancellationToken: ct);
-            
+
+            Console.WriteLine($"[DEBUG]   Scroll returned {scrollResult.Result.Count} points");
+            if (_verbose)
+                VerboseHelper.Log($"[dim]  Scroll returned {scrollResult.Result.Count} points[/]");
+
             foreach (var point in scrollResult.Result)
             {
                 var segment = PayloadToSegment(point.Payload, 0, ExtractVectorData(point.Vectors));
                 if (segment != null)
                     segments.Add(segment);
             }
-            
+
             if (scrollResult.NextPageOffset == null)
                 break;
-            
+
             offset = scrollResult.NextPageOffset;
         }
-        
+
+        if (_verbose)
+            VerboseHelper.Log($"[dim]  Total segments retrieved: {segments.Count}[/]");
+
         return segments.OrderBy(s => s.Index).ToList();
     }
     
