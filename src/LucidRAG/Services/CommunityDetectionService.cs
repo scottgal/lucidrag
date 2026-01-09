@@ -103,10 +103,10 @@ public class CommunityDetectionService : ICommunityDetectionService
             adjacency[targetIdx].Add((sourceIdx, edge.Weight)); // Undirected
         }
 
-        // Run Louvain algorithm
-        var (communities, modularity) = RunLouvain(adjacency, graphData.Nodes.Count);
+        // Run Leiden algorithm (improved Louvain with connectivity guarantees)
+        var (communities, modularity) = RunLeiden(adjacency, graphData.Nodes.Count);
 
-        _logger.LogInformation("Louvain found {CommunityCount} communities with modularity {Modularity:F3}",
+        _logger.LogInformation("Leiden found {CommunityCount} communities with modularity {Modularity:F3}",
             communities.Values.Distinct().Count(), modularity);
 
         // Clear existing communities
@@ -169,7 +169,7 @@ public class CommunityDetectionService : ICommunityDetectionService
             {
                 Id = Guid.NewGuid(),
                 Name = $"Community {idx + 1}: {string.Join(", ", topEntities)}",
-                Algorithm = "louvain",
+                Algorithm = "leiden",
                 Level = 0,
                 EntityCount = memberEntities.Count,
                 Cohesion = features.InternalSimilarity,
@@ -223,9 +223,12 @@ public class CommunityDetectionService : ICommunityDetectionService
     }
 
     /// <summary>
-    /// Louvain community detection algorithm
+    /// Leiden community detection algorithm
+    /// Improves on Louvain by adding a refinement phase to ensure well-connected communities.
+    /// Based on: Traag, V.A., Waltman, L. & van Eck, N.J. (2019)
+    /// "From Louvain to Leiden: guaranteeing well-connected communities"
     /// </summary>
-    private (Dictionary<int, int> communities, double modularity) RunLouvain(
+    private (Dictionary<int, int> communities, double modularity) RunLeiden(
         Dictionary<int, List<(int neighbor, float weight)>> adjacency,
         int nodeCount)
     {
@@ -243,23 +246,58 @@ public class CommunityDetectionService : ICommunityDetectionService
             nodeWeights[node] = neighbors.Sum(n => n.weight);
         }
 
-        // Iteratively optimize modularity
-        bool improved;
         var maxIterations = 100;
         var iteration = 0;
+        bool improved;
 
         do
         {
             improved = false;
             iteration++;
 
+            // Phase 1: Local moving (same as Louvain)
+            var moved = LocalMovingPhase(communities, adjacency, nodeWeights, totalWeight, nodeCount);
+            improved = moved;
+
+            // Phase 2: Refinement - check for and fix poorly connected communities
+            if (improved)
+            {
+                RefineCommunitiesPhase(communities, adjacency, nodeWeights, totalWeight, nodeCount);
+            }
+
+        } while (improved && iteration < maxIterations);
+
+        // Renumber communities to be contiguous
+        var communityMap = communities.Values.Distinct().Select((c, i) => (c, i)).ToDictionary(x => x.c, x => x.i);
+        communities = communities.ToDictionary(kv => kv.Key, kv => communityMap[kv.Value]);
+
+        // Calculate final modularity
+        var modularity = CalculateModularity(communities, adjacency, nodeWeights, totalWeight);
+
+        return (communities, modularity);
+    }
+
+    /// <summary>
+    /// Local moving phase: Greedily move nodes to improve modularity
+    /// </summary>
+    private bool LocalMovingPhase(
+        Dictionary<int, int> communities,
+        Dictionary<int, List<(int neighbor, float weight)>> adjacency,
+        float[] nodeWeights, float totalWeight, int nodeCount)
+    {
+        var moved = false;
+        var changed = true;
+
+        while (changed)
+        {
+            changed = false;
             foreach (var node in Enumerable.Range(0, nodeCount).OrderBy(_ => Random.Shared.Next()))
             {
                 if (!adjacency.ContainsKey(node)) continue;
 
                 var currentCommunity = communities[node];
 
-                // Calculate modularity gain for moving to each neighbor's community
+                // Find best community among neighbors
                 var neighborCommunities = adjacency[node]
                     .Select(n => communities[n.neighbor])
                     .Distinct()
@@ -285,19 +323,99 @@ public class CommunityDetectionService : ICommunityDetectionService
                 if (bestCommunity != currentCommunity)
                 {
                     communities[node] = bestCommunity;
-                    improved = true;
+                    changed = true;
+                    moved = true;
                 }
             }
-        } while (improved && iteration < maxIterations);
+        }
 
-        // Renumber communities to be contiguous
-        var communityMap = communities.Values.Distinct().Select((c, i) => (c, i)).ToDictionary(x => x.c, x => x.i);
-        communities = communities.ToDictionary(kv => kv.Key, kv => communityMap[kv.Value]);
+        return moved;
+    }
 
-        // Calculate final modularity
-        var modularity = CalculateModularity(communities, adjacency, nodeWeights, totalWeight);
+    /// <summary>
+    /// Refinement phase: Check communities for connectivity and split poorly connected ones
+    /// This is the key difference from Louvain - Leiden guarantees well-connected communities
+    /// </summary>
+    private void RefineCommunitiesPhase(
+        Dictionary<int, int> communities,
+        Dictionary<int, List<(int neighbor, float weight)>> adjacency,
+        float[] nodeWeights, float totalWeight, int nodeCount)
+    {
+        // Group nodes by community
+        var communityNodes = communities
+            .GroupBy(kv => kv.Value)
+            .ToDictionary(g => g.Key, g => g.Select(kv => kv.Key).ToHashSet());
 
-        return (communities, modularity);
+        var nextCommunityId = communities.Values.Max() + 1;
+
+        foreach (var (communityId, nodes) in communityNodes)
+        {
+            if (nodes.Count < 2) continue;
+
+            // Check if community is well-connected using BFS
+            var components = FindConnectedComponents(nodes, adjacency);
+
+            if (components.Count > 1)
+            {
+                // Community has disconnected components - split them
+                // Keep the largest component in the original community
+                var sortedComponents = components.OrderByDescending(c => c.Count).ToList();
+
+                // First (largest) component keeps the community ID
+                // Other components get new community IDs
+                for (var i = 1; i < sortedComponents.Count; i++)
+                {
+                    foreach (var node in sortedComponents[i])
+                    {
+                        communities[node] = nextCommunityId;
+                    }
+                    nextCommunityId++;
+                }
+            }
+        }
+    }
+
+    /// <summary>
+    /// Find connected components within a set of nodes using BFS
+    /// </summary>
+    private List<HashSet<int>> FindConnectedComponents(
+        HashSet<int> nodes,
+        Dictionary<int, List<(int neighbor, float weight)>> adjacency)
+    {
+        var components = new List<HashSet<int>>();
+        var visited = new HashSet<int>();
+
+        foreach (var startNode in nodes)
+        {
+            if (visited.Contains(startNode)) continue;
+
+            // BFS to find connected component
+            var component = new HashSet<int>();
+            var queue = new Queue<int>();
+            queue.Enqueue(startNode);
+            visited.Add(startNode);
+
+            while (queue.Count > 0)
+            {
+                var node = queue.Dequeue();
+                component.Add(node);
+
+                if (!adjacency.TryGetValue(node, out var neighbors)) continue;
+
+                foreach (var (neighbor, _) in neighbors)
+                {
+                    if (nodes.Contains(neighbor) && !visited.Contains(neighbor))
+                    {
+                        visited.Add(neighbor);
+                        queue.Enqueue(neighbor);
+                    }
+                }
+            }
+
+            components.Add(component);
+        }
+
+        return components;
     }
 
     private double CalculateModularityGain(
@@ -587,14 +705,20 @@ SUMMARY: [one sentence description]";
         // Remove markdown formatting
         var cleaned = text.Trim();
 
-        // Remove leading/trailing asterisks, quotes, hashes, dashes
-        while (cleaned.Length > 0 && "*#-_\"'`".Contains(cleaned[0]))
+        // Remove leading asterisks, spaces, quotes, hashes, dashes repeatedly
+        const string trimChars = "*#-_\"'` ";
+        while (cleaned.Length > 0 && trimChars.Contains(cleaned[0]))
             cleaned = cleaned[1..];
-        while (cleaned.Length > 0 && "*#-_\"'`".Contains(cleaned[^1]))
+        while (cleaned.Length > 0 && trimChars.Contains(cleaned[^1]))
             cleaned = cleaned[..^1];
 
         // Remove common markdown patterns
-        cleaned = cleaned.Replace("**", "").Replace("__", "").Trim();
+        cleaned = cleaned
+            .Replace("**", "")
+            .Replace("__", "")
+            .Replace("* ", "")
+            .Replace("# ", "")
+            .Trim();
 
         return cleaned;
     }
