@@ -73,15 +73,15 @@ public class QdrantVectorStore : IVectorStore
         }
     }
     
-    public async Task<bool> HasDocumentAsync(string collectionName, string docId, CancellationToken ct = default)
+    public async Task<bool> HasDocumentAsync(string collectionName, string docHash, CancellationToken ct = default)
     {
         try
         {
             var collections = await _client.ListCollectionsAsync(ct);
             if (!collections.Any(c => c == collectionName))
                 return false;
-            
-            // Use scroll to find any point with this docId
+
+            // Use scroll to find any point with this docHash (content hash, not filename)
             var scrollResult = await _client.ScrollAsync(
                 collectionName,
                 filter: new Filter
@@ -92,15 +92,15 @@ public class QdrantVectorStore : IVectorStore
                         {
                             Field = new FieldCondition
                             {
-                                Key = "docId",
-                                Match = new Match { Keyword = docId }
+                                Key = "docHash",
+                                Match = new Match { Keyword = docHash }
                             }
                         }
                     }
                 },
                 limit: 1,
                 cancellationToken: ct);
-            
+
             return scrollResult.Result.Count > 0;
         }
         catch
@@ -116,32 +116,24 @@ public class QdrantVectorStore : IVectorStore
         if (segmentList.Count == 0)
             return;
 
-        // Debug: log the first segment's ID and extracted docId
-        if (segmentList.Count > 0)
-        {
-            var firstSeg = segmentList[0];
-            var extractedDocId = ExtractDocId(firstSeg.Id);
-            Console.WriteLine($"[DEBUG] UpsertSegmentsAsync: collection='{collectionName}', count={segmentList.Count}, firstId='{firstSeg.Id}', extractedDocId='{extractedDocId}'");
-        }
-
         // Convert segments to Qdrant points
+        // NOTE: No text or PII stored in vector DB - only embeddings + non-PII metadata
+        // Text is stored in evidence repository (PostgreSQL) keyed by contentHash
         var points = segmentList.Select(s => new PointStruct
         {
-            Id = new PointId { Uuid = GenerateUuidFromId(s.Id) },
+            Id = new PointId { Uuid = GenerateUuidFromId(s.ContentHash ?? s.Id) },
             Vectors = s.Embedding!,
             Payload =
             {
-                ["segmentId"] = s.Id,
-                ["docId"] = ExtractDocId(s.Id),
-                ["text"] = s.Text,
+                // Use content hash as ID - no filename/PII leakage
+                ["segmentHash"] = s.ContentHash ?? GenerateHashFromText(s.Text),
+                ["docHash"] = ExtractDocHash(s.Id),
+                // Non-PII metadata only
                 ["type"] = s.Type.ToString(),
                 ["index"] = s.Index,
-                ["sectionTitle"] = s.SectionTitle ?? "",
-                ["headingPath"] = s.HeadingPath ?? "",
                 ["headingLevel"] = s.HeadingLevel,
                 ["salienceScore"] = s.SalienceScore,
                 ["positionWeight"] = s.PositionWeight,
-                ["contentHash"] = s.ContentHash ?? "",
                 ["startChar"] = s.StartChar,
                 ["endChar"] = s.EndChar,
                 ["chunkIndex"] = s.ChunkIndex
@@ -164,15 +156,16 @@ public class QdrantVectorStore : IVectorStore
     }
     
     public async Task<List<Segment>> SearchAsync(
-        string collectionName, 
-        float[] queryEmbedding, 
-        int topK, 
-        string? docId = null,
+        string collectionName,
+        float[] queryEmbedding,
+        int topK,
+        string? docHash = null,
         CancellationToken ct = default)
     {
         Filter? filter = null;
-        if (!string.IsNullOrEmpty(docId))
+        if (!string.IsNullOrEmpty(docHash))
         {
+            // Filter by docHash (content hash, not filename - no PII)
             filter = new Filter
             {
                 Must =
@@ -181,14 +174,14 @@ public class QdrantVectorStore : IVectorStore
                     {
                         Field = new FieldCondition
                         {
-                            Key = "docId",
-                            Match = new Match { Keyword = docId }
+                            Key = "docHash",
+                            Match = new Match { Keyword = docHash }
                         }
                     }
                 }
             };
         }
-        
+
         var results = await _client.SearchAsync(
             collectionName,
             queryEmbedding,
@@ -196,7 +189,7 @@ public class QdrantVectorStore : IVectorStore
             limit: (ulong)topK,
             payloadSelector: true,
             cancellationToken: ct);
-        
+
         return results
             .Select(r => PayloadToSegment(r.Payload, r.Score))
             .Where(s => s != null)
@@ -204,16 +197,15 @@ public class QdrantVectorStore : IVectorStore
             .ToList();
     }
     
-    public async Task<List<Segment>> GetDocumentSegmentsAsync(string collectionName, string docId, CancellationToken ct = default)
+    public async Task<List<Segment>> GetDocumentSegmentsAsync(string collectionName, string docHash, CancellationToken ct = default)
     {
         var segments = new List<Segment>();
         PointId? offset = null;
 
-        Console.WriteLine($"[DEBUG] GetDocumentSegmentsAsync: collection='{collectionName}', docId='{docId}'");
         if (_verbose)
-            VerboseHelper.Log($"[dim]GetDocumentSegmentsAsync: collection='{VerboseHelper.Escape(collectionName)}', docId='{VerboseHelper.Escape(docId)}'[/]");
+            VerboseHelper.Log($"[dim]GetDocumentSegmentsAsync: collection='{VerboseHelper.Escape(collectionName)}', docHash='{VerboseHelper.Escape(docHash)}'[/]");
 
-        // Scroll through all points for this document
+        // Scroll through all points for this document (filtered by docHash, not filename)
         while (true)
         {
             var scrollResult = await _client.ScrollAsync(
@@ -226,8 +218,8 @@ public class QdrantVectorStore : IVectorStore
                         {
                             Field = new FieldCondition
                             {
-                                Key = "docId",
-                                Match = new Match { Keyword = docId }
+                                Key = "docHash",
+                                Match = new Match { Keyword = docHash }
                             }
                         }
                     }
@@ -238,7 +230,6 @@ public class QdrantVectorStore : IVectorStore
                 vectorsSelector: true,
                 cancellationToken: ct);
 
-            Console.WriteLine($"[DEBUG]   Scroll returned {scrollResult.Result.Count} points");
             if (_verbose)
                 VerboseHelper.Log($"[dim]  Scroll returned {scrollResult.Result.Count} points[/]");
 
@@ -276,8 +267,9 @@ public class QdrantVectorStore : IVectorStore
         }
     }
     
-    public async Task DeleteDocumentAsync(string collectionName, string docId, CancellationToken ct = default)
+    public async Task DeleteDocumentAsync(string collectionName, string docHash, CancellationToken ct = default)
     {
+        // Delete by docHash (content hash, not filename - no PII)
         await _client.DeleteAsync(
             collectionName,
             new Filter
@@ -288,16 +280,16 @@ public class QdrantVectorStore : IVectorStore
                     {
                         Field = new FieldCondition
                         {
-                            Key = "docId",
-                            Match = new Match { Keyword = docId }
+                            Key = "docHash",
+                            Match = new Match { Keyword = docHash }
                         }
                     }
                 }
             },
             cancellationToken: ct);
-        
+
         if (_verbose)
-            VerboseHelper.Log($"[dim]Deleted document '{VerboseHelper.Escape(docId)}' from Qdrant collection '{VerboseHelper.Escape(collectionName)}'[/]");
+            VerboseHelper.Log($"[dim]Deleted document by hash from Qdrant collection '{VerboseHelper.Escape(collectionName)}'[/]");
     }
     
     public async ValueTask DisposeAsync()
@@ -345,30 +337,32 @@ public class QdrantVectorStore : IVectorStore
     }
     
     private static Segment? PayloadToSegment(
-        IDictionary<string, Value>? payload, 
+        IDictionary<string, Value>? payload,
         float score,
         float[]? embedding = null)
     {
         if (payload == null) return null;
-        
+
         try
         {
-            var segmentId = payload.TryGetValue("segmentId", out var sidVal) ? sidVal.StringValue : "";
-            var text = payload.TryGetValue("text", out var textVal) ? textVal.StringValue : "";
+            // No PII stored in vector DB - use hashes as identifiers
+            // Text is retrieved from evidence repository (PostgreSQL) using segmentHash
+            var segmentHash = payload.TryGetValue("segmentHash", out var shVal) ? shVal.StringValue : "";
+            var docHash = payload.TryGetValue("docHash", out var dhVal) ? dhVal.StringValue : "";
             var typeStr = payload.TryGetValue("type", out var typeVal) ? typeVal.StringValue : "Sentence";
             var index = payload.TryGetValue("index", out var indexVal) ? (int)indexVal.IntegerValue : 0;
             var startChar = payload.TryGetValue("startChar", out var startVal) ? (int)startVal.IntegerValue : 0;
             var endChar = payload.TryGetValue("endChar", out var endVal) ? (int)endVal.IntegerValue : 0;
-            
+
             if (!Enum.TryParse<SegmentType>(typeStr, out var type))
                 type = SegmentType.Sentence;
-            
-            var docId = ExtractDocId(segmentId);
-            
-            var segment = new Segment(docId, text, type, index, startChar, endChar)
+
+            // Create segment with hash-based ID and empty text
+            // Text will be hydrated from evidence repository by the caller
+            var segment = new Segment(docHash, "", type, index, startChar, endChar)
             {
-                SectionTitle = payload.TryGetValue("sectionTitle", out var secVal) ? secVal.StringValue : "",
-                HeadingPath = payload.TryGetValue("headingPath", out var hpVal) ? hpVal.StringValue : "",
+                ContentHash = segmentHash,
+                // No PII fields: sectionTitle, headingPath removed
                 HeadingLevel = payload.TryGetValue("headingLevel", out var hlVal) ? (int)hlVal.IntegerValue : 0,
                 SalienceScore = payload.TryGetValue("salienceScore", out var salVal) ? salVal.DoubleValue : 0,
                 PositionWeight = payload.TryGetValue("positionWeight", out var pwVal) ? pwVal.DoubleValue : 1.0,
@@ -376,7 +370,7 @@ public class QdrantVectorStore : IVectorStore
                 QuerySimilarity = score,
                 Embedding = embedding
             };
-            
+
             return segment;
         }
         catch
@@ -385,34 +379,56 @@ public class QdrantVectorStore : IVectorStore
         }
     }
     
-    private static string ExtractDocId(string segmentId)
+    /// <summary>
+    /// Extract a non-PII doc hash from a segment ID.
+    /// Returns only the hash portion, not the filename.
+    /// </summary>
+    private static string ExtractDocHash(string segmentId)
     {
-        // Segment ID format: docid_type_index (e.g., "mydoc_s_42")
-        // We need to extract everything before the last two underscore-separated parts
+        // Segment ID format: filename_contenthash_type_index
+        // We want just the content hash portion (typically second-to-last group before _s_ or _p_)
         var parts = segmentId.Split('_');
-        if (parts.Length >= 3)
+        if (parts.Length >= 4)
         {
-            return string.Join("_", parts.Take(parts.Length - 2));
+            // Look for the hash portion (16 char hex)
+            for (int i = parts.Length - 3; i >= 0; i--)
+            {
+                if (parts[i].Length == 16 && parts[i].All(c => char.IsLetterOrDigit(c)))
+                {
+                    return parts[i];
+                }
+            }
         }
-        return segmentId;
+        // Fallback: generate hash from the full ID
+        return GenerateHashFromText(segmentId);
     }
-    
+
+    /// <summary>
+    /// Generate a deterministic hash from text for non-PII identification.
+    /// </summary>
+    private static string GenerateHashFromText(string text)
+    {
+        var bytes = Encoding.UTF8.GetBytes(text);
+        var hash = XxHash64.Hash(bytes);
+        return Convert.ToHexString(hash).ToLowerInvariant();
+    }
+
     // === Segment-Level Caching (Granular Invalidation) ===
     
     public async Task<Dictionary<string, Segment>> GetSegmentsByHashAsync(
-        string collectionName, 
-        IEnumerable<string> contentHashes, 
+        string collectionName,
+        IEnumerable<string> contentHashes,
         CancellationToken ct = default)
     {
         var result = new Dictionary<string, Segment>();
         var hashList = contentHashes.ToList();
-        
+
         if (hashList.Count == 0)
             return result;
-        
+
         try
         {
-            // Scroll through segments with matching content hashes
+            // Scroll through segments with matching segment hashes
             // Qdrant doesn't support IN filter well, so we use multiple OR conditions
             // For large hash sets, this could be batched
             foreach (var hashBatch in hashList.Chunk(50))
@@ -424,12 +440,12 @@ public class QdrantVectorStore : IVectorStore
                     {
                         Field = new FieldCondition
                         {
-                            Key = "contentHash",
+                            Key = "segmentHash",  // Changed from contentHash
                             Match = new Match { Keyword = hash }
                         }
                     });
                 }
-                
+
                 var scrollResult = await _client.ScrollAsync(
                     collectionName,
                     filter: filter,
@@ -437,7 +453,7 @@ public class QdrantVectorStore : IVectorStore
                     payloadSelector: true,
                     vectorsSelector: true,
                     cancellationToken: ct);
-                
+
                 foreach (var point in scrollResult.Result)
                 {
                     var segment = PayloadToSegment(point.Payload, 0, ExtractVectorData(point.Vectors));
@@ -447,7 +463,7 @@ public class QdrantVectorStore : IVectorStore
                     }
                 }
             }
-            
+
             if (_verbose && result.Count > 0)
                 VerboseHelper.Log(_verbose, $"[dim]Found {result.Count}/{hashList.Count} cached segments by hash[/]");
         }
@@ -456,38 +472,39 @@ public class QdrantVectorStore : IVectorStore
             if (_verbose)
                 VerboseHelper.Log($"[yellow]GetSegmentsByHash failed: {VerboseHelper.Escape(ex.Message)}[/]");
         }
-        
+
         return result;
     }
     
     public async Task RemoveStaleSegmentsAsync(
-        string collectionName, 
-        string docId, 
-        IEnumerable<string> validContentHashes, 
+        string collectionName,
+        string docHash,
+        IEnumerable<string> validContentHashes,
         CancellationToken ct = default)
     {
         try
         {
             var validHashes = validContentHashes.ToHashSet();
-            
-            // Get all segments for this document
-            var docSegments = await GetDocumentSegmentsAsync(collectionName, docId, ct);
-            
+
+            // Get all segments for this document (by docHash)
+            var docSegments = await GetDocumentSegmentsAsync(collectionName, docHash, ct);
+
             // Find segments to delete (those not in valid hashes)
-            var staleIds = docSegments
+            var staleHashes = docSegments
                 .Where(s => !validHashes.Contains(s.ContentHash))
-                .Select(s => s.Id)
+                .Select(s => s.ContentHash)
+                .Where(h => !string.IsNullOrEmpty(h))
                 .ToList();
-            
-            if (staleIds.Count == 0)
+
+            if (staleHashes.Count == 0)
                 return;
-            
-            // Delete stale segments by ID
-            var pointIds = staleIds.Select(id => new PointId { Uuid = GenerateUuidFromId(id) }).ToList();
+
+            // Delete stale segments by their content hash (used as point ID)
+            var pointIds = staleHashes.Select(hash => new PointId { Uuid = GenerateUuidFromId(hash!) }).ToList();
             await _client.DeleteAsync(collectionName, pointIds, cancellationToken: ct);
-            
+
             if (_verbose)
-                VerboseHelper.Log($"[dim]Removed {staleIds.Count} stale segments from '{VerboseHelper.Escape(docId)}'[/]");
+                VerboseHelper.Log($"[dim]Removed {staleHashes.Count} stale segments from document[/]");
         }
         catch (Exception ex)
         {

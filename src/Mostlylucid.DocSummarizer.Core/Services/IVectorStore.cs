@@ -6,6 +6,12 @@ namespace Mostlylucid.DocSummarizer.Services;
 /// Abstraction for vector storage in BertRag pipeline.
 /// Allows switching between in-memory (default) and persistent (Qdrant) storage.
 /// Supports both segment storage (for retrieval) and summary caching (to avoid re-LLM).
+///
+/// PRIVACY: Vector store contains NO PII or text content. All text is stored in the
+/// evidence repository (PostgreSQL). The vector DB only contains:
+/// - Embeddings (numeric vectors)
+/// - Content hashes (segmentHash, docHash) for lookup
+/// - Non-PII metadata (type, index, scores, positions)
 /// </summary>
 public interface IVectorStore : IAsyncDisposable, IDisposable
 {
@@ -16,63 +22,66 @@ public interface IVectorStore : IAsyncDisposable, IDisposable
     /// <param name="vectorSize">Dimension of the embedding vectors</param>
     /// <param name="ct">Cancellation token</param>
     Task InitializeAsync(string collectionName, int vectorSize, CancellationToken ct = default);
-    
+
     /// <summary>
     /// Check if a collection exists and has segments for the given document
     /// </summary>
     /// <param name="collectionName">Name of the collection</param>
-    /// <param name="docId">Document identifier (content-hash based for stability)</param>
+    /// <param name="docHash">Document content hash (not filename - for privacy)</param>
     /// <param name="ct">Cancellation token</param>
     /// <returns>True if the document is already indexed</returns>
-    Task<bool> HasDocumentAsync(string collectionName, string docId, CancellationToken ct = default);
-    
+    Task<bool> HasDocumentAsync(string collectionName, string docHash, CancellationToken ct = default);
+
     /// <summary>
-    /// Store segments with their embeddings
+    /// Store segments with their embeddings.
+    /// NOTE: Text is NOT stored - only embeddings and non-PII metadata.
     /// </summary>
     /// <param name="collectionName">Name of the collection</param>
     /// <param name="segments">Segments to store (must have embeddings)</param>
     /// <param name="ct">Cancellation token</param>
     Task UpsertSegmentsAsync(string collectionName, IEnumerable<Segment> segments, CancellationToken ct = default);
-    
+
     /// <summary>
-    /// Search for similar segments by embedding vector
+    /// Search for similar segments by embedding vector.
+    /// NOTE: Returned segments have empty text - caller must hydrate from evidence repository.
     /// </summary>
     /// <param name="collectionName">Name of the collection</param>
     /// <param name="queryEmbedding">Query vector</param>
     /// <param name="topK">Number of results to return</param>
-    /// <param name="docId">Optional: filter by document ID</param>
+    /// <param name="docHash">Optional: filter by document content hash</param>
     /// <param name="ct">Cancellation token</param>
-    /// <returns>Segments ordered by similarity (descending)</returns>
+    /// <returns>Segments ordered by similarity (descending), text must be hydrated separately</returns>
     Task<List<Segment>> SearchAsync(
-        string collectionName, 
-        float[] queryEmbedding, 
-        int topK, 
-        string? docId = null,
+        string collectionName,
+        float[] queryEmbedding,
+        int topK,
+        string? docHash = null,
         CancellationToken ct = default);
-    
+
     /// <summary>
-    /// Get all segments for a document (for salience-based retrieval without query)
+    /// Get all segments for a document (for salience-based retrieval without query).
+    /// NOTE: Returned segments have empty text - caller must hydrate from evidence repository.
     /// </summary>
     /// <param name="collectionName">Name of the collection</param>
-    /// <param name="docId">Document identifier</param>
+    /// <param name="docHash">Document content hash</param>
     /// <param name="ct">Cancellation token</param>
     /// <returns>All segments for the document</returns>
-    Task<List<Segment>> GetDocumentSegmentsAsync(string collectionName, string docId, CancellationToken ct = default);
-    
+    Task<List<Segment>> GetDocumentSegmentsAsync(string collectionName, string docHash, CancellationToken ct = default);
+
     /// <summary>
     /// Delete a collection
     /// </summary>
     /// <param name="collectionName">Name of the collection to delete</param>
     /// <param name="ct">Cancellation token</param>
     Task DeleteCollectionAsync(string collectionName, CancellationToken ct = default);
-    
+
     /// <summary>
     /// Delete segments for a specific document
     /// </summary>
     /// <param name="collectionName">Name of the collection</param>
-    /// <param name="docId">Document identifier</param>
+    /// <param name="docHash">Document content hash</param>
     /// <param name="ct">Cancellation token</param>
-    Task DeleteDocumentAsync(string collectionName, string docId, CancellationToken ct = default);
+    Task DeleteDocumentAsync(string collectionName, string docHash, CancellationToken ct = default);
     
     /// <summary>
     /// Whether this store persists data between runs
@@ -98,13 +107,13 @@ public interface IVectorStore : IAsyncDisposable, IDisposable
     /// Remove segments that no longer exist in the document (drift cleanup).
     /// </summary>
     /// <param name="collectionName">Name of the collection</param>
-    /// <param name="docId">Document ID</param>
+    /// <param name="docHash">Document content hash</param>
     /// <param name="validContentHashes">Hashes of segments that still exist</param>
     /// <param name="ct">Cancellation token</param>
     Task RemoveStaleSegmentsAsync(
-        string collectionName, 
-        string docId, 
-        IEnumerable<string> validContentHashes, 
+        string collectionName,
+        string docHash,
+        IEnumerable<string> validContentHashes,
         CancellationToken ct = default);
     
     // === Summary Caching ===

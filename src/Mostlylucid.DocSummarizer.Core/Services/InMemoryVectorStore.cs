@@ -28,13 +28,14 @@ public class InMemoryVectorStore : IVectorStore
         return Task.CompletedTask;
     }
     
-    public Task<bool> HasDocumentAsync(string collectionName, string docId, CancellationToken ct = default)
+    public Task<bool> HasDocumentAsync(string collectionName, string docHash, CancellationToken ct = default)
     {
         if (!_collections.TryGetValue(collectionName, out var segments))
             return Task.FromResult(false);
-        
-        // Check if any segment belongs to this document
-        var hasDoc = segments.Any(s => s.Id.StartsWith(SanitizeDocId(docId) + "_"));
+
+        // Check if any segment belongs to this document (by content hash)
+        var hasDoc = segments.Any(s => s.Id.StartsWith(SanitizeDocId(docHash) + "_") ||
+                                       s.ContentHash?.StartsWith(docHash) == true);
         return Task.FromResult(hasDoc);
     }
     
@@ -64,24 +65,25 @@ public class InMemoryVectorStore : IVectorStore
     }
     
     public Task<List<Segment>> SearchAsync(
-        string collectionName, 
-        float[] queryEmbedding, 
-        int topK, 
-        string? docId = null,
+        string collectionName,
+        float[] queryEmbedding,
+        int topK,
+        string? docHash = null,
         CancellationToken ct = default)
     {
         if (!_collections.TryGetValue(collectionName, out var segments))
             return Task.FromResult(new List<Segment>());
-        
+
         var candidates = segments.AsEnumerable();
-        
-        // Filter by document if specified
-        if (!string.IsNullOrEmpty(docId))
+
+        // Filter by document hash if specified
+        if (!string.IsNullOrEmpty(docHash))
         {
-            var prefix = SanitizeDocId(docId) + "_";
-            candidates = candidates.Where(s => s.Id.StartsWith(prefix));
+            var prefix = SanitizeDocId(docHash) + "_";
+            candidates = candidates.Where(s => s.Id.StartsWith(prefix) ||
+                                               s.ContentHash?.StartsWith(docHash) == true);
         }
-        
+
         // Score by cosine similarity and return top K
         var results = candidates
             .Where(s => s.Embedding != null)
@@ -95,21 +97,21 @@ public class InMemoryVectorStore : IVectorStore
                 return x.Segment;
             })
             .ToList();
-        
+
         return Task.FromResult(results);
     }
     
-    public Task<List<Segment>> GetDocumentSegmentsAsync(string collectionName, string docId, CancellationToken ct = default)
+    public Task<List<Segment>> GetDocumentSegmentsAsync(string collectionName, string docHash, CancellationToken ct = default)
     {
         if (!_collections.TryGetValue(collectionName, out var segments))
             return Task.FromResult(new List<Segment>());
-        
-        var prefix = SanitizeDocId(docId) + "_";
+
+        var prefix = SanitizeDocId(docHash) + "_";
         var docSegments = segments
-            .Where(s => s.Id.StartsWith(prefix))
+            .Where(s => s.Id.StartsWith(prefix) || s.ContentHash?.StartsWith(docHash) == true)
             .OrderBy(s => s.Index)
             .ToList();
-        
+
         return Task.FromResult(docSegments);
     }
     
@@ -123,19 +125,20 @@ public class InMemoryVectorStore : IVectorStore
         return Task.CompletedTask;
     }
     
-    public Task DeleteDocumentAsync(string collectionName, string docId, CancellationToken ct = default)
+    public Task DeleteDocumentAsync(string collectionName, string docHash, CancellationToken ct = default)
     {
         if (!_collections.TryGetValue(collectionName, out var segments))
             return Task.CompletedTask;
-        
-        var prefix = SanitizeDocId(docId) + "_";
-        var remaining = segments.Where(s => !s.Id.StartsWith(prefix)).ToList();
-        
+
+        var prefix = SanitizeDocId(docHash) + "_";
+        var remaining = segments.Where(s => !s.Id.StartsWith(prefix) &&
+                                            s.ContentHash?.StartsWith(docHash) != true).ToList();
+
         _collections[collectionName] = remaining;
-        
+
         if (_verbose)
-            Console.WriteLine($"[InMemoryVectorStore] Deleted document '{docId}' from '{collectionName}'");
-        
+            Console.WriteLine($"[InMemoryVectorStore] Deleted document by hash from '{collectionName}'");
+
         return Task.CompletedTask;
     }
     
@@ -179,27 +182,29 @@ public class InMemoryVectorStore : IVectorStore
     }
     
     public Task RemoveStaleSegmentsAsync(
-        string collectionName, 
-        string docId, 
-        IEnumerable<string> validContentHashes, 
+        string collectionName,
+        string docHash,
+        IEnumerable<string> validContentHashes,
         CancellationToken ct = default)
     {
         if (!_collections.TryGetValue(collectionName, out var segments))
             return Task.CompletedTask;
-        
+
         var validHashes = validContentHashes.ToHashSet();
-        var prefix = SanitizeDocId(docId) + "_";
-        
+        var prefix = SanitizeDocId(docHash) + "_";
+
+        // Keep segments that don't belong to this doc, or have valid content hashes
         var remaining = segments
-            .Where(s => !s.Id.StartsWith(prefix) || validHashes.Contains(s.ContentHash))
+            .Where(s => (!s.Id.StartsWith(prefix) && s.ContentHash?.StartsWith(docHash) != true) ||
+                        validHashes.Contains(s.ContentHash ?? ""))
             .ToList();
-        
+
         var removed = segments.Count - remaining.Count;
         _collections[collectionName] = remaining;
-        
+
         if (_verbose && removed > 0)
-            Console.WriteLine($"[InMemoryVectorStore] Removed {removed} stale segments from '{docId}'");
-        
+            Console.WriteLine($"[InMemoryVectorStore] Removed {removed} stale segments");
+
         return Task.CompletedTask;
     }
     
