@@ -122,6 +122,18 @@ public class HuggingFaceTokenizer
     }
 
     /// <summary>
+    /// Decode token IDs back to tokens (for NER span extraction).
+    /// </summary>
+    public string[] Decode(long[] inputIds)
+    {
+        // Build reverse vocab lazily
+        var reverseVocab = _vocab.ToDictionary(kv => kv.Value, kv => kv.Key);
+        var unkToken = reverseVocab.GetValueOrDefault(UnkTokenId, "[UNK]");
+
+        return inputIds.Select(id => reverseVocab.GetValueOrDefault((int)id, unkToken)).ToArray();
+    }
+
+    /// <summary>
     /// Encode text to token IDs with attention mask
     /// </summary>
     public (long[] InputIds, long[] AttentionMask, long[] TokenTypeIds) Encode(string text, int maxLength)

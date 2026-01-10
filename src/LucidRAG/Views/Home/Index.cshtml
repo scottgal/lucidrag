@@ -745,6 +745,179 @@
                     </div>
                 </div>
             </template>
+
+            <!-- Document Details View (Tab) - INSIDE Content Area -->
+            <template x-if="viewMode === 'details' && documentDetails">
+                <div class="flex-1 overflow-y-auto p-4">
+                    <div class="max-w-4xl mx-auto space-y-4">
+                        <!-- Header -->
+                        <div class="flex items-start justify-between">
+                            <div>
+                                <h2 class="text-xl font-bold flex items-center gap-2">
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-primary" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                                    </svg>
+                                    <span x-text="documentDetails.document.name"></span>
+                                </h2>
+                                <p class="text-sm opacity-60 mt-1">
+                                    <span x-text="documentDetails.document.originalFilename"></span>
+                                    <span class="mx-1">•</span>
+                                    <span x-text="formatFileSize(documentDetails.document.fileSizeBytes)"></span>
+                                    <span class="mx-1">•</span>
+                                    <span class="badge badge-sm" :class="getStatusBadgeClass(documentDetails.document.status)" x-text="documentDetails.document.status"></span>
+                                </p>
+                            </div>
+                            <button class="btn btn-sm btn-ghost" @@click="closeDocumentDetails()">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                                </svg>
+                            </button>
+                        </div>
+
+                        <!-- Stats -->
+                        <div class="stats stats-horizontal shadow w-full">
+                            <div class="stat">
+                                <div class="stat-title">Segments</div>
+                                <div class="stat-value text-lg" x-text="documentDetails.totalSegments || 0"></div>
+                            </div>
+                            <div class="stat">
+                                <div class="stat-title">Entities</div>
+                                <div class="stat-value text-lg" x-text="documentDetails.entitiesTotalCount || 0"></div>
+                            </div>
+                            <div class="stat">
+                                <div class="stat-title">Evidence</div>
+                                <div class="stat-value text-lg" x-text="documentDetails.evidenceCount || 0"></div>
+                            </div>
+                            <div class="stat">
+                                <div class="stat-title">Progress</div>
+                                <div class="stat-value text-lg" x-text="(documentDetails.document.progress || 0) + '%'"></div>
+                            </div>
+                        </div>
+
+                        <!-- Tabs within Details -->
+                        <div class="tabs tabs-boxed">
+                            <button class="tab" :class="detailsTab === 'entities' ? 'tab-active' : ''" @@click="detailsTab = 'entities'">
+                                Entities (<span x-text="documentDetails.entitiesTotalCount || 0"></span>)
+                            </button>
+                            <button class="tab" :class="detailsTab === 'evidence' ? 'tab-active' : ''" @@click="detailsTab = 'evidence'">
+                                Evidence (<span x-text="documentDetails.evidenceCount || 0"></span>)
+                            </button>
+                            <button class="tab" :class="detailsTab === 'segments' ? 'tab-active' : ''" @@click="detailsTab = 'segments'">
+                                Segments (<span x-text="documentDetails.totalSegments || 0"></span>)
+                            </button>
+                        </div>
+
+                        <!-- Entities Tab -->
+                        <template x-if="detailsTab === 'entities'">
+                            <div class="space-y-2">
+                                <template x-if="documentDetails.entities && documentDetails.entities.length > 0">
+                                    <template x-for="entity in documentDetails.entities" :key="entity.id">
+                                        <div class="card bg-base-200 shadow-sm">
+                                            <div class="card-body p-3">
+                                                <div class="flex items-center gap-2">
+                                                    <span class="badge" :class="getEntityTypeBadge(entity.type)" x-text="entity.type"></span>
+                                                    <span class="font-semibold" x-text="entity.name"></span>
+                                                </div>
+                                                <template x-if="entity.description">
+                                                    <p class="text-sm opacity-70 mt-1" x-text="entity.description"></p>
+                                                </template>
+                                                <template x-if="entity.aliases && entity.aliases.length > 0">
+                                                    <p class="text-xs opacity-50 mt-1">
+                                                        Aliases: <span x-text="entity.aliases.join(', ')"></span>
+                                                    </p>
+                                                </template>
+                                            </div>
+                                        </div>
+                                    </template>
+                                </template>
+                                <template x-if="!documentDetails.entities || documentDetails.entities.length === 0">
+                                    <div class="text-center py-8 opacity-50">
+                                        <p>No entities/signals extracted yet.</p>
+                                    </div>
+                                </template>
+                            </div>
+                        </template>
+
+                        <!-- Evidence Tab -->
+                        <template x-if="detailsTab === 'evidence'">
+                            <div class="space-y-2">
+                                <template x-if="documentDetails.evidence && documentDetails.evidence.length > 0">
+                                    <template x-for="ev in documentDetails.evidence" :key="ev.id">
+                                        <div class="card bg-base-200 shadow-sm">
+                                            <div class="card-body p-3">
+                                                <div class="flex items-center justify-between">
+                                                    <div class="flex items-center gap-2">
+                                                        <span class="badge badge-accent" x-text="ev.type"></span>
+                                                        <span class="font-semibold" x-text="ev.description"></span>
+                                                    </div>
+                                                    <template x-if="ev.confidence">
+                                                        <span class="text-xs opacity-60">
+                                                            Confidence: <span x-text="(ev.confidence * 100).toFixed(0) + '%'"></span>
+                                                        </span>
+                                                    </template>
+                                                </div>
+                                                <template x-if="ev.producerSource">
+                                                    <p class="text-xs opacity-50 mt-1">
+                                                        Source: <span x-text="ev.producerSource"></span>
+                                                    </p>
+                                                </template>
+                                            </div>
+                                        </div>
+                                    </template>
+                                </template>
+                                <template x-if="!documentDetails.evidence || documentDetails.evidence.length === 0">
+                                    <div class="text-center py-8 opacity-50">
+                                        <p>No evidence artifacts yet.</p>
+                                    </div>
+                                </template>
+                            </div>
+                        </template>
+
+                        <!-- Segments Tab -->
+                        <template x-if="detailsTab === 'segments'">
+                            <div class="space-y-2">
+                                <template x-if="documentDetails.segmentsTruncated">
+                                    <div class="alert alert-info text-sm">
+                                        Showing first 100 of <span x-text="documentDetails.totalSegments"></span> segments.
+                                    </div>
+                                </template>
+                                <template x-if="documentDetails.segments && documentDetails.segments.length > 0">
+                                    <template x-for="(segment, idx) in documentDetails.segments" :key="segment.id || idx">
+                                        <div class="card bg-base-200 shadow-sm">
+                                            <div class="card-body p-3">
+                                                <div class="flex items-center gap-2 mb-2">
+                                                    <span class="badge badge-sm badge-outline" x-text="'#' + segment.index"></span>
+                                                    <template x-if="segment.sectionTitle">
+                                                        <span class="text-sm font-medium" x-text="segment.sectionTitle"></span>
+                                                    </template>
+                                                    <template x-if="segment.pageNumber">
+                                                        <span class="text-xs opacity-60">Page <span x-text="segment.pageNumber"></span></span>
+                                                    </template>
+                                                </div>
+                                                <p class="text-sm" x-text="segment.text"></p>
+                                            </div>
+                                        </div>
+                                    </template>
+                                </template>
+                                <template x-if="!documentDetails.segments || documentDetails.segments.length === 0">
+                                    <div class="text-center py-8 opacity-50">
+                                        <p>No segments extracted yet.</p>
+                                    </div>
+                                </template>
+                            </div>
+                        </template>
+
+                        <!-- Retry Button for failed docs -->
+                        <template x-if="documentDetails.document.status === 'failed'">
+                            <div class="flex justify-end pt-4">
+                                <button class="btn btn-primary btn-sm" @@click="retryDocument(documentDetails.document.id)">
+                                    Retry Processing
+                                </button>
+                            </div>
+                        </template>
+                    </div>
+                </div>
+            </template>
         </div>
 
         <!-- Debug Panel (collapsible) -->
@@ -777,181 +950,6 @@
                         | Graph expansions: <span x-text="debugInfo.graphExpansions"></span>
                     </div>
                 </template>
-            </div>
-        </template>
-
-        <!-- Document Details View (Tab) -->
-        <template x-if="viewMode === 'details' && documentDetails">
-            <div class="flex-1 overflow-y-auto p-4">
-                <div class="max-w-4xl mx-auto space-y-4">
-                    <!-- Header -->
-                    <div class="flex items-start justify-between">
-                        <div>
-                            <h2 class="text-xl font-bold flex items-center gap-2">
-                                <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-primary" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                                </svg>
-                                <span x-text="documentDetails.document.name"></span>
-                            </h2>
-                            <p class="text-sm opacity-60 mt-1">
-                                <span x-text="documentDetails.document.originalFilename"></span>
-                                <span class="mx-1">•</span>
-                                <span x-text="formatFileSize(documentDetails.document.fileSizeBytes)"></span>
-                                <span class="mx-1">•</span>
-                                <span class="badge badge-sm" :class="getStatusBadgeClass(documentDetails.document.status)" x-text="documentDetails.document.status"></span>
-                            </p>
-                        </div>
-                        <button class="btn btn-sm btn-ghost" @@click="closeDocumentDetails()">
-                            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
-                            </svg>
-                        </button>
-                    </div>
-
-                    <!-- Stats -->
-                    <div class="stats stats-horizontal shadow w-full">
-                        <div class="stat">
-                            <div class="stat-title">Segments</div>
-                            <div class="stat-value text-lg" x-text="documentDetails.totalSegments || 0"></div>
-                        </div>
-                        <div class="stat">
-                            <div class="stat-title">Entities</div>
-                            <div class="stat-value text-lg" x-text="documentDetails.entitiesTotalCount || 0"></div>
-                        </div>
-                        <div class="stat">
-                            <div class="stat-title">Evidence</div>
-                            <div class="stat-value text-lg" x-text="documentDetails.evidenceCount || 0"></div>
-                        </div>
-                        <div class="stat">
-                            <div class="stat-title">Progress</div>
-                            <div class="stat-value text-lg" x-text="(documentDetails.document.progress || 0) + '%'"></div>
-                        </div>
-                    </div>
-
-                    <!-- Tabs within Details -->
-                    <div class="tabs tabs-boxed">
-                        <button class="tab" :class="detailsTab === 'entities' ? 'tab-active' : ''" @@click="detailsTab = 'entities'">
-                            Entities (<span x-text="documentDetails.entitiesTotalCount || 0"></span>)
-                        </button>
-                        <button class="tab" :class="detailsTab === 'evidence' ? 'tab-active' : ''" @@click="detailsTab = 'evidence'">
-                            Evidence (<span x-text="documentDetails.evidenceCount || 0"></span>)
-                        </button>
-                        <button class="tab" :class="detailsTab === 'segments' ? 'tab-active' : ''" @@click="detailsTab = 'segments'">
-                            Segments (<span x-text="documentDetails.totalSegments || 0"></span>)
-                        </button>
-                    </div>
-
-                    <!-- Entities Tab -->
-                    <template x-if="detailsTab === 'entities'">
-                        <div class="space-y-2">
-                            <template x-if="documentDetails.entities && documentDetails.entities.length > 0">
-                                <template x-for="entity in documentDetails.entities" :key="entity.id">
-                                    <div class="card bg-base-200 shadow-sm">
-                                        <div class="card-body p-3">
-                                            <div class="flex items-center gap-2">
-                                                <span class="badge" :class="getEntityTypeBadge(entity.type)" x-text="entity.type"></span>
-                                                <span class="font-semibold" x-text="entity.name"></span>
-                                            </div>
-                                            <template x-if="entity.description">
-                                                <p class="text-sm opacity-70 mt-1" x-text="entity.description"></p>
-                                            </template>
-                                            <template x-if="entity.aliases && entity.aliases.length > 0">
-                                                <div class="mt-2 flex flex-wrap gap-1">
-                                                    <span class="text-xs opacity-60">Aliases:</span>
-                                                    <template x-for="alias in entity.aliases" :key="alias">
-                                                        <span class="badge badge-xs badge-outline" x-text="alias"></span>
-                                                    </template>
-                                                </div>
-                                            </template>
-                                        </div>
-                                    </div>
-                                </template>
-                            </template>
-                            <template x-if="!documentDetails.entities || documentDetails.entities.length === 0">
-                                <div class="text-center py-8 opacity-50">
-                                    <p>No entities/signals extracted yet.</p>
-                                </div>
-                            </template>
-                        </div>
-                    </template>
-
-                    <!-- Evidence Tab -->
-                    <template x-if="detailsTab === 'evidence'">
-                        <div class="space-y-2">
-                            <template x-if="documentDetails.evidence && documentDetails.evidence.length > 0">
-                                <template x-for="ev in documentDetails.evidence" :key="ev.id">
-                                    <div class="card bg-base-200 shadow-sm">
-                                        <div class="card-body p-3">
-                                            <div class="flex items-center justify-between">
-                                                <div class="flex items-center gap-2">
-                                                    <span class="badge badge-accent" x-text="ev.type"></span>
-                                                    <span class="font-semibold" x-text="ev.description"></span>
-                                                </div>
-                                                <template x-if="ev.confidence">
-                                                    <span class="text-xs opacity-60">
-                                                        Confidence: <span x-text="(ev.confidence * 100).toFixed(0) + '%'"></span>
-                                                    </span>
-                                                </template>
-                                            </div>
-                                            <div class="flex items-center gap-4 text-xs opacity-60 mt-2">
-                                                <span>Producer: <span x-text="ev.producer || 'Unknown'"></span></span>
-                                                <span>Size: <span x-text="formatFileSize(ev.sizeBytes)"></span></span>
-                                            </div>
-                                        </div>
-                                    </div>
-                                </template>
-                            </template>
-                            <template x-if="!documentDetails.evidence || documentDetails.evidence.length === 0">
-                                <div class="text-center py-8 opacity-50">
-                                    <p>No evidence artifacts yet.</p>
-                                </div>
-                            </template>
-                        </div>
-                    </template>
-
-                    <!-- Segments Tab -->
-                    <template x-if="detailsTab === 'segments'">
-                        <div class="space-y-2">
-                            <template x-if="documentDetails.segmentsTruncated">
-                                <div class="alert alert-info text-sm">
-                                    Showing first 100 of <span x-text="documentDetails.totalSegments"></span> segments.
-                                </div>
-                            </template>
-                            <template x-if="documentDetails.segments && documentDetails.segments.length > 0">
-                                <template x-for="(segment, idx) in documentDetails.segments" :key="segment.id || idx">
-                                    <div class="card bg-base-200 shadow-sm">
-                                        <div class="card-body p-3">
-                                            <div class="flex items-center gap-2 mb-2">
-                                                <span class="badge badge-sm badge-outline" x-text="'#' + segment.index"></span>
-                                                <template x-if="segment.sectionTitle">
-                                                    <span class="text-sm font-medium" x-text="segment.sectionTitle"></span>
-                                                </template>
-                                                <template x-if="segment.pageNumber">
-                                                    <span class="text-xs opacity-60">Page <span x-text="segment.pageNumber"></span></span>
-                                                </template>
-                                            </div>
-                                            <p class="text-sm whitespace-pre-wrap" x-text="segment.text"></p>
-                                        </div>
-                                    </div>
-                                </template>
-                            </template>
-                            <template x-if="!documentDetails.segments || documentDetails.segments.length === 0">
-                                <div class="text-center py-8 opacity-50">
-                                    <p>No segments extracted yet.</p>
-                                </div>
-                            </template>
-                        </div>
-                    </template>
-
-                    <!-- Retry Button for failed docs -->
-                    <template x-if="documentDetails.document.status === 'failed'">
-                        <div class="flex justify-end pt-4">
-                            <button class="btn btn-primary btn-sm" @@click="retryDocument(documentDetails.document.id)">
-                                Retry Processing
-                            </button>
-                        </div>
-                    </template>
-                </div>
             </div>
         </template>
 

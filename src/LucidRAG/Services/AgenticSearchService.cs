@@ -7,10 +7,12 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using Mostlylucid.DocSummarizer;
 using Mostlylucid.DocSummarizer.Config;
+using Mostlylucid.DocSummarizer.Models;
 using Mostlylucid.DocSummarizer.Services;
 using LucidRAG.Config;
 using LucidRAG.Data;
 using LucidRAG.Services.Sentinel;
+using StyloFlow.Retrieval;
 
 namespace LucidRAG.Services;
 
@@ -71,8 +73,8 @@ public class AgenticSearchService(
             "Sentinel decomposed query into {SubQueryCount} sub-queries (confidence: {Confidence:F2}, mode: {Mode})",
             queryPlan.SubQueries.Count, queryPlan.Confidence, queryPlan.Mode);
 
-        // Execute sub-queries and merge results
-        var allResults = new List<SearchResultItem>();
+        // Execute sub-queries and merge results using BM25 + RRF
+        var allSegments = new List<(Segment Segment, double DenseScore, int Priority)>();
         var collectionName = _docSummarizerConfig.BertRag.CollectionName;
 
         // Build lookup for VectorStoreDocId -> DocumentEntity (handle duplicates by taking most recent)
@@ -82,111 +84,65 @@ public class AgenticSearchService(
             .Select(g => g.OrderByDescending(d => d.CreatedAt).First())
             .ToDictionaryAsync(d => d.VectorStoreDocId!, d => d, ct);
 
+        // Retrieve more candidates for BM25 re-ranking (3x the final count)
+        var candidateCount = Math.Max(request.TopK * 3, 50);
+
         foreach (var subQuery in queryPlan.SubQueries.OrderBy(sq => sq.Priority))
         {
             logger.LogDebug("Executing sub-query: {Query} (purpose: {Purpose})", subQuery.Query, subQuery.Purpose);
 
             var queryEmbedding = await embeddingService.EmbedAsync(subQuery.Query, ct);
 
-            // Debug: Log embedding info
-            logger.LogDebug("Query embedding dimension: {Dim}, first values: [{V0:F4}, {V1:F4}, {V2:F4}]",
-                queryEmbedding.Length,
-                queryEmbedding.Length > 0 ? queryEmbedding[0] : 0,
-                queryEmbedding.Length > 1 ? queryEmbedding[1] : 0,
-                queryEmbedding.Length > 2 ? queryEmbedding[2] : 0);
-
             var segments = await vectorStore.SearchAsync(
                 collectionName,
                 queryEmbedding,
-                subQuery.TopK,
+                candidateCount,
                 docId: null,
                 ct);
 
-            // Debug: Log search results
-            if (segments.Count > 0)
+            // Store with dense score and priority
+            foreach (var s in segments)
             {
-                logger.LogDebug("Search returned {Count} segments. Top result: '{Text}' (score: {Score:F4})",
-                    segments.Count,
-                    segments[0].Text?.Substring(0, Math.Min(50, segments[0].Text?.Length ?? 0)),
-                    segments[0].QuerySimilarity);
+                allSegments.Add((s, s.QuerySimilarity, subQuery.Priority));
             }
-
-            var subResults = segments
-                .Select((s, i) =>
-                {
-                    // Extract docId from segment ID (format: {docId}_{type}_{index})
-                    var segmentDocId = ExtractDocIdFromSegmentId(s.Id);
-                    var doc = segmentDocId != null && documentLookup.TryGetValue(segmentDocId, out var d) ? d : null;
-
-                    return new SearchResultItem(
-                        DocumentId: doc?.Id ?? Guid.Empty,
-                        DocumentName: doc?.Name ?? s.SectionTitle ?? s.HeadingPath ?? "Unknown",
-                        SegmentId: s.Id,
-                        Text: s.Text,
-                        Score: s.QuerySimilarity * (1.0 / subQuery.Priority), // Weight by priority
-                        SectionTitle: s.SectionTitle);
-                })
-                .ToList();
-
-            allResults.AddRange(subResults);
         }
 
-        // Extract significant keywords from query for boosting (ignore common stopwords)
-        var queryKeywords = ExtractSignificantKeywords(request.Query);
-        logger.LogInformation("Search mode: {Mode}, extracted keywords: [{Keywords}] from query '{Query}'",
-            request.SearchMode, string.Join(", ", queryKeywords), request.Query);
-
-        // Deduplicate and re-rank based on search mode
-        var mergedResults = allResults
-            .GroupBy(r => r.SegmentId)
-            .Select(g =>
-            {
-                var best = g.OrderByDescending(r => r.Score).First();
-                var baseScore = g.Sum(r => r.Score); // RRF-like aggregation
-
-                // Pure semantic mode - no keyword boosting
-                if (request.SearchMode == SearchMode.Semantic)
-                {
-                    return best with { Score = baseScore };
-                }
-
-                // Calculate keyword matches for hybrid/keyword modes
-                var text = best.Text?.ToLowerInvariant() ?? "";
-                var docName = best.DocumentName?.ToLowerInvariant() ?? "";
-                var sectionTitle = best.SectionTitle?.ToLowerInvariant() ?? "";
-
-                // Count matches in text, document name, and section title
-                var textMatches = queryKeywords.Count(kw => text.Contains(kw, StringComparison.OrdinalIgnoreCase));
-                var docNameMatches = queryKeywords.Count(kw => docName.Contains(kw, StringComparison.OrdinalIgnoreCase));
-                var sectionMatches = queryKeywords.Count(kw => sectionTitle.Contains(kw, StringComparison.OrdinalIgnoreCase));
-                var totalMatches = textMatches + docNameMatches + sectionMatches;
-
-                double finalScore;
-
-                if (request.SearchMode == SearchMode.Keyword)
-                {
-                    // Keyword mode: HEAVY boost for matches, severe penalty for no matches
-                    // This prioritizes exact keyword matches over semantic similarity
-                    var keywordBoost = (docNameMatches * 1.5) + (textMatches * 1.0) + (sectionMatches * 0.5);
-                    var noMatchPenalty = (totalMatches == 0 && queryKeywords.Count > 0) ? -0.5 : 0.0;
-                    finalScore = baseScore + keywordBoost + noMatchPenalty;
-                }
-                else // Hybrid mode (default)
-                {
-                    // Hybrid: balanced boost + mild penalty for completely irrelevant results
-                    var keywordBoost = (docNameMatches * 0.5) + (textMatches * 0.3) + (sectionMatches * 0.2);
-                    // Penalty for results with NO keyword matches when we have keywords to match
-                    var noMatchPenalty = (totalMatches == 0 && queryKeywords.Count > 0) ? -0.2 : 0.0;
-                    finalScore = baseScore + keywordBoost + noMatchPenalty;
-                }
-
-                return best with { Score = finalScore };
-            })
-            .OrderByDescending(r => r.Score)
-            .Take(request.TopK)
+        // Deduplicate segments by ID, keeping best dense score
+        var uniqueSegments = allSegments
+            .GroupBy(x => x.Segment.Id)
+            .Select(g => (Segment: g.First().Segment, DenseScore: g.Max(x => x.DenseScore)))
             .ToList();
 
-        // Log top results after boosting for debugging
+        logger.LogInformation("Search mode: {Mode}, retrieved {Count} unique segments for BM25+RRF",
+            request.SearchMode, uniqueSegments.Count);
+
+        List<SearchResultItem> mergedResults;
+
+        if (request.SearchMode == SearchMode.Semantic)
+        {
+            // Pure semantic mode - no BM25, just dense scores
+            mergedResults = uniqueSegments
+                .OrderByDescending(x => x.DenseScore)
+                .Take(request.TopK)
+                .Select(x => CreateSearchResultItem(x.Segment, x.DenseScore, documentLookup))
+                .ToList();
+        }
+        else
+        {
+            // Hybrid/Keyword mode - use BM25 + RRF (4-way: dense + sparse + salience + freshness)
+            var rrfResults = ApplyBm25Rrf(
+                uniqueSegments,
+                request.Query,
+                request.SearchMode,
+                request.TopK,
+                documentLookup);
+
+            mergedResults = rrfResults
+                .Select(x => CreateSearchResultItem(x.Segment, x.RrfScore, documentLookup))
+                .ToList();
+        }
+
+        // Log top results for debugging
         if (mergedResults.Count > 0)
         {
             logger.LogInformation("Top 3 results after {Mode} ranking:", request.SearchMode);
@@ -438,6 +394,132 @@ ANSWER:";
             return $"Based on the documents:\n\n{sources[0].Text}\n\n" +
                    (sources.Count > 1 ? $"Additional context from sources [{string.Join(", ", sources.Skip(1).Select(s => s.Number))}]." : "");
         }
+    }
+
+    /// <summary>
+    /// Apply BM25 scoring and combine with dense scores using Reciprocal Rank Fusion.
+    /// RRF(d) = 1/(k + rank_dense) + 1/(k + rank_bm25) + 1/(k + rank_salience) + 1/(k + rank_freshness)
+    ///
+    /// This four-way fusion captures:
+    /// - Semantic similarity (dense embeddings)
+    /// - Lexical matching (BM25 sparse retrieval)
+    /// - Document importance (salience from extraction)
+    /// - Freshness (recent documents boosted)
+    /// </summary>
+    private List<(Segment Segment, double RrfScore)> ApplyBm25Rrf(
+        List<(Segment Segment, double DenseScore)> candidates,
+        string query,
+        SearchMode mode,
+        int topK,
+        Dictionary<string, Entities.DocumentEntity>? documentLookup = null)
+    {
+        if (candidates.Count == 0) return [];
+
+        const int rrfK = 60; // RRF smoothing constant
+
+        // Build BM25 corpus from candidate texts
+        var corpus = Bm25Corpus.Build(candidates.Select(c => Bm25Scorer.Tokenize(c.Segment.Text)));
+        var bm25 = new Bm25Scorer(corpus);
+
+        // Score all candidates with BM25 and get document freshness
+        var scoredCandidates = candidates.Select(c =>
+        {
+            var bm25Score = bm25.Score(query, c.Segment.Text);
+
+            // Get document creation date for freshness scoring
+            DateTimeOffset createdAt = DateTimeOffset.MinValue;
+            var segmentDocId = ExtractDocIdFromSegmentId(c.Segment.Id);
+            if (segmentDocId != null && documentLookup?.TryGetValue(segmentDocId, out var doc) == true)
+            {
+                createdAt = doc.CreatedAt;
+            }
+
+            return (c.Segment, c.DenseScore, Bm25Score: bm25Score, Salience: c.Segment.SalienceScore, CreatedAt: createdAt);
+        }).ToList();
+
+        // Rank by each signal
+        var byDense = scoredCandidates.OrderByDescending(x => x.DenseScore).ToList();
+        var byBm25 = scoredCandidates.OrderByDescending(x => x.Bm25Score).ToList();
+        var bySalience = scoredCandidates.OrderByDescending(x => x.Salience).ToList();
+        var byFreshness = scoredCandidates.OrderByDescending(x => x.CreatedAt).ToList(); // Most recent first
+
+        // Compute RRF scores
+        var rrfScores = new Dictionary<string, double>();
+        var segmentLookup = candidates.ToDictionary(c => c.Segment.Id, c => c.Segment);
+
+        // Weights based on search mode
+        double denseWeight, bm25Weight, salienceWeight, freshnessWeight;
+        if (mode == SearchMode.Keyword)
+        {
+            // Keyword mode: heavily favor BM25
+            denseWeight = 0.3;
+            bm25Weight = 1.5;
+            salienceWeight = 0.2;
+            freshnessWeight = 0.1;
+        }
+        else // Hybrid (default)
+        {
+            // Balanced weights with slight freshness bonus
+            denseWeight = 1.0;
+            bm25Weight = 1.0;
+            salienceWeight = 0.3;
+            freshnessWeight = 0.2;
+        }
+
+        // Dense ranking contribution
+        for (int i = 0; i < byDense.Count; i++)
+        {
+            var id = byDense[i].Segment.Id;
+            rrfScores[id] = denseWeight * (1.0 / (rrfK + i + 1));
+        }
+
+        // BM25 ranking contribution
+        for (int i = 0; i < byBm25.Count; i++)
+        {
+            var id = byBm25[i].Segment.Id;
+            rrfScores[id] = rrfScores.GetValueOrDefault(id) + bm25Weight * (1.0 / (rrfK + i + 1));
+        }
+
+        // Salience ranking contribution
+        for (int i = 0; i < bySalience.Count; i++)
+        {
+            var id = bySalience[i].Segment.Id;
+            rrfScores[id] = rrfScores.GetValueOrDefault(id) + salienceWeight * (1.0 / (rrfK + i + 1));
+        }
+
+        // Freshness ranking contribution (recent documents get boost)
+        for (int i = 0; i < byFreshness.Count; i++)
+        {
+            var id = byFreshness[i].Segment.Id;
+            rrfScores[id] = rrfScores.GetValueOrDefault(id) + freshnessWeight * (1.0 / (rrfK + i + 1));
+        }
+
+        // Return top-K by RRF score
+        return rrfScores
+            .OrderByDescending(kv => kv.Value)
+            .Take(topK)
+            .Select(kv => (segmentLookup[kv.Key], kv.Value))
+            .ToList();
+    }
+
+    /// <summary>
+    /// Create SearchResultItem from Segment with score.
+    /// </summary>
+    private static SearchResultItem CreateSearchResultItem(
+        Segment segment,
+        double score,
+        Dictionary<string, Entities.DocumentEntity> documentLookup)
+    {
+        var segmentDocId = ExtractDocIdFromSegmentId(segment.Id);
+        var doc = segmentDocId != null && documentLookup.TryGetValue(segmentDocId, out var d) ? d : null;
+
+        return new SearchResultItem(
+            DocumentId: doc?.Id ?? Guid.Empty,
+            DocumentName: doc?.Name ?? segment.SectionTitle ?? segment.HeadingPath ?? "Unknown",
+            SegmentId: segment.Id,
+            Text: segment.Text,
+            Score: score,
+            SectionTitle: segment.SectionTitle);
     }
 
     /// <summary>
