@@ -56,7 +56,8 @@ public record ChatRequest(
     Guid? ConversationId = null,
     Guid? CollectionId = null,
     Guid[]? DocumentIds = null,
-    string? SystemPrompt = null);
+    string? SystemPrompt = null,
+    SearchMode SearchMode = SearchMode.Hybrid);
 
 public record ChatResponse(
     string Answer,

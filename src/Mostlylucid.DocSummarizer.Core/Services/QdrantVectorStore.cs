@@ -73,7 +73,7 @@ public class QdrantVectorStore : IVectorStore
         }
     }
     
-    public async Task<bool> HasDocumentAsync(string collectionName, string docHash, CancellationToken ct = default)
+    public async Task<bool> HasDocumentAsync(string collectionName, string docId, CancellationToken ct = default)
     {
         try
         {
@@ -81,7 +81,10 @@ public class QdrantVectorStore : IVectorStore
             if (!collections.Any(c => c == collectionName))
                 return false;
 
-            // Use scroll to find any point with this docHash (content hash, not filename)
+            // Extract content hash from docId (format: sanitizedFilename_contentHash)
+            // Filter by docHash only - no filename/PII in vector DB
+            var docHash = ExtractDocHash(docId);
+
             var scrollResult = await _client.ScrollAsync(
                 collectionName,
                 filter: new Filter
@@ -159,13 +162,14 @@ public class QdrantVectorStore : IVectorStore
         string collectionName,
         float[] queryEmbedding,
         int topK,
-        string? docHash = null,
+        string? docId = null,
         CancellationToken ct = default)
     {
         Filter? filter = null;
-        if (!string.IsNullOrEmpty(docHash))
+        if (!string.IsNullOrEmpty(docId))
         {
-            // Filter by docHash (content hash, not filename - no PII)
+            // Extract content hash from docId and filter by docHash (no PII)
+            var docHash = ExtractDocHash(docId);
             filter = new Filter
             {
                 Must =
@@ -197,10 +201,13 @@ public class QdrantVectorStore : IVectorStore
             .ToList();
     }
     
-    public async Task<List<Segment>> GetDocumentSegmentsAsync(string collectionName, string docHash, CancellationToken ct = default)
+    public async Task<List<Segment>> GetDocumentSegmentsAsync(string collectionName, string docId, CancellationToken ct = default)
     {
         var segments = new List<Segment>();
         PointId? offset = null;
+
+        // Extract content hash from docId (format: sanitizedFilename_contentHash)
+        var docHash = ExtractDocHash(docId);
 
         if (_verbose)
             VerboseHelper.Log($"[dim]GetDocumentSegmentsAsync: collection='{VerboseHelper.Escape(collectionName)}', docHash='{VerboseHelper.Escape(docHash)}'[/]");
@@ -267,9 +274,11 @@ public class QdrantVectorStore : IVectorStore
         }
     }
     
-    public async Task DeleteDocumentAsync(string collectionName, string docHash, CancellationToken ct = default)
+    public async Task DeleteDocumentAsync(string collectionName, string docId, CancellationToken ct = default)
     {
-        // Delete by docHash (content hash, not filename - no PII)
+        // Extract content hash from docId and delete by docHash (no PII)
+        var docHash = ExtractDocHash(docId);
+
         await _client.DeleteAsync(
             collectionName,
             new Filter
@@ -478,7 +487,7 @@ public class QdrantVectorStore : IVectorStore
     
     public async Task RemoveStaleSegmentsAsync(
         string collectionName,
-        string docHash,
+        string docId,
         IEnumerable<string> validContentHashes,
         CancellationToken ct = default)
     {
@@ -486,8 +495,8 @@ public class QdrantVectorStore : IVectorStore
         {
             var validHashes = validContentHashes.ToHashSet();
 
-            // Get all segments for this document (by docHash)
-            var docSegments = await GetDocumentSegmentsAsync(collectionName, docHash, ct);
+            // Get all segments for this document (by extracted docHash)
+            var docSegments = await GetDocumentSegmentsAsync(collectionName, docId, ct);
 
             // Find segments to delete (those not in valid hashes)
             var staleHashes = docSegments

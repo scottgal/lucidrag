@@ -21,12 +21,21 @@ public class ChatController(
 
         try
         {
+            // Parse search mode from string (default to Hybrid)
+            var searchMode = request.SearchMode?.ToLowerInvariant() switch
+            {
+                "semantic" => Services.SearchMode.Semantic,
+                "keyword" => Services.SearchMode.Keyword,
+                _ => Services.SearchMode.Hybrid
+            };
+
             var chatRequest = new ChatRequest(
                 Query: request.Query,
                 ConversationId: request.ConversationId,
                 CollectionId: request.CollectionId,
                 DocumentIds: request.DocumentIds,
-                SystemPrompt: request.SystemPrompt);
+                SystemPrompt: request.SystemPrompt,
+                SearchMode: searchMode);
 
             var response = await searchService.ChatAsync(chatRequest, ct);
 
@@ -74,12 +83,21 @@ public class ChatController(
         Response.Headers.Append("Cache-Control", "no-cache");
         Response.Headers.Append("Connection", "keep-alive");
 
+        // Parse search mode from string (default to Hybrid)
+        var searchMode = request.SearchMode?.ToLowerInvariant() switch
+        {
+            "semantic" => Services.SearchMode.Semantic,
+            "keyword" => Services.SearchMode.Keyword,
+            _ => Services.SearchMode.Hybrid
+        };
+
         var chatRequest = new ChatRequest(
             Query: request.Query,
             ConversationId: request.ConversationId,
             CollectionId: request.CollectionId,
             DocumentIds: request.DocumentIds,
-            SystemPrompt: request.SystemPrompt);
+            SystemPrompt: request.SystemPrompt,
+            SearchMode: searchMode);
 
         await foreach (var chunk in searchService.ChatStreamAsync(chatRequest, ct))
         {
@@ -152,4 +170,5 @@ public record ChatApiRequest(
     Guid? ConversationId = null,
     Guid? CollectionId = null,
     Guid[]? DocumentIds = null,
-    string? SystemPrompt = null);
+    string? SystemPrompt = null,
+    string? SearchMode = null);  // "semantic", "keyword", or "hybrid" (default)

@@ -979,6 +979,38 @@
             </template>
             <form x-on:submit.prevent="sendMessage" class="max-w-4xl mx-auto">
                 <div class="flex gap-3 items-center">
+                    <!-- Search Mode Toggle -->
+                    <div class="dropdown dropdown-top">
+                        <label tabindex="0" class="btn btn-ghost btn-sm gap-1 opacity-70 hover:opacity-100"
+                               :class="searchMode !== 'hybrid' ? 'btn-active text-primary' : ''">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                            </svg>
+                            <span class="text-xs" x-text="searchMode === 'hybrid' ? 'Hybrid' : searchMode === 'semantic' ? 'Semantic' : 'Keyword'"></span>
+                        </label>
+                        <ul tabindex="0" class="dropdown-content z-50 menu p-2 shadow-lg bg-base-100 rounded-box w-48 mb-2">
+                            <li class="menu-title"><span>Search Mode</span></li>
+                            <li>
+                                <a @@click="searchMode = 'hybrid'" :class="searchMode === 'hybrid' ? 'active' : ''">
+                                    <span class="font-medium">Hybrid</span>
+                                    <span class="text-xs opacity-60">Semantic + Keyword</span>
+                                </a>
+                            </li>
+                            <li>
+                                <a @@click="searchMode = 'semantic'" :class="searchMode === 'semantic' ? 'active' : ''">
+                                    <span class="font-medium">Semantic</span>
+                                    <span class="text-xs opacity-60">Meaning-based</span>
+                                </a>
+                            </li>
+                            <li>
+                                <a @@click="searchMode = 'keyword'" :class="searchMode === 'keyword' ? 'active' : ''">
+                                    <span class="font-medium">Keyword</span>
+                                    <span class="text-xs opacity-60">Exact match (BM25)</span>
+                                </a>
+                            </li>
+                        </ul>
+                    </div>
+                    <!-- Debug Panel Toggle -->
                     <button type="button" class="btn btn-ghost btn-circle btn-sm opacity-60 hover:opacity-100"
                             @@click="showDebugPanel = !showDebugPanel"
                             :class="showDebugPanel ? 'btn-active' : ''"
@@ -1246,6 +1278,9 @@ function ragApp() {
         viewMode: 'answer', // 'answer', 'evidence', 'graph'
         graphRagEnabled: true,
         showDebugPanel: false,
+
+        // Search mode state: 'hybrid', 'semantic', 'keyword'
+        searchMode: 'hybrid',
 
         // Chat history state
         showChatHistory: false,
@@ -1910,6 +1945,7 @@ function ragApp() {
                         query,
                         conversationId: this.conversationId,
                         documentIds: this.selectedDocIds.size > 0 ? Array.from(this.selectedDocIds) : null,
+                        searchMode: this.searchMode,
                         includeGraphData: this.graphRagEnabled,
                         includeDebugInfo: true
                     })

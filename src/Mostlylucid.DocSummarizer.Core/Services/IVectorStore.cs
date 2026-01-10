@@ -24,13 +24,14 @@ public interface IVectorStore : IAsyncDisposable, IDisposable
     Task InitializeAsync(string collectionName, int vectorSize, CancellationToken ct = default);
 
     /// <summary>
-    /// Check if a collection exists and has segments for the given document
+    /// Check if a collection exists and has segments for the given document.
+    /// Internally extracts content hash from docId for privacy-safe lookup.
     /// </summary>
     /// <param name="collectionName">Name of the collection</param>
-    /// <param name="docHash">Document content hash (not filename - for privacy)</param>
+    /// <param name="docId">Document ID (content hash will be extracted for lookup)</param>
     /// <param name="ct">Cancellation token</param>
     /// <returns>True if the document is already indexed</returns>
-    Task<bool> HasDocumentAsync(string collectionName, string docHash, CancellationToken ct = default);
+    Task<bool> HasDocumentAsync(string collectionName, string docId, CancellationToken ct = default);
 
     /// <summary>
     /// Store segments with their embeddings.
@@ -48,14 +49,14 @@ public interface IVectorStore : IAsyncDisposable, IDisposable
     /// <param name="collectionName">Name of the collection</param>
     /// <param name="queryEmbedding">Query vector</param>
     /// <param name="topK">Number of results to return</param>
-    /// <param name="docHash">Optional: filter by document content hash</param>
+    /// <param name="docId">Optional: filter by document ID (hash extracted internally)</param>
     /// <param name="ct">Cancellation token</param>
     /// <returns>Segments ordered by similarity (descending), text must be hydrated separately</returns>
     Task<List<Segment>> SearchAsync(
         string collectionName,
         float[] queryEmbedding,
         int topK,
-        string? docHash = null,
+        string? docId = null,
         CancellationToken ct = default);
 
     /// <summary>
@@ -63,10 +64,10 @@ public interface IVectorStore : IAsyncDisposable, IDisposable
     /// NOTE: Returned segments have empty text - caller must hydrate from evidence repository.
     /// </summary>
     /// <param name="collectionName">Name of the collection</param>
-    /// <param name="docHash">Document content hash</param>
+    /// <param name="docId">Document ID (hash extracted internally)</param>
     /// <param name="ct">Cancellation token</param>
     /// <returns>All segments for the document</returns>
-    Task<List<Segment>> GetDocumentSegmentsAsync(string collectionName, string docHash, CancellationToken ct = default);
+    Task<List<Segment>> GetDocumentSegmentsAsync(string collectionName, string docId, CancellationToken ct = default);
 
     /// <summary>
     /// Delete a collection
@@ -79,9 +80,9 @@ public interface IVectorStore : IAsyncDisposable, IDisposable
     /// Delete segments for a specific document
     /// </summary>
     /// <param name="collectionName">Name of the collection</param>
-    /// <param name="docHash">Document content hash</param>
+    /// <param name="docId">Document ID (hash extracted internally)</param>
     /// <param name="ct">Cancellation token</param>
-    Task DeleteDocumentAsync(string collectionName, string docHash, CancellationToken ct = default);
+    Task DeleteDocumentAsync(string collectionName, string docId, CancellationToken ct = default);
     
     /// <summary>
     /// Whether this store persists data between runs
@@ -107,12 +108,12 @@ public interface IVectorStore : IAsyncDisposable, IDisposable
     /// Remove segments that no longer exist in the document (drift cleanup).
     /// </summary>
     /// <param name="collectionName">Name of the collection</param>
-    /// <param name="docHash">Document content hash</param>
+    /// <param name="docId">Document ID (hash extracted internally)</param>
     /// <param name="validContentHashes">Hashes of segments that still exist</param>
     /// <param name="ct">Cancellation token</param>
     Task RemoveStaleSegmentsAsync(
         string collectionName,
-        string docHash,
+        string docId,
         IEnumerable<string> validContentHashes,
         CancellationToken ct = default);
     
