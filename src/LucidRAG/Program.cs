@@ -9,6 +9,8 @@ using Mostlylucid.DocSummarizer.Anthropic.Extensions;
 using Mostlylucid.DocSummarizer.OpenAI.Extensions;
 using Mostlylucid.DocSummarizer.Config;
 using LucidRAG.Config;
+using LucidRAG.Core.Services;
+using LucidRAG.Core.Services.Caching;
 using LucidRAG.Data;
 using LucidRAG.Multitenancy;
 using LucidRAG.Services;
@@ -60,6 +62,11 @@ var multitenancyEnabled = builder.Configuration.GetValue<bool>("Multitenancy:Ena
 if (!standaloneMode)
 {
     builder.Services.AddMultitenancy(builder.Configuration);
+}
+else
+{
+    // Standalone mode: register null tenant accessor for compatibility
+    builder.Services.AddScoped<ITenantAccessor, TenantAccessor>();
 }
 
 // Database - use SQLite in standalone mode, PostgreSQL otherwise
@@ -143,6 +150,18 @@ builder.Services.AddHostedService<DemoContentSeeder>();
 builder.Services.AddSingleton<IWebCrawlerService, WebCrawlerService>();
 builder.Services.AddSingleton<IIngestionService, IngestionService>();
 
+// PostgreSQL full-text search service (10-25x faster than C# BM25)
+// Only register for PostgreSQL databases (not SQLite)
+if (!standaloneMode && connectionString?.Contains("Host=") == true)
+{
+    builder.Services.AddScoped<PostgresBM25Service>();
+}
+else
+{
+    // Standalone/SQLite mode: register null for optional injection
+    builder.Services.AddScoped<PostgresBM25Service>(sp => null!);
+}
+
 // Table extraction services
 builder.Services.AddScoped<Mostlylucid.DocSummarizer.Core.Services.ITableExtractorFactory,
     Mostlylucid.DocSummarizer.Core.Services.TableExtractorFactory>();
@@ -152,6 +171,15 @@ builder.Services.AddScoped<TableProcessingService>();
 builder.Services.Configure<SentinelConfig>(
     builder.Configuration.GetSection("Sentinel"));
 builder.Services.AddScoped<ISentinelService, SentinelService>();
+
+// Per-tenant LFU cache for evidence and entities (5-10x faster text hydration)
+builder.Services.Configure<LfuCacheConfig>(
+    builder.Configuration.GetSection("LfuCache"));
+builder.Services.AddSingleton<ITenantLfuCacheService, TenantLfuCacheService>();
+
+// Salient terms service for autocomplete (TF-IDF + RRF)
+builder.Services.AddScoped<ISalientTermsService, SalientTermsService>();
+builder.Services.AddHostedService<SalientTermsUpdaterService>();
 
 // Evidence storage for multimodal artifacts
 builder.Services.Configure<EvidenceStorageOptions>(

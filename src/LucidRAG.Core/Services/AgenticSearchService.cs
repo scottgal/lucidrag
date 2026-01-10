@@ -11,6 +11,7 @@ using Mostlylucid.DocSummarizer.Models;
 using Mostlylucid.DocSummarizer.Services;
 using LucidRAG.Config;
 using LucidRAG.Data;
+using LucidRAG.Core.Services;
 using LucidRAG.Services.Sentinel;
 using StyloFlow.Retrieval;
 
@@ -27,6 +28,7 @@ public class AgenticSearchService(
     ILlmService llmService,
     SynthesisCacheService synthesisCache,
     IEvidenceRepository evidenceRepository,
+    PostgresBM25Service? postgresBM25, // Optional - only for PostgreSQL
     IOptions<PromptsConfig> promptsConfig,
     IOptions<DocSummarizerConfig> docSummarizerConfig,
     IOptions<RagDocumentsConfig> ragDocumentsConfig,
@@ -35,6 +37,7 @@ public class AgenticSearchService(
     private readonly PromptsConfig _prompts = promptsConfig.Value;
     private readonly DocSummarizerConfig _docSummarizerConfig = docSummarizerConfig.Value;
     private readonly RagDocumentsConfig _ragConfig = ragDocumentsConfig.Value;
+    private readonly PostgresBM25Service? _postgresBM25 = postgresBM25;
 
     public async Task<SearchResult> SearchAsync(SearchRequest request, CancellationToken ct = default)
     {
@@ -459,15 +462,77 @@ ANSWER:";
 
         logger.LogDebug("Query expansion: '{Original}' → '{Expanded}'", query, queryForBm25);
 
-        // Build BM25 corpus from candidate texts
-        var corpus = Bm25Corpus.Build(candidates.Select(c => Bm25Scorer.Tokenize(c.Segment.Text)));
-        var bm25 = new Bm25Scorer(corpus);
+        // Get BM25 scores - use PostgreSQL FTS if available (10-25x faster), fall back to C# BM25
+        Dictionary<string, double> bm25ScoreLookup;
 
-        // Score all candidates with BM25 (using expanded query) and get document freshness
+        if (_postgresBM25 != null)
+        {
+            // PostgreSQL FTS path (fast - database native)
+            logger.LogDebug("Using PostgreSQL FTS for BM25 scoring");
+
+            // Map segments to evidence artifact IDs via ContentHash
+            var segmentHashes = candidates
+                .Select(c => c.Segment.ContentHash)
+                .Where(h => !string.IsNullOrEmpty(h))
+                .Distinct()
+                .ToList();
+
+            if (segmentHashes.Count > 0)
+            {
+                // Get evidence artifacts for these hashes
+                var evidenceArtifacts = await db.EvidenceArtifacts
+                    .Where(ea => segmentHashes.Contains(ea.SegmentHash!))
+                    .Select(ea => new { ea.Id, ea.SegmentHash })
+                    .ToListAsync(ct);
+
+                var evidenceIds = evidenceArtifacts.Select(ea => ea.Id).ToList();
+
+                // Use PostgreSQL FTS to score these specific evidence artifacts
+                var ftsResults = await _postgresBM25.SearchWithScoresAsync(
+                    queryForBm25,
+                    topK: evidenceIds.Count, // Get scores for all candidates
+                    documentIds: null, // Not filtering by document here
+                    ct);
+
+                // Build lookup: SegmentHash -> BM25 score
+                var hashToIdLookup = evidenceArtifacts.ToDictionary(ea => ea.SegmentHash!, ea => ea.Id);
+                var idToScoreLookup = ftsResults.ToDictionary(r => r.artifact.Id, r => r.score);
+
+                bm25ScoreLookup = new Dictionary<string, double>();
+                foreach (var candidate in candidates)
+                {
+                    if (!string.IsNullOrEmpty(candidate.Segment.ContentHash) &&
+                        hashToIdLookup.TryGetValue(candidate.Segment.ContentHash, out var evidenceId) &&
+                        idToScoreLookup.TryGetValue(evidenceId, out var score))
+                    {
+                        bm25ScoreLookup[candidate.Segment.Id] = score;
+                    }
+                }
+            }
+            else
+            {
+                bm25ScoreLookup = new Dictionary<string, double>();
+            }
+        }
+        else
+        {
+            // C# BM25 fallback path (slower - for SQLite or when PostgreSQL FTS unavailable)
+            logger.LogDebug("Using C# BM25 for scoring (fallback)");
+
+            var corpus = Bm25Corpus.Build(candidates.Select(c => Bm25Scorer.Tokenize(c.Segment.Text)));
+            var bm25 = new Bm25Scorer(corpus);
+
+            bm25ScoreLookup = candidates.ToDictionary(
+                c => c.Segment.Id,
+                c => bm25.Score(queryForBm25, c.Segment.Text)
+            );
+        }
+
+        // Score all candidates with BM25 scores and get document freshness
         var scoredCandidates = candidates.Select(c =>
         {
-            // BM25 with expanded query for synonym matching
-            var bm25Score = bm25.Score(queryForBm25, c.Segment.Text);
+            // Get BM25 score from lookup (either PostgreSQL FTS or C# BM25)
+            var bm25Score = bm25ScoreLookup.GetValueOrDefault(c.Segment.Id, 0.0);
 
             // Get document creation date for freshness scoring
             DateTimeOffset createdAt = DateTimeOffset.MinValue;

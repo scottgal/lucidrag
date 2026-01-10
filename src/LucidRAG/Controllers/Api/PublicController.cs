@@ -20,6 +20,7 @@ namespace LucidRAG.Controllers.Api;
 public class PublicController(
     RagDocumentsDbContext db,
     IAgenticSearchService searchService,
+    ISalientTermsService? salientTermsService,
     ILogger<PublicController> logger) : ControllerBase
 {
     /// <summary>
@@ -182,6 +183,71 @@ public class PublicController(
             return TypedResults.BadRequest(new ApiError("Search service error", "SEARCH_ERROR"));
         }
     }
+
+    /// <summary>
+    /// Get autocomplete suggestions for a query prefix within a collection.
+    /// Returns pre-computed salient terms from TF-IDF and entity analysis.
+    /// </summary>
+    [HttpGet("autocomplete")]
+    public async Task<Results<Ok<List<AutocompleteSuggestion>>, BadRequest<ApiError>>> Autocomplete(
+        [FromQuery] string query,
+        [FromQuery] Guid? collectionId = null,
+        [FromQuery] int limit = 10,
+        CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(query) || query.Length < 2)
+        {
+            return TypedResults.BadRequest(new ApiError("Query must be at least 2 characters", "VALIDATION_ERROR"));
+        }
+
+        if (salientTermsService == null)
+        {
+            // Service not available, return empty suggestions
+            return TypedResults.Ok(new List<AutocompleteSuggestion>());
+        }
+
+        try
+        {
+            // If no collection specified, try to get default collection
+            if (collectionId == null)
+            {
+                var defaultCollection = await db.Collections
+                    .AsNoTracking()
+                    .FirstOrDefaultAsync(c => c.IsDefault, ct);
+
+                if (defaultCollection != null)
+                {
+                    collectionId = defaultCollection.Id;
+                }
+            }
+
+            if (collectionId == null)
+            {
+                // No collection available, return empty
+                return TypedResults.Ok(new List<AutocompleteSuggestion>());
+            }
+
+            var suggestions = await salientTermsService.GetAutocompleteSuggestionsAsync(
+                collectionId.Value,
+                query,
+                limit,
+                ct);
+
+            var response = suggestions
+                .Select(s => new AutocompleteSuggestion(
+                    s.Term,
+                    s.Score,
+                    s.Source))
+                .ToList();
+
+            return TypedResults.Ok(response);
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Error in autocomplete");
+            return TypedResults.BadRequest(new ApiError("Autocomplete service error", "AUTOCOMPLETE_ERROR"));
+        }
+    }
 }
 
 // DTOs for public API
@@ -221,4 +287,10 @@ public record PublicSearchResponse(
     int ResultCount,
     List<EntityTypeCount> TopEntityTypes,
     double Relevance
+);
+
+public record AutocompleteSuggestion(
+    string Term,
+    double Score,
+    string Source
 );

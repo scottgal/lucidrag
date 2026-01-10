@@ -14,13 +14,13 @@ export default defineConfig({
         styles: resolve(__dirname, 'src/css/main.css')
       },
       output: {
-        entryFileNames: 'js/[name].[hash].js',
-        chunkFileNames: 'js/[name].[hash].js',
+        entryFileNames: 'js/[name].js',
+        chunkFileNames: 'js/[name].js',
         assetFileNames: (assetInfo) => {
           if (assetInfo.name?.endsWith('.css')) {
-            return 'css/[name].[hash][extname]'
+            return 'css/[name][extname]'
           }
-          return 'assets/[name].[hash][extname]'
+          return 'assets/[name][extname]'
         }
       }
     }

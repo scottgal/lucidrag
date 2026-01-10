@@ -2,6 +2,9 @@
 // Import CSS for Vite bundling
 import '../css/main.css'
 
+// Import public app module (makes publicApp available globally)
+import './public-app.js'
+
 // Theme management
 const ThemeManager = {
   STORAGE_KEY: 'lucidrag-theme',

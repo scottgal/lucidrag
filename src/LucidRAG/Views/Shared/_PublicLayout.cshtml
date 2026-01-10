@@ -1,12 +1,16 @@
+@using Microsoft.AspNetCore.Antiforgery
+@inject IAntiforgery Antiforgery
 @{
     var tenantName = ViewData["TenantName"] as string ?? "LucidRAG";
     var tenantLogo = ViewData["TenantLogo"] as string;
+    var tokens = Antiforgery.GetAndStoreTokens(Context);
 }
 <!DOCTYPE html>
 <html lang="en" data-theme="light">
 <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="x-csrf-token" content="@tokens.RequestToken" />
     <title>@ViewData["Title"] - @tenantName</title>
 
     <!-- Fonts -->
@@ -32,7 +36,7 @@
     </style>
 </head>
 <body class="bg-base-200 min-h-screen">
-    <div x-data="publicApp()" x-cloak class="flex h-screen overflow-hidden">
+    <div x-data="publicApp('@tenantName')" x-cloak class="flex h-screen overflow-hidden">
         <!-- Mobile sidebar backdrop -->
         <div x-show="sidebarOpen"
              x-transition:enter="transition-opacity ease-linear duration-300"
@@ -151,6 +155,9 @@
                     </template>
                 </div>
 
+                <!-- Search Controls (shared between admin and public) -->
+                @await Html.PartialAsync("_SearchControls")
+
                 <!-- Theme toggle -->
                 <button @@click="toggleTheme()" class="btn btn-ghost btn-sm btn-square">
                     <svg x-show="theme === 'light'" xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -175,153 +182,7 @@
         </div>
     </div>
 
-    <script>
-        function publicApp() {
-            return {
-                sidebarOpen: false,
-                loading: true,
-                collections: [],
-                selectedCollection: null,
-                stats: { totalDocuments: 0, totalEntities: 0 },
-                theme: localStorage.getItem('lucidrag-theme') || 'light',
-                conversationId: null,
-                messages: [],
-                currentMessage: '',
-                isTyping: false,
-
-                async init() {
-                    // Apply theme
-                    document.documentElement.setAttribute('data-theme', this.theme);
-
-                    // Load collections and stats
-                    await Promise.all([
-                        this.loadCollections(),
-                        this.loadStats()
-                    ]);
-
-                    // Check URL for collection slug
-                    this.checkUrlForCollection();
-
-                    this.loading = false;
-                },
-
-                async loadCollections() {
-                    try {
-                        const response = await fetch('/api/public/collections?pageSize=100');
-                        const data = await response.json();
-                        this.collections = data.data || [];
-
-                        // Auto-select if only one collection
-                        if (this.collections.length === 1 && !this.selectedCollection) {
-                            this.selectCollection(this.collections[0]);
-                        }
-                    } catch (e) {
-                        console.error('Failed to load collections:', e);
-                    }
-                },
-
-                async loadStats() {
-                    try {
-                        const response = await fetch('/api/public/stats');
-                        this.stats = await response.json();
-                    } catch (e) {
-                        console.error('Failed to load stats:', e);
-                    }
-                },
-
-                checkUrlForCollection() {
-                    // Parse /collection/{slug} from URL
-                    const match = window.location.pathname.match(/\/collection\/([^\/]+)/);
-                    if (match) {
-                        const slug = decodeURIComponent(match[1]);
-                        const collection = this.collections.find(c =>
-                            c.name.toLowerCase().replace(/\s+/g, '-') === slug.toLowerCase() ||
-                            c.id === slug
-                        );
-                        if (collection) {
-                            this.selectCollection(collection);
-                        }
-                    }
-                },
-
-                selectCollection(collection) {
-                    this.selectedCollection = collection;
-                    this.messages = [];
-                    this.conversationId = null;
-                    this.sidebarOpen = false;
-
-                    // Update URL
-                    const slug = collection.name.toLowerCase().replace(/\s+/g, '-');
-                    history.pushState({}, '', `/collection/${slug}`);
-                },
-
-                clearCollection() {
-                    this.selectedCollection = null;
-                    this.messages = [];
-                    this.conversationId = null;
-                    history.pushState({}, '', '/');
-                },
-
-                toggleTheme() {
-                    this.theme = this.theme === 'light' ? 'dark' : 'light';
-                    document.documentElement.setAttribute('data-theme', this.theme);
-                    localStorage.setItem('lucidrag-theme', this.theme);
-                },
-
-                async sendMessage() {
-                    if (!this.currentMessage.trim() || !this.selectedCollection) return;
-
-                    const userMessage = this.currentMessage.trim();
-                    this.currentMessage = '';
-
-                    // Add user message
-                    this.messages.push({ role: 'user', content: userMessage });
-                    this.isTyping = true;
-
-                    try {
-                        const response = await fetch('/api/public/chat', {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({
-                                message: userMessage,
-                                conversationId: this.conversationId,
-                                collectionId: this.selectedCollection.id
-                            })
-                        });
-
-                        const data = await response.json();
-
-                        if (response.ok) {
-                            this.conversationId = data.conversationId;
-                            this.messages.push({
-                                role: 'assistant',
-                                content: data.response,
-                                sourceCount: data.sourceCount
-                            });
-                        } else {
-                            this.messages.push({
-                                role: 'assistant',
-                                content: 'Sorry, I encountered an error. Please try again.',
-                                error: true
-                            });
-                        }
-                    } catch (e) {
-                        console.error('Chat error:', e);
-                        this.messages.push({
-                            role: 'assistant',
-                            content: 'Sorry, I could not connect to the server. Please try again.',
-                            error: true
-                        });
-                    } finally {
-                        this.isTyping = false;
-                        this.$nextTick(() => {
-                            const container = document.getElementById('chat-messages');
-                            if (container) container.scrollTop = container.scrollHeight;
-                        });
-                    }
-                }
-            };
-        }
-    </script>
+    @* Vite bundled JavaScript - publicApp is loaded from /dist/js/main.js *@
+    <script type="module" src="/dist/js/main.js"></script>
 </body>
 </html>

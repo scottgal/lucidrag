@@ -36,6 +36,9 @@ public class RagDocumentsDbContext(DbContextOptions<RagDocumentsDbContext> optio
     public DbSet<CommunityEntity> Communities => Set<CommunityEntity>();
     public DbSet<CommunityMembership> CommunityMemberships => Set<CommunityMembership>();
 
+    // Salient terms for autocomplete
+    public DbSet<CollectionSalientTerm> SalientTerms => Set<CollectionSalientTerm>();
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);
@@ -397,6 +400,26 @@ public class RagDocumentsDbContext(DbContextOptions<RagDocumentsDbContext> optio
             entity.HasOne(e => e.Entity)
                 .WithMany()
                 .HasForeignKey(e => e.EntityId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        // CollectionSalientTerm - Pre-computed autocomplete terms
+        modelBuilder.Entity<CollectionSalientTerm>(entity =>
+        {
+            entity.ToTable("collection_salient_terms");
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.Term).HasMaxLength(200).IsRequired();
+            entity.Property(e => e.NormalizedTerm).HasMaxLength(200).IsRequired();
+            entity.Property(e => e.Source).HasMaxLength(32).IsRequired();
+
+            // Indexes for fast autocomplete lookups
+            entity.HasIndex(e => new { e.CollectionId, e.NormalizedTerm });
+            entity.HasIndex(e => new { e.CollectionId, e.Score });
+            entity.HasIndex(e => e.UpdatedAt);
+
+            entity.HasOne(e => e.Collection)
+                .WithMany()
+                .HasForeignKey(e => e.CollectionId)
                 .OnDelete(DeleteBehavior.Cascade);
         });
     }

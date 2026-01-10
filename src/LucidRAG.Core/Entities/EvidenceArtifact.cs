@@ -65,6 +65,13 @@ public class EvidenceArtifact
     public string? SegmentHash { get; set; }
 
     /// <summary>
+    /// Inline content for text artifacts (segment_text, transcript, etc.).
+    /// Enables PostgreSQL full-text search with tsvector/GIN indexes.
+    /// For binary/large content (images, PDFs), use blob storage instead.
+    /// </summary>
+    public string? Content { get; set; }
+
+    /// <summary>
     /// What produced this evidence (e.g., 'tesseract', 'whisper', 'claude-3').
     /// </summary>
     [MaxLength(128)]

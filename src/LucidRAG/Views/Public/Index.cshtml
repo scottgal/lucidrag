@@ -9,17 +9,23 @@
         <!-- Welcome message when no collection selected -->
         <template x-if="!selectedCollection">
             <div class="flex items-center justify-center h-full">
-                <div class="text-center max-w-md">
-                    <div class="text-6xl mb-4">
-                        <svg xmlns="http://www.w3.org/2000/svg" class="h-16 w-16 mx-auto text-primary/50" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <div class="text-center max-w-lg px-4">
+                    <div class="text-6xl mb-6">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-20 w-20 mx-auto text-primary/40" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
                         </svg>
                     </div>
-                    <h2 class="text-xl font-semibold mb-2">Welcome!</h2>
-                    <p class="text-base-content/60 mb-4">
-                        Select a collection from the sidebar to start asking questions about your documents.
+                    <h1 class="text-3xl font-bold mb-3" x-text="'Welcome to ' + (tenantName || 'LucidRAG')"></h1>
+                    <p class="text-lg text-base-content/70 mb-6">
+                        Your intelligent document chat system
                     </p>
-                    <button @@click="sidebarOpen = true" class="btn btn-primary lg:hidden">
+                    <p class="text-base-content/60 mb-6">
+                        Select a collection from the sidebar to start exploring knowledge and asking questions about your documents.
+                    </p>
+                    <button @@click="sidebarOpen = true" class="btn btn-primary btn-lg lg:hidden">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
+                        </svg>
                         Browse Collections
                     </button>
                 </div>
@@ -29,17 +35,29 @@
         <!-- Empty chat state -->
         <template x-if="selectedCollection && messages.length === 0 && !isTyping">
             <div class="flex items-center justify-center h-full">
-                <div class="text-center max-w-md">
-                    <div class="text-6xl mb-4">
-                        <svg xmlns="http://www.w3.org/2000/svg" class="h-16 w-16 mx-auto text-primary/30" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <div class="text-center max-w-lg px-4">
+                    <div class="text-6xl mb-6">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-20 w-20 mx-auto text-primary/30" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
                         </svg>
                     </div>
-                    <h2 class="text-xl font-semibold mb-2">Ask a question</h2>
-                    <p class="text-base-content/60">
-                        Ask anything about the <span class="font-medium" x-text="selectedCollection.name"></span> collection.
-                        <span x-text="selectedCollection.completedDocuments"></span> documents are ready to search.
+                    <h2 class="text-2xl font-bold mb-3">
+                        <span x-text="tenantName || 'LucidRAG'"></span>
+                        <span class="text-primary" x-text="'/ ' + selectedCollection.name"></span>
+                    </h2>
+                    <p class="text-lg text-base-content/70 mb-4">
+                        Ask anything about your documents
                     </p>
+                    <div class="flex items-center justify-center gap-2 text-sm text-base-content/60">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                        </svg>
+                        <span x-text="selectedCollection.completedDocuments + ' documents ready'"></span>
+                        <template x-if="selectedCollection.description">
+                            <span class="text-base-content/40">•</span>
+                            <span class="italic" x-text="selectedCollection.description"></span>
+                        </template>
+                    </div>
                 </div>
             </div>
         </template>
@@ -87,19 +105,44 @@
 
     <!-- Chat Input -->
     <div class="border-t border-base-300 bg-base-100 p-4">
-        <form @@submit.prevent="sendMessage()" class="flex gap-2">
-            <input type="text"
-                   x-model="currentMessage"
-                   :disabled="!selectedCollection || isTyping"
-                   :placeholder="selectedCollection ? 'Ask about ' + selectedCollection.name + '...' : 'Select a collection first'"
-                   class="input input-bordered flex-1 focus:input-primary" />
-            <button type="submit"
-                    :disabled="!selectedCollection || !currentMessage.trim() || isTyping"
-                    class="btn btn-primary">
-                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
-                </svg>
-            </button>
-        </form>
+        <div class="w-full max-w-4xl mx-auto relative">
+            <!-- Autocomplete Dropdown -->
+            <div x-show="autocompleteVisible"
+                 x-transition:enter="transition ease-out duration-100"
+                 x-transition:enter-start="opacity-0 scale-95"
+                 x-transition:enter-end="opacity-100 scale-100"
+                 x-transition:leave="transition ease-in duration-75"
+                 x-transition:leave-start="opacity-100 scale-100"
+                 x-transition:leave-end="opacity-0 scale-95"
+                 class="absolute bottom-full mb-2 w-full bg-base-100 border border-base-300 rounded-lg shadow-lg max-h-60 overflow-y-auto z-10">
+                <template x-for="(suggestion, index) in autocompleteSuggestions" :key="index">
+                    <button type="button"
+                            @@click="selectSuggestion(suggestion)"
+                            :class="index === autocompleteSelectedIndex ? 'bg-primary/10' : 'hover:bg-base-200'"
+                            class="w-full px-4 py-2 text-left flex items-center justify-between transition-colors">
+                        <span class="font-medium" x-text="suggestion.term"></span>
+                        <span class="text-xs text-base-content/50 badge badge-sm" x-text="suggestion.source"></span>
+                    </button>
+                </template>
+            </div>
+
+            <!-- Input Form -->
+            <form @@submit.prevent="sendMessage()" class="flex gap-2 items-center">
+                <input type="text"
+                       x-model="currentMessage"
+                       @@input.debounce.300ms="fetchAutocomplete()"
+                       @@keydown="handleAutocompleteKeydown($event)"
+                       :disabled="!selectedCollection || isTyping"
+                       :placeholder="selectedCollection ? 'Ask about ' + selectedCollection.name + '...' : 'Select a collection first'"
+                       class="input input-bordered flex-1 min-w-0 focus:input-primary" />
+                <button type="submit"
+                        :disabled="!selectedCollection || !currentMessage.trim() || isTyping"
+                        class="btn btn-primary flex-shrink-0 min-w-fit">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
+                    </svg>
+                </button>
+            </form>
+        </div>
     </div>
 </div>
