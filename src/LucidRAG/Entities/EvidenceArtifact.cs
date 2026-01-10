@@ -57,6 +57,14 @@ public class EvidenceArtifact
     public string? ContentHash { get; set; }
 
     /// <summary>
+    /// Segment-level content hash for RAG hydration lookups.
+    /// Used to retrieve segment text from evidence when vector store returns only embeddings.
+    /// Indexed for fast lookups.
+    /// </summary>
+    [MaxLength(32)]
+    public string? SegmentHash { get; set; }
+
+    /// <summary>
     /// What produced this evidence (e.g., 'tesseract', 'whisper', 'claude-3').
     /// </summary>
     [MaxLength(128)]

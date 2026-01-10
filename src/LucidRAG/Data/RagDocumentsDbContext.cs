@@ -232,6 +232,7 @@ public class RagDocumentsDbContext(DbContextOptions<RagDocumentsDbContext> optio
             entity.Property(e => e.StorageBackend).HasMaxLength(32).IsRequired();
             entity.Property(e => e.StoragePath).HasMaxLength(2048).IsRequired();
             entity.Property(e => e.ContentHash).HasMaxLength(64);
+            entity.Property(e => e.SegmentHash).HasMaxLength(32);
             entity.Property(e => e.ProducerSource).HasMaxLength(128);
             entity.Property(e => e.ProducerVersion).HasMaxLength(32);
             if (!isSqlite) entity.Property(e => e.Metadata).HasColumnType("jsonb");
@@ -240,6 +241,7 @@ public class RagDocumentsDbContext(DbContextOptions<RagDocumentsDbContext> optio
             entity.HasIndex(e => e.EntityId);
             entity.HasIndex(e => e.ArtifactType);
             entity.HasIndex(e => e.ContentHash);
+            entity.HasIndex(e => e.SegmentHash);  // Fast lookup for RAG text hydration
             entity.HasIndex(e => new { e.EntityId, e.ArtifactType });
 
             // GIN index on JSONB metadata for efficient signal filtering

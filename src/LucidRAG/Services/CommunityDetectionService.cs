@@ -1,7 +1,10 @@
+using System.Text;
 using System.Text.Json;
+using System.IO.Hashing;
 using Microsoft.EntityFrameworkCore;
 using LucidRAG.Data;
 using LucidRAG.Entities;
+using Mostlylucid.DocSummarizer.Models;
 using Mostlylucid.DocSummarizer.Services;
 
 namespace LucidRAG.Services;
@@ -50,6 +53,8 @@ public class CommunityDetectionService : ICommunityDetectionService
     private readonly IEntityGraphService _graphService;
     private readonly ILlmService _llmService;
     private readonly IEmbeddingService _embeddingService;
+    private readonly IVectorStore _vectorStore;
+    private readonly IEvidenceRepository _evidenceRepository;
     private readonly ILogger<CommunityDetectionService> _logger;
 
     public CommunityDetectionService(
@@ -57,12 +62,16 @@ public class CommunityDetectionService : ICommunityDetectionService
         IEntityGraphService graphService,
         ILlmService llmService,
         IEmbeddingService embeddingService,
+        IVectorStore vectorStore,
+        IEvidenceRepository evidenceRepository,
         ILogger<CommunityDetectionService> logger)
     {
         _db = db;
         _graphService = graphService;
         _llmService = llmService;
         _embeddingService = embeddingService;
+        _vectorStore = vectorStore;
+        _evidenceRepository = evidenceRepository;
         _logger = logger;
     }
 
@@ -690,6 +699,12 @@ SUMMARY: [one sentence description]";
 
                 community.UpdatedAt = DateTimeOffset.UtcNow;
 
+                // Store summary as evidence artifact
+                await StoreCommunityEvidenceAsync(community, communityText, ct);
+
+                // Add to vector store for semantic search
+                await IndexCommunityInVectorStoreAsync(community, communityText, ct);
+
                 _logger.LogDebug("Generated summary for community: {Name}", community.Name);
             }
             catch (Exception ex)
@@ -700,6 +715,106 @@ SUMMARY: [one sentence description]";
 
         await _db.SaveChangesAsync(ct);
         _logger.LogInformation("Community summary generation complete");
+    }
+
+    /// <summary>
+    /// Store community summary and features as evidence artifacts.
+    /// </summary>
+    private async Task StoreCommunityEvidenceAsync(CommunityEntity community, string summaryText, CancellationToken ct)
+    {
+        try
+        {
+            // We need an entity ID for evidence storage - use the community ID
+            // Note: This requires the community to be linked to a RetrievalEntityRecord
+            // For now, we'll store with the community ID as the "entity" ID
+            // In a full implementation, communities would be linked to RetrievalEntityRecords
+
+            // Generate a content hash for the summary
+            var contentHash = GenerateContentHash(summaryText);
+
+            // Store summary as evidence
+            using var textStream = new MemoryStream(Encoding.UTF8.GetBytes(summaryText));
+            var metadata = new
+            {
+                communityId = community.Id,
+                communityName = community.Name,
+                entityCount = community.EntityCount,
+                cohesion = community.Cohesion,
+                level = community.Level
+            };
+
+            await _evidenceRepository.StoreAsync(
+                entityId: community.Id,  // Use community ID as entity ID
+                artifactType: EvidenceTypes.LlmSummary,
+                content: textStream,
+                mimeType: "text/plain",
+                producerSource: "CommunityDetection",
+                confidence: community.Cohesion,
+                metadata: metadata,
+                segmentHash: contentHash,
+                ct: ct);
+
+            _logger.LogDebug("Stored evidence for community {Name}", community.Name);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to store evidence for community {Id}", community.Id);
+        }
+    }
+
+    /// <summary>
+    /// Add community summary to vector store for semantic search.
+    /// Communities appear as searchable segments with type CommunitySummary.
+    /// </summary>
+    private async Task IndexCommunityInVectorStoreAsync(CommunityEntity community, string summaryText, CancellationToken ct)
+    {
+        if (community.Embedding == null || community.Embedding.Length == 0)
+        {
+            _logger.LogWarning("Community {Id} has no embedding, skipping vector indexing", community.Id);
+            return;
+        }
+
+        try
+        {
+            var contentHash = GenerateContentHash(summaryText);
+
+            // Create a segment for the community summary (use Heading type as it represents high-level content)
+            var segment = new Segment(
+                docId: $"community_{community.Id}",
+                text: summaryText,
+                type: SegmentType.Heading,
+                index: 0,
+                startChar: 0,
+                endChar: summaryText.Length)
+            {
+                ContentHash = contentHash,
+                SectionTitle = community.Name,
+                SalienceScore = community.Cohesion,
+                PositionWeight = 1.0,
+                Embedding = community.Embedding
+            };
+
+            // Use a special collection for communities or the default collection
+            const string collectionName = "communities";
+            await _vectorStore.InitializeAsync(collectionName, community.Embedding.Length, ct);
+            await _vectorStore.UpsertSegmentsAsync(collectionName, [segment], ct);
+
+            _logger.LogDebug("Indexed community {Name} in vector store", community.Name);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to index community {Id} in vector store", community.Id);
+        }
+    }
+
+    /// <summary>
+    /// Generate a content hash for deduplication and lookups.
+    /// </summary>
+    private static string GenerateContentHash(string text)
+    {
+        var bytes = Encoding.UTF8.GetBytes(text);
+        var hash = XxHash64.Hash(bytes);
+        return Convert.ToHexString(hash).ToLowerInvariant();
     }
 
     /// <summary>

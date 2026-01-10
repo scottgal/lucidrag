@@ -153,7 +153,8 @@ public class EvidenceController(
             producerSource,
             producerVersion,
             confidence,
-            null,
+            null,     // metadata
+            null,     // segmentHash
             ct);
 
         var artifact = await evidenceRepository.GetByIdAsync(artifactId, ct);

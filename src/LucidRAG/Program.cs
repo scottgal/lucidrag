@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.Runtime.InteropServices;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Http.Resilience;
 using Mostlylucid.DocSummarizer.Extensions;
 using Mostlylucid.DocSummarizer.Images.Extensions;
 using Mostlylucid.DocSummarizer.Anthropic.Extensions;
@@ -52,6 +53,13 @@ var ragConfig = builder.Configuration
     .GetSection(RagDocumentsConfig.SectionName)
     .Get<RagDocumentsConfig>() ?? new();
 
+// Multi-tenancy services (register before DbContext to make dependencies clear)
+var multitenancyEnabled = builder.Configuration.GetValue<bool>("Multitenancy:Enabled");
+if (!standaloneMode)
+{
+    builder.Services.AddMultitenancy(builder.Configuration);
+}
+
 // Database - use SQLite in standalone mode, PostgreSQL otherwise
 var connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
 if (standaloneMode)
@@ -64,10 +72,37 @@ if (standaloneMode)
         options.UseSqlite(sqliteConnectionString));
     connectionString = sqliteConnectionString; // Update for later checks
 }
+else if (multitenancyEnabled)
+{
+    // Multi-tenancy: register TenantSchemaInterceptor as scoped (depends on tenant context per request)
+    builder.Services.AddScoped<TenantSchemaInterceptor>();
+
+    // Register DbContext with interceptor for per-connection search_path switching
+    // EnableRetryOnFailure handles transient network failures
+    builder.Services.AddDbContext<RagDocumentsDbContext>((sp, options) =>
+    {
+        var interceptor = sp.GetRequiredService<TenantSchemaInterceptor>();
+        options.UseNpgsql(connectionString, npgsqlOptions =>
+               {
+                   npgsqlOptions.EnableRetryOnFailure(
+                       maxRetryCount: 5,
+                       maxRetryDelay: TimeSpan.FromSeconds(30),
+                       errorCodesToAdd: null);
+               })
+               .AddInterceptors(interceptor);
+    });
+}
 else
 {
+    // EnableRetryOnFailure handles transient network failures
     builder.Services.AddDbContext<RagDocumentsDbContext>(options =>
-        options.UseNpgsql(connectionString));
+        options.UseNpgsql(connectionString, npgsqlOptions =>
+        {
+            npgsqlOptions.EnableRetryOnFailure(
+                maxRetryCount: 5,
+                maxRetryDelay: TimeSpan.FromSeconds(30),
+                errorCodesToAdd: null);
+        }));
 }
 
 // DocSummarizer.Core
@@ -117,15 +152,9 @@ builder.Services.Configure<EvidenceStorageOptions>(
 builder.Services.AddSingleton<IEvidenceStorage, FilesystemEvidenceStorage>();
 builder.Services.AddScoped<IEvidenceRepository, EvidenceRepository>();
 
-// Multi-tenancy services (always register for API, middleware only when enabled)
-var multitenancyEnabled = builder.Configuration.GetValue<bool>("Multitenancy:Enabled");
-if (!standaloneMode)
-{
-    builder.Services.AddMultitenancy(builder.Configuration);
-}
-
-// HttpClient for external API calls (RSS feeds, etc.)
-builder.Services.AddHttpClient();
+// HttpClient for external API calls (RSS feeds, etc.) with Polly resilience
+builder.Services.AddHttpClient("Resilient")
+    .AddStandardResilienceHandler();
 
 // SignalR for real-time updates
 builder.Services.AddSignalR();

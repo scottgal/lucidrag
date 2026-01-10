@@ -20,7 +20,7 @@ public class Segment
     /// <summary>
     /// The actual text content
     /// </summary>
-    public string Text { get; init; }
+    public string Text { get; set; }
     
     /// <summary>
     /// Type of segment for rendering and scoring

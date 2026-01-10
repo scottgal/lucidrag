@@ -26,6 +26,7 @@ public class AgenticSearchService(
     IQueryExpansionService queryExpansion,
     ILlmService llmService,
     SynthesisCacheService synthesisCache,
+    IEvidenceRepository evidenceRepository,
     IOptions<PromptsConfig> promptsConfig,
     IOptions<DocSummarizerConfig> docSummarizerConfig,
     IOptions<RagDocumentsConfig> ragDocumentsConfig,
@@ -114,6 +115,28 @@ public class AgenticSearchService(
             .Select(g => (Segment: g.First().Segment, DenseScore: g.Max(x => x.DenseScore)))
             .ToList();
 
+        // Hydrate segment text from evidence repository (vector store contains only embeddings)
+        var segmentHashes = uniqueSegments
+            .Select(x => x.Segment.ContentHash)
+            .Where(h => !string.IsNullOrEmpty(h))
+            .Distinct()
+            .ToList();
+
+        if (segmentHashes.Count > 0)
+        {
+            var textLookup = await evidenceRepository.GetSegmentTextsByHashesAsync(segmentHashes!, ct);
+            foreach (var (segment, _) in uniqueSegments)
+            {
+                if (!string.IsNullOrEmpty(segment.ContentHash) &&
+                    textLookup.TryGetValue(segment.ContentHash, out var text))
+                {
+                    segment.Text = text;
+                }
+            }
+            logger.LogDebug("Hydrated {Count}/{Total} segments with text from evidence",
+                textLookup.Count, uniqueSegments.Count);
+        }
+
         logger.LogInformation("Search mode: {Mode}, retrieved {Count} unique segments for BM25+RRF",
             request.SearchMode, uniqueSegments.Count);
 
@@ -190,7 +213,8 @@ public class AgenticSearchService(
         var searchResult = await SearchAsync(new SearchRequest(
             request.Query,
             request.CollectionId,
-            request.DocumentIds), ct);
+            request.DocumentIds,
+            SearchMode: request.SearchMode), ct);
 
         // Check if Sentinel needs clarification
         if (searchResult.QueryPlan?.NeedsClarification == true)

@@ -375,6 +375,7 @@ public class DocumentQueueProcessor(
                     producerSource: "BertRAG",
                     confidence: segment.SalienceScore,
                     metadata: metadata,
+                    segmentHash: segment.ContentHash,  // For RAG text hydration lookups
                     ct: ct);
 
                 stored++;

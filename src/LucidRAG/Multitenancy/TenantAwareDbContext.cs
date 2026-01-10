@@ -1,11 +1,75 @@
+using System.Data.Common;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Diagnostics;
 using LucidRAG.Data;
 
 namespace LucidRAG.Multitenancy;
 
 /// <summary>
-/// Tenant-aware DbContext that applies schema-per-tenant isolation.
-/// Wraps RagDocumentsDbContext with tenant-specific schema configuration.
+/// Connection interceptor that sets PostgreSQL search_path for tenant isolation.
+/// This is the correct approach because EF Core caches compiled models.
+/// </summary>
+public class TenantSchemaInterceptor : DbConnectionInterceptor
+{
+    private readonly ITenantAccessor _tenantAccessor;
+    private readonly ILogger<TenantSchemaInterceptor> _logger;
+
+    public TenantSchemaInterceptor(ITenantAccessor tenantAccessor, ILogger<TenantSchemaInterceptor> logger)
+    {
+        _tenantAccessor = tenantAccessor;
+        _logger = logger;
+    }
+
+    public override void ConnectionOpened(DbConnection connection, ConnectionEndEventData eventData)
+    {
+        SetSearchPath(connection);
+        base.ConnectionOpened(connection, eventData);
+    }
+
+    public override async Task ConnectionOpenedAsync(
+        DbConnection connection,
+        ConnectionEndEventData eventData,
+        CancellationToken cancellationToken = default)
+    {
+        await SetSearchPathAsync(connection, cancellationToken);
+        await base.ConnectionOpenedAsync(connection, eventData, cancellationToken);
+    }
+
+    private void SetSearchPath(DbConnection connection)
+    {
+        var tenant = _tenantAccessor.Current;
+        if (tenant == null || tenant.TenantId == TenantConstants.DefaultTenantId)
+        {
+            return;
+        }
+
+        using var cmd = connection.CreateCommand();
+        // Use parameterized approach to prevent SQL injection
+        var schemaName = tenant.SchemaName;
+        cmd.CommandText = $"SET search_path TO \"{schemaName}\", public";
+        cmd.ExecuteNonQuery();
+        _logger.LogDebug("Set search_path to schema: {Schema}", schemaName);
+    }
+
+    private async Task SetSearchPathAsync(DbConnection connection, CancellationToken ct)
+    {
+        var tenant = _tenantAccessor.Current;
+        if (tenant == null || tenant.TenantId == TenantConstants.DefaultTenantId)
+        {
+            return;
+        }
+
+        await using var cmd = connection.CreateCommand();
+        var schemaName = tenant.SchemaName;
+        cmd.CommandText = $"SET search_path TO \"{schemaName}\", public";
+        await cmd.ExecuteNonQueryAsync(ct);
+        _logger.LogDebug("Set search_path to schema: {Schema}", schemaName);
+    }
+}
+
+/// <summary>
+/// Tenant-aware DbContext that applies schema-per-tenant isolation via search_path.
+/// NOTE: Schema isolation is handled by TenantSchemaInterceptor, not OnModelCreating.
 /// </summary>
 public class TenantAwareDbContext : RagDocumentsDbContext
 {
@@ -22,18 +86,9 @@ public class TenantAwareDbContext : RagDocumentsDbContext
         _logger = logger;
     }
 
-    protected override void OnModelCreating(ModelBuilder modelBuilder)
-    {
-        base.OnModelCreating(modelBuilder);
-
-        // Apply tenant schema if available
-        var tenant = _tenantAccessor.Current;
-        if (tenant != null && tenant.TenantId != TenantConstants.DefaultTenantId)
-        {
-            modelBuilder.HasDefaultSchema(tenant.SchemaName);
-            _logger.LogDebug("DbContext configured for tenant schema: {Schema}", tenant.SchemaName);
-        }
-    }
+    // NOTE: We don't override OnModelCreating for schema anymore.
+    // EF Core caches compiled models, so HasDefaultSchema would use the first tenant's schema for all.
+    // Instead, TenantSchemaInterceptor sets search_path on each connection.
 }
 
 /// <summary>

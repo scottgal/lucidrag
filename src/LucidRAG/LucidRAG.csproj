@@ -56,6 +56,11 @@
         <PackageReference Include="AspNetCore.HealthChecks.NpgSql" Version="9.0.0" />
     </ItemGroup>
 
+    <!-- Resilience (Polly) -->
+    <ItemGroup>
+        <PackageReference Include="Microsoft.Extensions.Http.Resilience" Version="9.4.0" />
+    </ItemGroup>
+
     <!-- Frontend -->
     <ItemGroup>
         <PackageReference Include="Htmx" Version="1.9.0" />

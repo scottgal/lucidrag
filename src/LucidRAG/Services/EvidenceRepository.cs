@@ -25,6 +25,7 @@ public interface IEvidenceRepository
         string? producerVersion = null,
         double? confidence = null,
         object? metadata = null,
+        string? segmentHash = null,
         CancellationToken ct = default);
 
     /// <summary>
@@ -78,6 +79,20 @@ public interface IEvidenceRepository
         string artifactType,
         string contentHash,
         CancellationToken ct = default);
+
+    /// <summary>
+    /// Get segment text by content hash. Used for hydrating RAG results from vector store.
+    /// Queries segment_text evidence artifacts where metadata contains the content hash.
+    /// </summary>
+    Task<string?> GetSegmentTextByHashAsync(string contentHash, CancellationToken ct = default);
+
+    /// <summary>
+    /// Batch get segment texts by content hashes for efficient hydration.
+    /// Returns dictionary mapping contentHash to text.
+    /// </summary>
+    Task<Dictionary<string, string>> GetSegmentTextsByHashesAsync(
+        IEnumerable<string> contentHashes,
+        CancellationToken ct = default);
 }
 
 public class EvidenceRepository(
@@ -94,6 +109,7 @@ public class EvidenceRepository(
         string? producerVersion = null,
         double? confidence = null,
         object? metadata = null,
+        string? segmentHash = null,
         CancellationToken ct = default)
     {
         // Compute content hash for deduplication
@@ -142,6 +158,7 @@ public class EvidenceRepository(
             StoragePath = storagePath,
             FileSizeBytes = fileSize,
             ContentHash = contentHash,
+            SegmentHash = segmentHash,  // For fast RAG text hydration lookups
             ProducerSource = producerSource,
             ProducerVersion = producerVersion,
             Confidence = confidence,
@@ -285,6 +302,88 @@ public class EvidenceRepository(
                 a.EntityId == entityId &&
                 a.ArtifactType == artifactType &&
                 a.ContentHash == contentHash, ct);
+    }
+
+    public async Task<string?> GetSegmentTextByHashAsync(string contentHash, CancellationToken ct = default)
+    {
+        if (string.IsNullOrEmpty(contentHash))
+            return null;
+
+        // Find segment_text artifact by SegmentHash
+        var artifact = await db.EvidenceArtifacts
+            .AsNoTracking()
+            .FirstOrDefaultAsync(a =>
+                a.ArtifactType == EvidenceTypes.SegmentText &&
+                a.SegmentHash == contentHash, ct);
+
+        if (artifact == null)
+        {
+            logger.LogDebug("No segment text found for hash: {Hash}", contentHash);
+            return null;
+        }
+
+        // Read text from storage
+        try
+        {
+            using var stream = await storage.RetrieveAsync(artifact.StoragePath, ct);
+            if (stream == null)
+                return null;
+
+            using var reader = new StreamReader(stream);
+            return await reader.ReadToEndAsync(ct);
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "Failed to retrieve segment text for hash: {Hash}", contentHash);
+            return null;
+        }
+    }
+
+    public async Task<Dictionary<string, string>> GetSegmentTextsByHashesAsync(
+        IEnumerable<string> contentHashes,
+        CancellationToken ct = default)
+    {
+        var hashList = contentHashes.Where(h => !string.IsNullOrEmpty(h)).Distinct().ToList();
+        if (hashList.Count == 0)
+            return new Dictionary<string, string>();
+
+        // Batch query for all matching artifacts
+        var artifacts = await db.EvidenceArtifacts
+            .AsNoTracking()
+            .Where(a =>
+                a.ArtifactType == EvidenceTypes.SegmentText &&
+                a.SegmentHash != null &&
+                hashList.Contains(a.SegmentHash))
+            .ToListAsync(ct);
+
+        var result = new Dictionary<string, string>();
+
+        // Read text for each artifact
+        foreach (var artifact in artifacts)
+        {
+            if (string.IsNullOrEmpty(artifact.SegmentHash))
+                continue;
+
+            try
+            {
+                using var stream = await storage.RetrieveAsync(artifact.StoragePath, ct);
+                if (stream == null)
+                    continue;
+
+                using var reader = new StreamReader(stream);
+                var text = await reader.ReadToEndAsync(ct);
+                result[artifact.SegmentHash] = text;
+            }
+            catch (Exception ex)
+            {
+                logger.LogWarning(ex, "Failed to retrieve segment text for hash: {Hash}", artifact.SegmentHash);
+            }
+        }
+
+        logger.LogDebug("Retrieved {Count}/{Requested} segment texts from evidence",
+            result.Count, hashList.Count);
+
+        return result;
     }
 
     private static string GetExtensionForMimeType(string mimeType)
