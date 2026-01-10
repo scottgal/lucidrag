@@ -1,5 +1,5 @@
-using System.Security.Cryptography;
 using System.Text;
+using Mostlylucid.Summarizer.Core.Utilities;
 
 namespace Mostlylucid.DocSummarizer.Models;
 
@@ -146,13 +146,10 @@ public class Segment
     }
     
     /// <summary>
-    /// Compute stable SHA256 hash of content (first 16 chars)
+    /// Compute stable content hash using XxHash64.
     /// </summary>
     private static string ComputeHash(string text)
-    {
-        var bytes = SHA256.HashData(Encoding.UTF8.GetBytes(text));
-        return Convert.ToHexString(bytes)[..16].ToLowerInvariant();
-    }
+        => ContentHasher.ComputeHash(text);
     
     private static string SanitizeDocId(string docId)
     {

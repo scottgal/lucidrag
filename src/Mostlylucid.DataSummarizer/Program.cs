@@ -143,6 +143,16 @@ toSqliteCmd.Options.Add(sqliteNoIndexOption);
 toSqliteCmd.Options.Add(sqliteOverwriteOption);
 toSqliteCmd.Options.Add(verboseOption);
 
+// Markdown table conversion command
+var convertMdCmd = new Command("convert-markdown", "Convert markdown tables to CSV for profiling");
+var mdInputOption = new Option<string>("--input", "-i") { Description = "Markdown file path", Required = true };
+var mdOutputDirOption = new Option<string?>("--output-dir", "-d") { Description = "Output directory for CSV files (default: ./converted_tables)" };
+var mdListOnlyOption = new Option<bool>("--list-only") { Description = "List detected tables without converting" };
+convertMdCmd.Options.Add(mdInputOption);
+convertMdCmd.Options.Add(mdOutputDirOption);
+convertMdCmd.Options.Add(mdListOnlyOption);
+convertMdCmd.Options.Add(verboseOption);
+
 // Intelligent search command
 var searchCmd = new Command("search", "Search data with intelligent strategy detection or natural language queries");
 var searchTermArg = new Argument<string>("query") { Description = "Search term or natural language query (e.g., 'dave' or 'show me ages of people named dave')" };
@@ -246,6 +256,7 @@ rootCommand.Subcommands.Add(toolCmd);
 rootCommand.Subcommands.Add(storeCmd);
 rootCommand.Subcommands.Add(segmentCmd);
 rootCommand.Subcommands.Add(toSqliteCmd);
+rootCommand.Subcommands.Add(convertMdCmd);
 rootCommand.Subcommands.Add(searchCmd);
 
 profileCmd.SetAction(async (parseResult, cancellationToken) =>
@@ -999,6 +1010,85 @@ toSqliteCmd.SetAction(async (parseResult, cancellationToken) =>
                 AnsiConsole.MarkupLine($"[red]✗ Export failed:[/] {result.Error}");
             }
         });
+});
+
+// Markdown table conversion handler
+convertMdCmd.SetAction(async (parseResult, cancellationToken) =>
+{
+    var mdInput = parseResult.GetValue(mdInputOption);
+    var outputDir = parseResult.GetValue(mdOutputDirOption) ?? "./converted_tables";
+    var listOnly = parseResult.GetValue(mdListOnlyOption);
+    var verbose = parseResult.GetValue(verboseOption);
+
+    if (string.IsNullOrEmpty(mdInput) || !File.Exists(mdInput))
+    {
+        AnsiConsole.MarkupLine("[red]Error:[/] Markdown file not found: {0}", mdInput ?? "null");
+        return;
+    }
+
+    try
+    {
+        // Check if file contains tables
+        var hasTables = await MarkdownTableConverter.ContainsTablesAsync(mdInput, cancellationToken);
+
+        if (!hasTables)
+        {
+            AnsiConsole.MarkupLine("[yellow]No markdown tables found in {0}[/]", Path.GetFileName(mdInput));
+            return;
+        }
+
+        // Extract tables
+        var content = await File.ReadAllTextAsync(mdInput, cancellationToken);
+        var tables = MarkdownTableConverter.ExtractTablesToCsv(content);
+
+        if (listOnly)
+        {
+            AnsiConsole.MarkupLine("[green]Found {0} table(s) in {1}:[/]", tables.Count, Path.GetFileName(mdInput));
+            for (int i = 0; i < tables.Count; i++)
+            {
+                var lines = tables[i].Split('\n', StringSplitOptions.RemoveEmptyEntries);
+                var rowCount = lines.Length - 1; // Exclude header
+                var colCount = lines.FirstOrDefault()?.Split(',').Length ?? 0;
+                AnsiConsole.MarkupLine("  Table {0}: {1} columns × {2} rows", i + 1, colCount, rowCount);
+            }
+            return;
+        }
+
+        // Convert and save
+        var csvPaths = await MarkdownTableConverter.ConvertFileAsync(mdInput, outputDir, cancellationToken);
+
+        AnsiConsole.MarkupLine("[green]✓[/] Converted {0} table(s) from {1}:", csvPaths.Count, Path.GetFileName(mdInput));
+        foreach (var csvPath in csvPaths)
+        {
+            var fileInfo = new FileInfo(csvPath);
+            AnsiConsole.MarkupLine("  [cyan]{0}[/] ({1:N0} bytes)", Path.GetFileName(csvPath), fileInfo.Length);
+
+            if (verbose)
+            {
+                // Show preview
+                var lines = await File.ReadAllLinesAsync(csvPath, cancellationToken);
+                AnsiConsole.MarkupLine("  [dim]Preview:[/]");
+                foreach (var line in lines.Take(3))
+                {
+                    AnsiConsole.MarkupLine("    [dim]{0}[/]", Markup.Escape(line));
+                }
+                if (lines.Length > 3)
+                {
+                    AnsiConsole.MarkupLine("    [dim]... ({0} more rows)[/]", lines.Length - 3);
+                }
+            }
+        }
+
+        AnsiConsole.MarkupLine("\n[dim]Tip: Use 'datasummarizer profile <csv>' to analyze these tables[/]");
+    }
+    catch (Exception ex)
+    {
+        AnsiConsole.MarkupLine("[red]Error converting markdown tables:[/] {0}", ex.Message);
+        if (verbose)
+        {
+            AnsiConsole.WriteException(ex);
+        }
+    }
 });
 
 // Intelligent search command handler

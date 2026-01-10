@@ -36,7 +36,9 @@ Open http://localhost:5080
 dotnet run --project src/LucidRAG/LucidRAG.csproj -- --standalone
 ```
 
-Uses SQLite + DuckDB locally - no PostgreSQL or external services needed.
+Uses SQLite + InMemory vectors locally - no PostgreSQL or Qdrant needed.
+
+**⚠️ Limitation:** Document embeddings are **not persisted** in standalone mode. All documents must be re-indexed on each startup. For persistent embeddings, use Docker with Qdrant (see docker-compose.yml).
 
 ---
 
@@ -44,11 +46,9 @@ Uses SQLite + DuckDB locally - no PostgreSQL or external services needed.
 
 | Category | Formats |
 |----------|---------|
-| **Text** | PDF, DOCX, Markdown, HTML, TXT |
-| **Images** | PNG, JPG, GIF, WebP, SVG, BMP, TIFF |
-| **Data** | CSV, XLSX, Parquet, JSON, XML, SQLite, DuckDB |
-| **Video** | MP4, WebM, MOV, AVI |
-| **Audio** | MP3, WAV, M4A, FLAC |
+| **Documents** | PDF, DOCX, DOC, Markdown, HTML, TXT, RTF |
+| **Images** | PNG, JPG, JPEG, GIF, WebP, BMP, TIFF, TIF |
+| **Data** | CSV, XLSX, XLS, Parquet, JSON |
 
 ---
 
@@ -57,16 +57,51 @@ Uses SQLite + DuckDB locally - no PostgreSQL or external services needed.
 ```
 src/
   LucidRAG/                            # Main web application (ASP.NET Core 10)
-  LucidRAG.Cli/                        # Command-line tool
+  LucidRAG.Cli/                        # Command-line tool with unified pipeline
   LucidRAG.Tests/                      # Integration tests with TestContainers
-  Mostlylucid.DocSummarizer.Core/      # Document processing, embeddings, BM25
-  Mostlylucid.DocSummarizer.Images/    # 22-wave image analysis engine
+
+  # Core Pipeline Infrastructure
+  Mostlylucid.Summarizer.Core/         # Unified pipeline interfaces & registry
+  Mostlylucid.DocSummarizer.Core/      # Document processing (PDF, DOCX, MD, HTML)
+  ImageSummarizer.Core/                # 22-wave image analysis engine
+  DataSummarizer.Core/                 # Structured data (CSV, Excel, Parquet, JSON)
+
+  # LLM Providers
   Mostlylucid.DocSummarizer.Anthropic/ # Claude provider
   Mostlylucid.DocSummarizer.OpenAI/    # OpenAI/GPT-4o provider
+
+  # Standalone Tools
   Mostlylucid.ImageSummarizer.Cli/     # Standalone OCR tool with MCP support
+
+  # Specialized Features
   Mostlylucid.GraphRag/                # Entity extraction & knowledge graph
   Mostlylucid.RAG/                     # Vector store abstraction (Qdrant)
 ```
+
+---
+
+## Unified Pipeline Architecture
+
+All content processing flows through a unified `IPipeline` interface:
+
+- **DocumentPipeline** - PDF, DOCX, Markdown, HTML, TXT
+- **ImagePipeline** - GIF, PNG, JPG, WebP, BMP, TIFF
+- **DataPipeline** - CSV, Excel, Parquet, JSON
+
+Each pipeline:
+- Owns its modality-specific processing
+- Returns standardized `ContentChunk` objects
+- Registers with `IPipelineRegistry` for auto-routing
+- Supports progress reporting and cancellation
+
+```csharp
+// CLI auto-routes based on file extension
+lucidrag process document.pdf image.gif data.csv --collection mydata
+
+// Each file routed to appropriate pipeline automatically
+```
+
+**Content Hashing**: All pipelines use XxHash64 for fast, consistent content hashing and deduplication.
 
 ---
 
@@ -266,21 +301,23 @@ For public deployments:
 ## CLI Tool
 
 ```bash
-# Index documents
-lucidrag-cli index document.pdf
-lucidrag-cli index ./documents --collection my-docs
+# Process files (unified pipeline - auto-routes by extension)
+lucidrag-cli process document.pdf image.gif data.csv --collection my-docs
+
+# List available pipelines
+lucidrag-cli process --list-pipelines
+
+# Force specific pipeline
+lucidrag-cli process *.jpg --pipeline image --verbose
 
 # Search
-lucidrag-cli search "your query"
+lucidrag-cli search "your query" --collection my-docs
 
 # Interactive chat
 lucidrag-cli chat
 
 # Run web server
 lucidrag-cli serve --port 5080
-
-# OCR standalone
-lucidrag-cli ocr screenshot.png --pipeline advancedocr
 ```
 
 ---

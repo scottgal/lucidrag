@@ -51,15 +51,20 @@ services:
 
 **What you get**:
 - SQLite for metadata (no PostgreSQL needed)
-- DuckDB for vectors (no Qdrant needed)
 - ONNX embeddings (no external APIs)
 - Heuristic entity extraction (no LLM needed)
 - Markdown/TXT/HTML file support
+- Full RAG search and chat functionality
 
-**What you don't get**:
-- PDF/DOCX conversion (requires Docling)
-- LLM-enhanced answers (requires Ollama)
-- Hybrid/LLM extraction modes
+**⚠️ Limitations**:
+- **No vector persistence**: Embeddings are lost on restart (uses InMemory vector store)
+- **Slow startup**: Must re-index all documents on every restart
+- **No HNSW index**: Uses brute-force similarity search
+- PDF/DOCX conversion requires Docling
+- LLM-enhanced answers require Ollama
+- Hybrid/LLM extraction modes unavailable
+
+**Why no DuckDB vectors?** DuckDB vector store with VSS extension is not yet implemented for DocSummarizer (though DataSummarizer has full DuckDB VSS support). Use Qdrant for persistent embeddings.
 
 **Connect to external Ollama** (optional):
 ```yaml
@@ -289,6 +294,39 @@ LucidRAG will connect to Ollama at `host.docker.internal:11434`.
 ```
 
 **Why DuckDB?** DuckDB is used for vector storage to keep indexing local, fast, and inspectable without introducing an external vector database dependency. It's ephemeral by design — you can always rebuild it from source documents.
+
+### Unified Pipeline Architecture
+
+LucidRAG uses a unified pipeline system via `Mostlylucid.Summarizer.Core` that enables consistent processing across different content types:
+
+```
+IPipelineRegistry
+  ├─ DocumentPipeline (PDF, DOCX, Markdown, HTML, TXT)
+  ├─ ImagePipeline (PNG, JPG, GIF, WebP)
+  └─ DataPipeline (CSV, Excel, Parquet, JSON)
+```
+
+**Benefits:**
+- **Auto-routing**: Files routed to appropriate pipeline based on extension
+- **Standardized output**: All pipelines return `ContentChunk` objects
+- **Content hashing**: Unified XxHash64 hashing via `ContentHasher` utility
+- **Modular architecture**: Each pipeline owns its domain-specific processing
+
+**Pipeline registration:**
+```csharp
+// Each Core project registers its pipeline
+services.AddDocSummarizer();          // DocumentPipeline
+services.AddDocSummarizerImages();    // ImagePipeline
+services.AddDataSummarizer();         // DataPipeline
+
+// Unified registry for discovery
+services.AddPipelineRegistry();
+
+// Usage
+var registry = serviceProvider.GetRequiredService<IPipelineRegistry>();
+var pipeline = registry.FindForFile("document.pdf");
+var result = await pipeline.ProcessAsync("document.pdf");
+```
 
 ### Key Components
 
@@ -647,8 +685,12 @@ Mostlylucid.RagDocuments/
 
 | Package | Purpose |
 |---------|---------|
-| Mostlylucid.DocSummarizer.Core | RAG pipeline, embeddings, vector store |
-| Mostlylucid.GraphRag | Entity extraction, knowledge graph |
+| **Mostlylucid.Summarizer.Core** | Unified pipeline interfaces, content hashing (XxHash64), base classes |
+| **Mostlylucid.DocSummarizer.Core** | Document processing (PDF, DOCX, Markdown, HTML, TXT) |
+| **ImageSummarizer.Core** | 22-wave image analysis, OCR, motion detection, vision LLM escalation |
+| **DataSummarizer.Core** | Structured data profiling (CSV, Excel, Parquet, JSON) |
+| **Mostlylucid.GraphRag** | Entity extraction, knowledge graph, relationship detection |
+| **Mostlylucid.RAG** | Vector store abstraction (DuckDB/Qdrant backends) |
 | AngleSharp | HTML parsing for web crawler |
 | Entity Framework Core | Database access (PostgreSQL/SQLite) |
 | Serilog | Structured logging |

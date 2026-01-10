@@ -1,9 +1,9 @@
 using System.Diagnostics;
-using System.Security.Cryptography;
 using System.Text;
 using System.Text.RegularExpressions;
 using Mostlylucid.DocSummarizer.Config;
 using Mostlylucid.DocSummarizer.Models;
+using Mostlylucid.Summarizer.Core.Utilities;
 
 
 namespace Mostlylucid.DocSummarizer.Services;
@@ -438,10 +438,8 @@ public class RagSummarizer
     private static string GetCollectionName(string docId)
     {
         // Create a short hash of the docId to ensure unique collection per document
-        using var sha = SHA256.Create();
-        var bytes = sha.ComputeHash(Encoding.UTF8.GetBytes(docId));
-        var hash = Convert.ToHexString(bytes)[..12].ToLowerInvariant();
-        return $"{CollectionPrefix}{hash}";
+        var hash = ContentHasher.ComputeHash(docId);
+        return $"{CollectionPrefix}{hash[..12]}";
     }
 
     /// <summary>
@@ -2066,11 +2064,7 @@ public class RagSummarizer
     /// Includes order to handle duplicate content (same hash) in documents with repeated sections.
     /// </summary>
     private static Guid GenerateStableId(string docId, string chunkHash, int order)
-    {
-        using var sha = SHA256.Create();
-        var bytes = sha.ComputeHash(Encoding.UTF8.GetBytes($"{docId}:{chunkHash}:{order}"));
-        return new Guid(bytes.Take(16).ToArray());
-    }
+        => ContentHasher.ComputeGuid($"{docId}:{chunkHash}:{order}");
 
     private static string ReplaceChunkCitations(string text, IReadOnlyDictionary<string, DocumentChunk> chunkLookup)
     {

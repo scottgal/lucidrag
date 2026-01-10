@@ -52,7 +52,7 @@ public class TextDetectionServiceTests : IDisposable
         // Arrange
         var config = new OcrConfig { EnableTextDetection = false };
         var modelDownloader = CreateMockModelDownloader(eastPath: null, craftPath: null);
-        var service = new TextDetectionService(modelDownloader, config, _loggerMock.Object);
+        var service = new TextDetectionService(modelDownloader, config, null, _loggerMock.Object);
         var imagePath = CreateTestImage("solid.png", 100, 100, Color.White);
 
         // Act
@@ -71,7 +71,7 @@ public class TextDetectionServiceTests : IDisposable
     {
         // Arrange
         var modelDownloader = CreateMockModelDownloader(eastPath: null, craftPath: null);
-        var service = new TextDetectionService(modelDownloader, _config, _loggerMock.Object);
+        var service = new TextDetectionService(modelDownloader, _config, null, _loggerMock.Object);
         var imagePath = CreateTestImage("nomodels.png", 200, 200, Color.White);
 
         // Act
@@ -90,7 +90,7 @@ public class TextDetectionServiceTests : IDisposable
     {
         // Arrange - Use mock that returns no models (fallback path)
         var modelDownloader = CreateMockModelDownloader(eastPath: null, craftPath: null);
-        var service = new TextDetectionService(modelDownloader, _config, _loggerMock.Object);
+        var service = new TextDetectionService(modelDownloader, _config, null, _loggerMock.Object);
         var imagePath = CreateTestImage("test.png", 300, 200, Color.LightGray);
 
         // Act
@@ -110,7 +110,7 @@ public class TextDetectionServiceTests : IDisposable
     {
         // Arrange
         var modelDownloader = CreateMockModelDownloader(null, null);
-        var service = new TextDetectionService(modelDownloader, _config, _loggerMock.Object);
+        var service = new TextDetectionService(modelDownloader, _config, null, _loggerMock.Object);
 
         var boxes = new List<Mostlylucid.DocSummarizer.Images.Services.Ocr.BoundingBox>
         {
@@ -135,7 +135,7 @@ public class TextDetectionServiceTests : IDisposable
     {
         // Arrange
         var modelDownloader = CreateMockModelDownloader(null, null);
-        var service = new TextDetectionService(modelDownloader, _config, _loggerMock.Object);
+        var service = new TextDetectionService(modelDownloader, _config, null, _loggerMock.Object);
 
         var boxes = new List<Mostlylucid.DocSummarizer.Images.Services.Ocr.BoundingBox>
         {
@@ -159,7 +159,7 @@ public class TextDetectionServiceTests : IDisposable
     {
         // Arrange
         var modelDownloader = CreateMockModelDownloader(null, null);
-        var service = new TextDetectionService(modelDownloader, _config, _loggerMock.Object);
+        var service = new TextDetectionService(modelDownloader, _config, null, _loggerMock.Object);
 
         // Act
         var result = service.ApplyNonMaximumSuppression(
@@ -175,7 +175,7 @@ public class TextDetectionServiceTests : IDisposable
     {
         // Arrange
         var modelDownloader = CreateMockModelDownloader(null, null);
-        var service = new TextDetectionService(modelDownloader, _config, _loggerMock.Object);
+        var service = new TextDetectionService(modelDownloader, _config, null, _loggerMock.Object);
 
         // Act
         var result = await service.DetectTextRegionsAsync("/nonexistent/path/image.png");

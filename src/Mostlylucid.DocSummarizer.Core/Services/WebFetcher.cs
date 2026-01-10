@@ -2,7 +2,6 @@ using System.Diagnostics;
 using System.Diagnostics.Metrics;
 using System.Net;
 using System.Net.Sockets;
-using System.Security.Cryptography;
 using System.Text;
 using AngleSharp;
 using AngleSharp.Dom;
@@ -10,6 +9,7 @@ using AngleSharp.Html.Parser;
 using Microsoft.Playwright;
 using Mostlylucid.DocSummarizer.Config;
 using Mostlylucid.DocSummarizer.Models;
+using Mostlylucid.Summarizer.Core.Utilities;
 using Polly;
 using Polly.CircuitBreaker;
 using Polly.Retry;
@@ -997,7 +997,7 @@ public class WebFetcher
                 }
 
                 // Deduplicate by URL hash
-                var urlHash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(absoluteUri.AbsoluteUri)))[..16];
+                var urlHash = ContentHasher.ComputeHash(absoluteUri.AbsoluteUri);
                 if (!seenImageHashes.Add(urlHash))
                 {
                     img.Remove();

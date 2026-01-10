@@ -20,8 +20,8 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!-- Only reference CLI - it transitively includes ImageSummarizer.Core -->
     <ProjectReference Include="..\Mostlylucid.ImageSummarizer.Cli\Mostlylucid.ImageSummarizer.Cli.csproj" />
-    <ProjectReference Include="..\Mostlylucid.DocSummarizer.Images\Mostlylucid.DocSummarizer.Images.csproj" />
   </ItemGroup>
 
   <ItemGroup>

@@ -19,6 +19,7 @@ A .NET 10 CLI that turns any CSV/Excel/Parquet/JSON into a reproducible statisti
 - [Quick Start](#quick-start)
 - [Installation](#installation)
 - [Core Concepts](#core-concepts)
+- [Unified Pipeline Integration](#unified-pipeline-integration)
 - [Commands Reference](#commands-reference)
 - [Profile Store Management](#profile-store-management)
 - [Automatic Drift Detection](#automatic-drift-detection)
@@ -278,6 +279,63 @@ DataSummarizer remembers datasets and questions separately:
 This enables: "Recomputed answer on 2025-12-20; drift vs baseline: 0.31 (significant)"
 
 See [Plain English Q&A](#plain-english-qa) for query memory in action.
+
+---
+
+## Unified Pipeline Integration
+
+DataSummarizer integrates with the LucidRAG unified pipeline architecture via `Mostlylucid.Summarizer.Core`:
+
+```csharp
+using Mostlylucid.Summarizer.Core.Pipeline;
+
+// DataPipeline implements IPipeline
+public class DataPipeline : PipelineBase
+{
+    public override string PipelineId => "data";
+    public override string Name => "Data Pipeline";
+    public override IReadOnlySet<string> SupportedExtensions =>
+        new[] { ".csv", ".tsv", ".xlsx", ".xls", ".parquet", ".json", ".ndjson", ".jsonl" };
+}
+```
+
+### Benefits
+
+- **Auto-routing by extension**: Use `IPipelineRegistry.FindForFile()` for automatic pipeline selection
+- **Standardized output**: Returns `ContentChunk` objects compatible with all LucidRAG pipelines
+- **Unified hashing**: Uses XxHash64 via `ContentHasher` for fast, consistent content hashing
+- **Cross-modal processing**: Works seamlessly alongside DocumentPipeline and ImagePipeline
+
+### Service Registration
+
+```csharp
+using Mostlylucid.DocSummarizer.Data.Extensions;
+
+services.AddDataSummarizer(opt =>
+{
+    // Configuration options
+});
+
+// Registers DataPipeline as IPipeline for unified pipeline registry
+```
+
+### XxHash64 Content Hashing
+
+All content hashing uses the unified `ContentHasher` utility with XxHash64:
+
+```csharp
+using Mostlylucid.Summarizer.Core.Utilities;
+
+var hash = ContentHasher.ComputeHash(content);      // String
+var hash = ContentHasher.ComputeHash(stream);       // Stream
+var hash = ContentHasher.ComputeHash(bytes);        // Byte array
+var guid = ContentHasher.ComputeGuid(content);      // Stable GUID
+```
+
+**Benefits:**
+- **Fast**: XxHash64 is 5-10× faster than SHA256
+- **Consistent**: Same hash algorithm across all LucidRAG components
+- **Deterministic**: Stable hashes for deduplication and caching
 
 ---
 

@@ -1,8 +1,8 @@
 using Mostlylucid.DocSummarizer.Config;
-using System.Security.Cryptography;
 using Mostlylucid.DocSummarizer.Models;
 using Mostlylucid.DocSummarizer.Services.Onnx;
 using Mostlylucid.DocSummarizer.Services.Utilities;
+using Mostlylucid.Summarizer.Core.Utilities;
 
 
 namespace Mostlylucid.DocSummarizer.Services;
@@ -1301,10 +1301,8 @@ Answer:";
 
     private static string ComputeFileHash(string filePath)
     {
-        using var sha = SHA256.Create();
         using var stream = File.OpenRead(filePath);
-        var bytes = sha.ComputeHash(stream);
-        return Convert.ToHexString(bytes)[..16].ToLowerInvariant();
+        return ContentHasher.ComputeHash(stream);
     }
  
     private static void PrintBanner()

@@ -35,26 +35,68 @@ docker-compose -f src/LucidRAG/docker-compose.yml up -d
 
 ## Architecture
 
-Six-project solution with layered dependencies:
+Multi-project solution with unified pipeline architecture:
 
 ```
-LucidRAG (web)          → ASP.NET Core 10 + Razor/HTMX + Tailwind/DaisyUI
-LucidRAG.Cli            → System.CommandLine CLI wrapping web services
-LucidRAG.Tests          → xUnit + PostgreSQL test containers
-Mostlylucid.DocSummarizer.Core → NuGet package: ONNX embeddings, document parsing, BM25
-Mostlylucid.GraphRag    → Entity/relationship extraction pipeline
-Mostlylucid.RAG         → Vector store abstraction (DuckDB/Qdrant backends)
+# Applications
+LucidRAG (web)              → ASP.NET Core 10 + Razor/HTMX + Tailwind/DaisyUI
+LucidRAG.Cli                → Unified CLI (auto-routes by extension)
+LucidRAG.Tests              → xUnit + PostgreSQL test containers
+Mostlylucid.ImageSummarizer.Cli → Standalone image analysis tool + MCP server
+
+# Core Pipeline Infrastructure (Unified Processing)
+Mostlylucid.Summarizer.Core         → Unified pipeline interfaces, XxHash64 content hashing
+Mostlylucid.DocSummarizer.Core      → Document pipeline (PDF, DOCX, Markdown, HTML, TXT)
+ImageSummarizer.Core                → Image pipeline (22-wave ML, OCR, motion, vision LLM)
+DataSummarizer.Core                 → Data pipeline (CSV, Excel, Parquet, JSON)
+
+# LLM Providers
+Mostlylucid.DocSummarizer.Anthropic → Claude integration
+Mostlylucid.DocSummarizer.OpenAI    → OpenAI/GPT-4o integration
+
+# Specialized Services
+Mostlylucid.GraphRag                → Entity extraction & knowledge graph
+Mostlylucid.RAG                     → Vector store abstraction (DuckDB/Qdrant)
 ```
 
-**Dependency flow:** Web/CLI → GraphRag/RAG → DocSummarizer.Core
+**Dependency flow:**
+- Applications → Core pipelines → Summarizer.Core
+- Each pipeline owns its domain-specific processing
+- All pipelines implement `IPipeline` interface
+- Unified `ContentHasher` utility (XxHash64) for all content hashing
+
+**Unified Pipeline Pattern:**
+```csharp
+// Each Core project registers its pipeline
+services.AddDocSummarizer();          // DocumentPipeline
+services.AddDocSummarizerImages();    // ImagePipeline
+services.AddDataSummarizer();         // DataPipeline
+services.AddPipelineRegistry();       // Discovery service
+
+// Auto-routing by extension
+var registry = services.GetRequiredService<IPipelineRegistry>();
+var pipeline = registry.FindForFile("document.pdf");
+var result = await pipeline.ProcessAsync("document.pdf");
+```
 
 ## Key Directories
 
+### Applications
 - `src/LucidRAG/Controllers/Api/` - REST endpoints (Chat, Search, Documents, Graph, Config)
 - `src/LucidRAG/Services/` - Core services: DocumentProcessingService, ConversationService, AgenticSearchService, EntityGraphService
 - `src/LucidRAG/Data/` - EF Core DbContext and migrations
-- `src/Mostlylucid.DocSummarizer.Core/Services/BertRagSummarizer.cs` - Core AI/embedding logic
+- `src/LucidRAG.Cli/` - Unified CLI tool with pipeline auto-routing
+- `src/Mostlylucid.ImageSummarizer.Cli/` - Standalone image analysis + MCP server
+
+### Core Pipeline Infrastructure
+- `src/Mostlylucid.Summarizer.Core/` - Unified pipeline interfaces, `PipelineBase`, `ContentHasher` utility
+- `src/Mostlylucid.DocSummarizer.Core/` - Document processing pipeline, ONNX embeddings, BM25
+- `src/ImageSummarizer.Core/` - 22-wave image analysis, OCR, motion detection, filmstrip optimization
+- `src/DataSummarizer.Core/` - Data profiling, DuckDB analytics, constraint validation
+
+### Specialized Services
 - `src/Mostlylucid.GraphRag/GraphRagPipeline.cs` - Entity extraction orchestration
+- `src/Mostlylucid.RAG/` - Vector store abstraction (DuckDB/Qdrant backends)
 
 ## Configuration
 
@@ -69,10 +111,26 @@ Primary configuration in `src/LucidRAG/appsettings.json`:
 ## Storage Backends
 
 - **PostgreSQL 16+** - Production database (EF Core)
-- **SQLite** - Standalone/CLI mode
-- **DuckDB** - Default vector embeddings
-- **Qdrant** - Optional scalable vector store
+- **SQLite** - Standalone/CLI mode (metadata only)
+- **Qdrant** - Production vector store (persistent embeddings)
+- **InMemory** - Standalone vector store (ephemeral, no persistence)
 - **ONNX** - Local embeddings (all-MiniLM-L6-v2, no API keys needed)
+
+### ⚠️ Standalone Mode Limitations
+
+**Current State:**
+- `VectorStoreBackend.DuckDB` is defined in the enum but **NOT IMPLEMENTED**
+- Code falls back to `InMemory` vector store in standalone mode
+- Document embeddings are **lost on restart**
+- Must re-index all documents on every startup
+
+**Working Standalone:**
+- ✅ **ImageSummarizer.Cli**: Fully standalone, no database needed
+- ✅ **DataSummarizer**: Uses DuckDB with VSS extension for persistent vectors
+- ⚠️ **LucidRAG (web)**: SQLite metadata + InMemory vectors (no persistence)
+- ⚠️ **LucidRAG.Cli**: SQLite metadata + InMemory vectors (no persistence)
+
+**For Persistent Embeddings:** Use docker-compose.yml with Qdrant
 
 ## CI/CD
 

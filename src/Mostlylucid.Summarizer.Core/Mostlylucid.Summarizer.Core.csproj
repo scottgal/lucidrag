@@ -1,0 +1,41 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFrameworks>net8.0;net9.0;net10.0</TargetFrameworks>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <LangVersion>latest</LangVersion>
+
+    <RootNamespace>Mostlylucid.Summarizer.Core</RootNamespace>
+    <AssemblyName>Mostlylucid.Summarizer.Core</AssemblyName>
+
+    <!-- Package metadata -->
+    <PackageId>Mostlylucid.Summarizer.Core</PackageId>
+    <Description>Common abstractions for content summarization pipelines (documents, images, data)</Description>
+    <Authors>Scott Galloway</Authors>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <PackageProjectUrl>https://github.com/scottgal/lucidrag</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/scottgal/lucidrag</RepositoryUrl>
+    <PackageTags>summarizer;pipeline;documents;images;data;abstraction</PackageTags>
+  </PropertyGroup>
+
+  <!-- Conditional package versions by framework -->
+  <ItemGroup Condition="'$(TargetFramework)' == 'net8.0'">
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="8.0.2" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="8.0.2" />
+    <PackageReference Include="System.IO.Hashing" Version="8.0.0" />
+  </ItemGroup>
+
+  <ItemGroup Condition="'$(TargetFramework)' == 'net9.0'">
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="9.0.1" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="9.0.1" />
+    <PackageReference Include="System.IO.Hashing" Version="9.0.1" />
+  </ItemGroup>
+
+  <ItemGroup Condition="'$(TargetFramework)' == 'net10.0'">
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.1" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="10.0.1" />
+    <PackageReference Include="System.IO.Hashing" Version="10.0.1" />
+  </ItemGroup>
+
+</Project>

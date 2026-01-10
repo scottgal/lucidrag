@@ -43,7 +43,8 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\Mostlylucid.DocSummarizer.Images\Mostlylucid.DocSummarizer.Images.csproj" />
+    <ProjectReference Include="..\ImageSummarizer.Core\ImageSummarizer.Core.csproj" />
+    <ProjectReference Include="..\Mostlylucid.Summarizer.Core\Mostlylucid.Summarizer.Core.csproj" />
   </ItemGroup>
 
   <ItemGroup>

@@ -36,7 +36,7 @@ public class HashHelperTests
     }
 
     [Fact]
-    public void ComputeHash_WithEmptyContent_ReturnsHash()
+    public void ComputeHash_WithEmptyContent_ReturnsEmptyString()
     {
         // Arrange
         var content = "";
@@ -46,7 +46,7 @@ public class HashHelperTests
 
         // Assert
         Assert.NotNull(hash);
-        Assert.Equal(16, hash.Length);
+        Assert.Empty(hash); // ContentHasher returns empty string for empty content
     }
 
     [Fact]

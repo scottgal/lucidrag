@@ -1,0 +1,36 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFrameworks>net8.0;net9.0;net10.0</TargetFrameworks>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <LangVersion>latest</LangVersion>
+
+    <!-- NuGet package metadata -->
+    <PackageId>Mostlylucid.Storage.Core</PackageId>
+    <Version>1.0.0</Version>
+    <Authors>LucidRAG</Authors>
+    <Description>Unified vector storage library with support for InMemory, DuckDB, and Qdrant backends. Used by all LucidRAG pipelines for consistent embedding storage.</Description>
+    <PackageTags>vector-store;embeddings;rag;duckdb;qdrant;semantic-search</PackageTags>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- DuckDB for embedded vector storage -->
+    <PackageReference Include="DuckDB.NET.Data.Full" Version="1.1.3" />
+
+    <!-- Qdrant for production vector storage -->
+    <PackageReference Include="Qdrant.Client" Version="1.12.0" />
+
+    <!-- Microsoft Extensions for DI and configuration - match Summarizer.Core versions -->
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="10.0.1" />
+    <PackageReference Include="Microsoft.Extensions.Options" Version="10.0.1" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.1" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Reference to unified pipeline core for ContentHasher -->
+    <ProjectReference Include="..\Mostlylucid.Summarizer.Core\Mostlylucid.Summarizer.Core.csproj" />
+  </ItemGroup>
+
+</Project>

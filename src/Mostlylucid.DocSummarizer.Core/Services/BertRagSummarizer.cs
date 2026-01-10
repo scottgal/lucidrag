@@ -1,9 +1,9 @@
 using System.Diagnostics;
-using System.Security.Cryptography;
 using System.Text;
 using Mostlylucid.DocSummarizer.Config;
 using Mostlylucid.DocSummarizer.Models;
 using Mostlylucid.DocSummarizer.Services.Onnx;
+using Mostlylucid.Summarizer.Core.Utilities;
 
 
 namespace Mostlylucid.DocSummarizer.Services;
@@ -225,8 +225,7 @@ public class BertRagSummarizer : IDisposable, IAsyncDisposable
     private static string ComputeContentHash(string content)
     {
         var canonical = Canonicalize(content);
-        var bytes = SHA256.HashData(Encoding.UTF8.GetBytes(canonical));
-        return Convert.ToHexString(bytes)[..16].ToLowerInvariant();
+        return ContentHasher.ComputeHash(canonical);
     }
     
     /// <summary>

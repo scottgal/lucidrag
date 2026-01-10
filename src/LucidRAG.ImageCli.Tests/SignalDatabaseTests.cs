@@ -93,8 +93,8 @@ public class SignalDatabaseTests : IDisposable
 
         // Assert
         stats.ImageCount.Should().Be(2);
-        stats.SignalCount.Should().BeGreaterOrEqualTo(2);
-        stats.UniqueSourceCount.Should().BeGreaterOrEqualTo(1);
+        stats.SignalCount.Should().BeGreaterThanOrEqualTo(2);
+        stats.UniqueSourceCount.Should().BeGreaterThanOrEqualTo(1);
     }
 
     [Fact]

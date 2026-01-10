@@ -3,7 +3,9 @@ using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Mostlylucid.DocSummarizer.Config;
+using Mostlylucid.DocSummarizer.Pipeline;
 using Mostlylucid.DocSummarizer.Services;
+using Mostlylucid.Summarizer.Core.Pipeline;
 
 namespace Mostlylucid.DocSummarizer.Extensions;
 
@@ -102,6 +104,10 @@ public static class ServiceCollectionExtensions
         // Register the startup initializer as a hosted service
         services.AddHostedService<DocSummarizerInitializer>();
 
+        // Register the pipeline for unified pipeline registry
+        services.TryAddSingleton<DocumentPipeline>();
+        services.AddSingleton<IPipeline>(sp => sp.GetRequiredService<DocumentPipeline>());
+
         return services;
     }
 
@@ -160,6 +166,10 @@ public static class ServiceCollectionExtensions
 
         services.TryAddSingleton<IDocumentSummarizer, DocumentSummarizerService>();
         services.AddHostedService<DocSummarizerInitializer>();
+
+        // Register the pipeline for unified pipeline registry
+        services.TryAddSingleton<DocumentPipeline>();
+        services.AddSingleton<IPipeline>(sp => sp.GetRequiredService<DocumentPipeline>());
 
         return services;
     }

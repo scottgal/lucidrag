@@ -780,12 +780,11 @@ public enum SummarizationMode
 
 public static class HashHelper
 {
+    /// <summary>
+    /// Compute content hash using XxHash64 (fast, consistent).
+    /// </summary>
     public static string ComputeHash(string content)
-    {
-        using var sha = SHA256.Create();
-        var bytes = sha.ComputeHash(Encoding.UTF8.GetBytes(content));
-        return Convert.ToHexString(bytes)[..16];
-    }
+        => Mostlylucid.Summarizer.Core.Utilities.ContentHasher.ComputeHash(content);
 }
 
 public static class CitationValidator

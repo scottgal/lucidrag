@@ -209,17 +209,4 @@ public class StreamingDocumentChunker
     }
 }
 
-/// <summary>
-/// Helper for computing content hashes
-/// </summary>
-public static class HashHelper
-{
-    public static string ComputeHash(string content)
-    {
-        if (string.IsNullOrEmpty(content)) return "";
-        
-        using var sha = System.Security.Cryptography.SHA256.Create();
-        var bytes = sha.ComputeHash(Encoding.UTF8.GetBytes(content));
-        return Convert.ToHexString(bytes)[..16].ToLowerInvariant();
-    }
-}
+// HashHelper is now defined in DocumentModels.cs and delegates to ContentHasher

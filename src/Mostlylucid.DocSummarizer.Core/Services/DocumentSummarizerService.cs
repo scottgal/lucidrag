@@ -7,6 +7,7 @@ using Microsoft.Extensions.Options;
 using Mostlylucid.DocSummarizer.Config;
 using Mostlylucid.DocSummarizer.Models;
 using Mostlylucid.DocSummarizer.Services.Onnx;
+using Mostlylucid.Summarizer.Core.Utilities;
 using UglyToad.PdfPig;
 
 namespace Mostlylucid.DocSummarizer.Services;
@@ -509,11 +510,7 @@ public class DocumentSummarizerService : IDocumentSummarizer, IDisposable
     }
 
     private static string ComputeDocumentId(string content)
-    {
-        using var sha = System.Security.Cryptography.SHA256.Create();
-        var hash = sha.ComputeHash(System.Text.Encoding.UTF8.GetBytes(content));
-        return Convert.ToHexString(hash)[..16].ToLowerInvariant();
-    }
+        => ContentHasher.ComputeHash(content);
 
     private static string HtmlToMarkdown(string html)
     {
