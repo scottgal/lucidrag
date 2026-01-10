@@ -143,6 +143,11 @@ builder.Services.AddHostedService<DemoContentSeeder>();
 builder.Services.AddSingleton<IWebCrawlerService, WebCrawlerService>();
 builder.Services.AddSingleton<IIngestionService, IngestionService>();
 
+// Table extraction services
+builder.Services.AddScoped<Mostlylucid.DocSummarizer.Core.Services.ITableExtractorFactory,
+    Mostlylucid.DocSummarizer.Core.Services.TableExtractorFactory>();
+builder.Services.AddScoped<TableProcessingService>();
+
 // Sentinel query decomposition service
 builder.Services.Configure<SentinelConfig>(
     builder.Configuration.GetSection("Sentinel"));

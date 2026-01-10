@@ -107,6 +107,15 @@
     <ItemGroup>
         <EmbeddedResource Include="Resources\*.txt" />
     </ItemGroup>
+
+    <!-- Copy Python table extractor scripts to output -->
+    <ItemGroup>
+        <None Include="Resources\TableExtractors\*.py">
+            <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+            <Pack>true</Pack>
+            <PackagePath>lib\$(TargetFramework)\Resources\TableExtractors</PackagePath>
+        </None>
+    </ItemGroup>
     
     <!-- Package files -->
     <ItemGroup>

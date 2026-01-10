@@ -79,6 +79,38 @@ var pipeline = registry.FindForFile("document.pdf");
 var result = await pipeline.ProcessAsync("document.pdf");
 ```
 
+## Features
+
+### Table Extraction (NEW - 2026-01-10)
+
+Automatic table extraction from PDF and DOCX documents:
+
+- **Extractors**: .NET native (DocumentFormat.OpenXml for DOCX, PdfPig for PDF)
+- **Storage**: Tables stored as evidence artifacts (CSV + JSON metadata)
+- **Entity Linking**: Tables linked to parent document as RetrievalEntityRecords
+- **Pipeline**: Integrated into DocumentQueueProcessor (runs at 60-70% progress)
+- **Confidence Scoring**: DOCX (0.7-1.0), PDF heuristic (0.4-0.7)
+
+**Key Services**:
+- `TableExtractorFactory` - Selects appropriate extractor (PDF/DOCX)
+- `TableProcessingService` - Stores tables as evidence, creates entities
+- `DocxTableExtractor` - Extracts tables from DOCX (high accuracy)
+- `PdfTableExtractor` - Extracts tables from PDF (heuristic word positioning)
+
+**Evidence Artifacts**:
+- `table_csv` - Exported CSV data (for DataSummarizer profiling)
+- `table_json` - Table metadata (structure, confidence, extraction method)
+
+**Test Coverage**: 3/3 integration tests passing
+**Documentation**: See `INTEGRATION_COMPLETE_TableExtraction.md`
+
+**Future Enhancements** (Phase 3):
+- Chart extraction (See `DESIGN_ChartExtraction.md`)
+- Table embeddings for semantic search
+- Table-aware queries ("find tables with column X")
+
+---
+
 ## Key Directories
 
 ### Applications

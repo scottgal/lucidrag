@@ -215,6 +215,45 @@ public class DocumentQueueProcessor(
             // Update document with initial results
             document.SegmentCount = result.Trace.TotalChunks;
             document.VectorStoreDocId = result.Trace.DocumentId; // Store the stableDocId for segment retrieval
+            document.ProcessingProgress = 60;
+            await db.SaveChangesAsync(ct);
+
+            // Notify progress via SignalR
+            await notifications.NotifyDocumentProgress(document.Id, document.Name, 60, "Table extraction", document.CollectionId);
+
+            // Extract tables from document (if supported)
+            try
+            {
+                progressChannel.Writer.TryWrite(
+                    ProgressUpdates.Stage("Tables", "Extracting tables...", 0, 0));
+
+                var tableProcessingService = scope.ServiceProvider.GetService<TableProcessingService>();
+                if (tableProcessingService != null)
+                {
+                    var tableEntities = await tableProcessingService.ProcessDocumentTablesAsync(
+                        job.FilePath,
+                        document.Id, // Use document ID as parent
+                        document.CollectionId ?? Guid.Empty,
+                        null, // Default options
+                        ct);
+
+                    if (tableEntities.Count > 0)
+                    {
+                        logger.LogInformation("Extracted {TableCount} tables from document {DocumentId}",
+                            tableEntities.Count, job.DocumentId);
+
+                        document.ProcessingProgress = 70;
+                        await db.SaveChangesAsync(ct);
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                // Table extraction failure shouldn't fail the whole document processing
+                logger.LogWarning(ex, "Table extraction failed for document {DocumentId}, continuing", job.DocumentId);
+            }
+
+            // Update progress
             document.ProcessingProgress = 80;
             await db.SaveChangesAsync(ct);
 
