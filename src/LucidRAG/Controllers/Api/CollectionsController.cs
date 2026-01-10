@@ -16,7 +16,7 @@ public class CollectionsController(
 {
 
     /// <summary>
-    /// List all collections with document counts
+    /// List all collections with document counts and processing status
     /// </summary>
     [HttpGet]
     public async Task<IActionResult> List(CancellationToken ct = default)
@@ -30,6 +30,10 @@ public class CollectionsController(
                 name = c.Name,
                 description = c.Description,
                 documentCount = c.Documents.Count,
+                completedCount = c.Documents.Count(d => d.Status == DocumentStatus.Completed),
+                processingCount = c.Documents.Count(d => d.Status == DocumentStatus.Processing),
+                pendingCount = c.Documents.Count(d => d.Status == DocumentStatus.Pending),
+                failedCount = c.Documents.Count(d => d.Status == DocumentStatus.Failed),
                 entityCount = c.Documents.Sum(d => d.EntityCount),
                 segmentCount = c.Documents.Sum(d => d.SegmentCount),
                 createdAt = c.CreatedAt,

@@ -14,6 +14,7 @@ using LucidRAG.Services;
 using LucidRAG.Services.Background;
 using LucidRAG.Services.Sentinel;
 using LucidRAG.Services.Storage;
+using LucidRAG.Hubs;
 using Scalar.AspNetCore;
 using Serilog;
 
@@ -125,6 +126,10 @@ if (!standaloneMode)
 // HttpClient for external API calls (RSS feeds, etc.)
 builder.Services.AddHttpClient();
 
+// SignalR for real-time updates
+builder.Services.AddSignalR();
+builder.Services.AddSingleton<IProcessingNotificationService, ProcessingNotificationService>();
+
 // MVC + Razor
 builder.Services.AddControllersWithViews();
 
@@ -187,6 +192,9 @@ app.UseAntiforgery();
 
 // Health check
 app.MapHealthChecks("/healthz");
+
+// SignalR hubs
+app.MapHub<DocumentProcessingHub>("/hubs/processing");
 
 // Controllers
 app.MapControllers();

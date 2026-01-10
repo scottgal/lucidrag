@@ -5,12 +5,14 @@ using Mostlylucid.DocSummarizer.Services;
 using LucidRAG.Config;
 using LucidRAG.Data;
 using LucidRAG.Entities;
+using LucidRAG.Hubs;
 
 namespace LucidRAG.Services.Background;
 
 public class DocumentQueueProcessor(
     DocumentProcessingQueue queue,
     IServiceScopeFactory scopeFactory,
+    IProcessingNotificationService notifications,
     ILogger<DocumentQueueProcessor> logger) : BackgroundService
 {
     // Maximum time to process a single document before timing out
@@ -194,6 +196,9 @@ public class DocumentQueueProcessor(
             document.ProcessingProgress = 0;
             await db.SaveChangesAsync(ct);
 
+            // Notify via SignalR
+            await notifications.NotifyDocumentStarted(document.Id, document.Name, document.CollectionId);
+
             // Report start
             await progressChannel.Writer.WriteAsync(
                 ProgressUpdates.Stage("Processing", "Starting document processing...", 0, 0), ct);
@@ -209,6 +214,9 @@ public class DocumentQueueProcessor(
             document.VectorStoreDocId = result.Trace.DocumentId; // Store the stableDocId for segment retrieval
             document.ProcessingProgress = 80;
             await db.SaveChangesAsync(ct);
+
+            // Notify progress via SignalR
+            await notifications.NotifyDocumentProgress(document.Id, document.Name, 80, "Entity extraction", document.CollectionId);
 
             // Report entity extraction starting
             progressChannel.Writer.TryWrite(
@@ -272,6 +280,9 @@ public class DocumentQueueProcessor(
             document.ProcessedAt = DateTimeOffset.UtcNow;
             await db.SaveChangesAsync(ct);
 
+            // Notify completion via SignalR
+            await notifications.NotifyDocumentCompleted(document.Id, document.Name, document.SegmentCount, document.EntityCount, document.CollectionId);
+
             // Report completion (channel may already be completed by summarizer)
             progressChannel.Writer.TryWrite(
                 ProgressUpdates.Completed($"Completed! {document.SegmentCount} segments, {document.EntityCount} entities.", 0));
@@ -286,6 +297,9 @@ public class DocumentQueueProcessor(
             document.Status = DocumentStatus.Failed;
             document.StatusMessage = ex.Message;
             await db.SaveChangesAsync(ct);
+
+            // Notify failure via SignalR
+            await notifications.NotifyDocumentFailed(document.Id, document.Name, ex.Message, document.CollectionId);
 
             // Channel may already be completed
             progressChannel.Writer.TryWrite(

@@ -18,6 +18,17 @@
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
                             </svg>
                             <span x-text="currentCollectionName" class="truncate"></span>
+                            <template x-if="currentCollection">
+                                <span class="badge badge-xs"
+                                      :class="{
+                                          'badge-success': currentCollection.documentCount > 0 && currentCollection.completedCount === currentCollection.documentCount,
+                                          'badge-warning': currentCollection.processingCount > 0,
+                                          'badge-error': currentCollection.failedCount > 0,
+                                          'badge-ghost': currentCollection.documentCount === 0 || (currentCollection.pendingCount > 0 && currentCollection.processingCount === 0 && currentCollection.failedCount === 0)
+                                      }"
+                                      x-text="`${currentCollection.completedCount}/${currentCollection.documentCount}`">
+                                </span>
+                            </template>
                         </span>
                         <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 opacity-50" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
@@ -46,7 +57,15 @@
                                         </svg>
                                         <span x-text="col.name" class="truncate"></span>
                                     </span>
-                                    <span class="badge badge-sm badge-ghost" x-text="col.documentCount || 0"></span>
+                                    <span class="badge badge-sm"
+                                          :class="{
+                                              'badge-success': col.documentCount > 0 && col.completedCount === col.documentCount,
+                                              'badge-warning': col.processingCount > 0,
+                                              'badge-error': col.failedCount > 0,
+                                              'badge-ghost': col.documentCount === 0 || (col.pendingCount > 0 && col.processingCount === 0 && col.failedCount === 0)
+                                          }"
+                                          x-text="col.documentCount > 0 ? `${col.completedCount}/${col.documentCount}` : '0'">
+                                    </span>
                                 </a>
                             </li>
                         </template>
@@ -90,11 +109,67 @@
             </template>
         </div>
 
-        <div class="p-4 border-b border-base-300">
-            <h2 class="font-semibold mb-3 flex items-center gap-2">
-                <span>📁</span> Add Content
-            </h2>
+        <!-- Communities Dropdown -->
+        <template x-if="communities.length > 0 && communityStats.totalCommunities > 0">
+            <div class="p-3 border-b border-base-300 bg-base-200/20">
+                <div class="dropdown dropdown-end w-full">
+                    <label tabindex="0" class="btn btn-sm btn-ghost w-full justify-between">
+                        <span class="flex items-center gap-2">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-secondary" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
+                            </svg>
+                            <span x-text="selectedCommunity ? selectedCommunity.name : 'All Communities'"></span>
+                            <span class="badge badge-xs badge-secondary" x-text="communityStats.totalCommunities"></span>
+                        </span>
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 opacity-50" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+                        </svg>
+                    </label>
+                    <ul tabindex="0" class="dropdown-content z-50 menu p-2 shadow-lg bg-base-100 rounded-box w-72 max-h-64 overflow-y-auto">
+                        <li>
+                            <a @@click="selectedCommunityId = null" :class="!selectedCommunityId ? 'active' : ''">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 10h16M4 14h16M4 18h16" />
+                                </svg>
+                                All Communities
+                            </a>
+                        </li>
+                        <template x-if="communityList.length > 0">
+                            <li class="menu-title"><span>Detected Communities</span></li>
+                        </template>
+                        <template x-for="comm in communityList" :key="comm.id">
+                            <li>
+                                <a @@click="selectCommunity(comm)"
+                                   :class="selectedCommunityId === comm.id ? 'active' : ''"
+                                   class="flex justify-between">
+                                    <span class="flex items-center gap-2 truncate">
+                                        <span class="w-2 h-2 rounded-full" :style="{ backgroundColor: getCommunityColor(comm) }"></span>
+                                        <span x-text="comm.name || `Community ${comm.id.substring(0, 8)}`" class="truncate"></span>
+                                    </span>
+                                    <span class="badge badge-xs badge-ghost" x-text="comm.entityCount || 0"></span>
+                                </a>
+                            </li>
+                        </template>
+                        <template x-if="communityList.length === 0">
+                            <li class="text-sm text-base-content/50 px-4 py-2">
+                                No communities detected yet. Communities are found during document processing.
+                            </li>
+                        </template>
+                    </ul>
+                </div>
+            </div>
+        </template>
 
+        <!-- Add Content - Collapsible -->
+        <div class="collapse collapse-arrow border-b border-base-300 bg-base-100" x-data="{ open: false }">
+            <input type="checkbox" class="min-h-0" x-model="open" />
+            <div class="collapse-title min-h-0 py-3 px-4 font-semibold flex items-center gap-2">
+                <span>📁</span> Add Content
+                <template x-if="!open">
+                    <span class="text-xs font-normal opacity-60 ml-auto">Click to expand</span>
+                </template>
+            </div>
+            <div class="collapse-content px-4">
             <!-- Demo Mode Banner -->
             <template x-if="demoMode">
                 <div class="alert alert-info text-xs mb-3 py-2">
@@ -242,6 +317,7 @@
                     <p class="text-xs opacity-60">Uploads disabled in demo</p>
                 </div>
             </template>
+            </div>
         </div>
 
         <!-- Document Selection Header -->
@@ -259,6 +335,44 @@
             </button>
             <span class="ml-auto badge badge-sm badge-ghost" x-text="selectedDocIds.size + ' selected'"></span>
         </div>
+
+        <!-- Processing Status (SignalR) -->
+        <template x-if="processingStatus.currentDocument">
+            <div class="px-3 py-2 bg-info/10 border-b border-info/30 animate-pulse">
+                <div class="flex items-center gap-2 text-xs">
+                    <span class="loading loading-spinner loading-xs text-info"></span>
+                    <span class="font-medium text-info truncate" x-text="processingStatus.currentDocument"></span>
+                </div>
+                <div class="flex items-center gap-2 mt-1">
+                    <progress class="progress progress-info h-1 flex-1"
+                              :value="processingStatus.progress"
+                              max="100"></progress>
+                    <span class="text-xs opacity-60" x-text="processingStatus.stage || 'Processing...'"></span>
+                </div>
+            </div>
+        </template>
+
+        <!-- Recent Processing Events -->
+        <template x-if="processingStatus.recentEvents.length > 0 && !processingStatus.currentDocument">
+            <div class="px-3 py-1 border-b border-base-300 text-xs">
+                <template x-if="processingStatus.recentEvents[0].type === 'completed'">
+                    <div class="flex items-center gap-1 text-success">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+                        </svg>
+                        <span class="truncate" x-text="`${processingStatus.recentEvents[0].documentName} completed`"></span>
+                    </div>
+                </template>
+                <template x-if="processingStatus.recentEvents[0].type === 'failed'">
+                    <div class="flex items-center gap-1 text-error">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                        </svg>
+                        <span class="truncate" x-text="`${processingStatus.recentEvents[0].documentName} failed`"></span>
+                    </div>
+                </template>
+            </div>
+        </template>
 
         <!-- Document List -->
         <div id="document-list" class="flex-1 overflow-y-auto p-2 space-y-1"
@@ -1099,6 +1213,20 @@ function ragApp() {
         newCollectionName: '',
         showCreateCollection: false,
 
+        // Community state
+        communityList: [],
+        communityStats: { totalCommunities: 0 },
+        selectedCommunityId: null,
+
+        // Processing status state (SignalR)
+        processingStatus: {
+            currentDocument: null,
+            progress: 0,
+            stage: '',
+            recentEvents: []
+        },
+        hubConnection: null,
+
         // Demo mode state
         demoMode: false,
         demoBannerMessage: '',
@@ -1167,7 +1295,9 @@ function ragApp() {
             await this.checkDemoMode();
             await this.loadExtractionModes();
             await this.loadCollections();
+            await this.loadCommunities();
             this.loadGraphStats();
+            this.initSignalR();
             if (!this.demoMode) {
                 // Wait for Alpine to render the input element after x-if evaluates
                 this.$nextTick(() => {
@@ -1176,6 +1306,65 @@ function ragApp() {
             }
             // Restore conversation from cookie
             await this.restoreConversation();
+        },
+
+        initSignalR() {
+            if (typeof signalR === 'undefined') {
+                console.warn('SignalR not loaded');
+                return;
+            }
+
+            this.hubConnection = new signalR.HubConnectionBuilder()
+                .withUrl('/hubs/processing')
+                .withAutomaticReconnect()
+                .build();
+
+            this.hubConnection.on('DocumentProcessing', (data) => {
+                this.handleProcessingUpdate(data);
+            });
+
+            this.hubConnection.on('QueueStatus', (data) => {
+                this.handleQueueStatus(data);
+            });
+
+            this.hubConnection.start()
+                .then(() => console.log('SignalR connected'))
+                .catch(err => console.warn('SignalR connection failed:', err));
+        },
+
+        handleProcessingUpdate(data) {
+            // Add to recent events (keep last 10)
+            this.processingStatus.recentEvents.unshift({
+                ...data,
+                receivedAt: new Date()
+            });
+            if (this.processingStatus.recentEvents.length > 10) {
+                this.processingStatus.recentEvents.pop();
+            }
+
+            // Update current document status
+            if (data.type === 'started' || data.type === 'progress') {
+                this.processingStatus.currentDocument = data.documentName;
+                this.processingStatus.progress = data.progress || 0;
+                this.processingStatus.stage = data.stage || 'Processing';
+            } else if (data.type === 'completed' || data.type === 'failed') {
+                // Clear current if it matches
+                if (this.processingStatus.currentDocument === data.documentName) {
+                    setTimeout(() => {
+                        this.processingStatus.currentDocument = null;
+                        this.processingStatus.progress = 0;
+                        this.processingStatus.stage = '';
+                    }, 2000);
+                }
+
+                // Refresh collections to update counts
+                this.loadCollections();
+            }
+        },
+
+        handleQueueStatus(data) {
+            // Could update a queue status display
+            console.log('Queue status:', data);
         },
 
         // Cookie utilities
@@ -1334,6 +1523,47 @@ function ragApp() {
             }
         },
 
+        // Community management
+        async loadCommunities() {
+            try {
+                // Load stats first
+                const statsResponse = await fetch('/api/communities/stats');
+                if (statsResponse.ok) {
+                    const stats = await statsResponse.json();
+                    this.communityStats = stats;
+                }
+
+                // Load community list
+                if (this.communityStats.totalCommunities > 0) {
+                    const response = await fetch('/api/communities?take=50');
+                    if (response.ok) {
+                        const data = await response.json();
+                        this.communityList = data.items || [];
+                    }
+                }
+            } catch (e) {
+                console.warn('Could not load communities:', e);
+            }
+        },
+
+        get selectedCommunity() {
+            if (!this.selectedCommunityId) return null;
+            return this.communityList.find(c => c.id === this.selectedCommunityId) || null;
+        },
+
+        selectCommunity(comm) {
+            this.selectedCommunityId = comm.id;
+            // Could filter graph or search by community here
+        },
+
+        getCommunityColor(comm) {
+            // Generate consistent color based on community id
+            if (!comm || !comm.id) return '#6b7280';
+            const hash = comm.id.split('').reduce((acc, char) => char.charCodeAt(0) + acc, 0);
+            const hue = hash % 360;
+            return `hsl(${hue}, 65%, 50%)`;
+        },
+
         async createCollection() {
             if (!this.newCollectionName.trim()) return;
             try {
@@ -1443,6 +1673,11 @@ function ragApp() {
             if (!this.currentCollectionId) return 'All Documents';
             const col = this.collections.find(c => c.id === this.currentCollectionId);
             return col?.name || 'All Documents';
+        },
+
+        get currentCollection() {
+            if (!this.currentCollectionId) return null;
+            return this.collections.find(c => c.id === this.currentCollectionId) || null;
         },
 
         async setExtractionMode(mode) {
