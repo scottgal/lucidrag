@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.Runtime.CompilerServices;
 using System.Text;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using Mostlylucid.DocSummarizer;
@@ -130,16 +131,71 @@ public class AgenticSearchService(
             allResults.AddRange(subResults);
         }
 
-        // Deduplicate and re-rank by aggregated score
+        // Extract significant keywords from query for boosting (ignore common stopwords)
+        var queryKeywords = ExtractSignificantKeywords(request.Query);
+        logger.LogInformation("Search mode: {Mode}, extracted keywords: [{Keywords}] from query '{Query}'",
+            request.SearchMode, string.Join(", ", queryKeywords), request.Query);
+
+        // Deduplicate and re-rank based on search mode
         var mergedResults = allResults
             .GroupBy(r => r.SegmentId)
-            .Select(g => g.OrderByDescending(r => r.Score).First() with
+            .Select(g =>
             {
-                Score = g.Sum(r => r.Score) // RRF-like aggregation
+                var best = g.OrderByDescending(r => r.Score).First();
+                var baseScore = g.Sum(r => r.Score); // RRF-like aggregation
+
+                // Pure semantic mode - no keyword boosting
+                if (request.SearchMode == SearchMode.Semantic)
+                {
+                    return best with { Score = baseScore };
+                }
+
+                // Calculate keyword matches for hybrid/keyword modes
+                var text = best.Text?.ToLowerInvariant() ?? "";
+                var docName = best.DocumentName?.ToLowerInvariant() ?? "";
+                var sectionTitle = best.SectionTitle?.ToLowerInvariant() ?? "";
+
+                // Count matches in text, document name, and section title
+                var textMatches = queryKeywords.Count(kw => text.Contains(kw, StringComparison.OrdinalIgnoreCase));
+                var docNameMatches = queryKeywords.Count(kw => docName.Contains(kw, StringComparison.OrdinalIgnoreCase));
+                var sectionMatches = queryKeywords.Count(kw => sectionTitle.Contains(kw, StringComparison.OrdinalIgnoreCase));
+                var totalMatches = textMatches + docNameMatches + sectionMatches;
+
+                double finalScore;
+
+                if (request.SearchMode == SearchMode.Keyword)
+                {
+                    // Keyword mode: HEAVY boost for matches, severe penalty for no matches
+                    // This prioritizes exact keyword matches over semantic similarity
+                    var keywordBoost = (docNameMatches * 1.5) + (textMatches * 1.0) + (sectionMatches * 0.5);
+                    var noMatchPenalty = (totalMatches == 0 && queryKeywords.Count > 0) ? -0.5 : 0.0;
+                    finalScore = baseScore + keywordBoost + noMatchPenalty;
+                }
+                else // Hybrid mode (default)
+                {
+                    // Hybrid: balanced boost + mild penalty for completely irrelevant results
+                    var keywordBoost = (docNameMatches * 0.5) + (textMatches * 0.3) + (sectionMatches * 0.2);
+                    // Penalty for results with NO keyword matches when we have keywords to match
+                    var noMatchPenalty = (totalMatches == 0 && queryKeywords.Count > 0) ? -0.2 : 0.0;
+                    finalScore = baseScore + keywordBoost + noMatchPenalty;
+                }
+
+                return best with { Score = finalScore };
             })
             .OrderByDescending(r => r.Score)
             .Take(request.TopK)
             .ToList();
+
+        // Log top results after boosting for debugging
+        if (mergedResults.Count > 0)
+        {
+            logger.LogInformation("Top 3 results after {Mode} ranking:", request.SearchMode);
+            foreach (var r in mergedResults.Take(3))
+            {
+                logger.LogInformation("  [{Score:F4}] {DocName}: {Text}",
+                    r.Score, r.DocumentName, r.Text?.Substring(0, Math.Min(50, r.Text?.Length ?? 0)));
+            }
+        }
 
         logger.LogInformation("Found {Count} merged results from {SubQueryCount} sub-queries",
             mergedResults.Count, queryPlan.SubQueries.Count);
@@ -397,6 +453,117 @@ ANSWER:";
             return string.Join("_", parts.Take(parts.Length - 2));
         }
         return null;
+    }
+
+    /// <summary>
+    /// Extract significant keywords from query, filtering out common stopwords.
+    /// Includes stemming and compound term splitting for better matching.
+    /// </summary>
+    private static HashSet<string> ExtractSignificantKeywords(string query)
+    {
+        // Common English stopwords to filter out
+        var stopwords = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+        {
+            "a", "an", "the", "is", "are", "was", "were", "be", "been", "being",
+            "have", "has", "had", "do", "does", "did", "will", "would", "could", "should",
+            "may", "might", "must", "shall", "can", "need", "dare", "ought", "used",
+            "to", "of", "in", "for", "on", "with", "at", "by", "from", "as", "into",
+            "through", "during", "before", "after", "above", "below", "between",
+            "under", "again", "further", "then", "once", "here", "there", "when",
+            "where", "why", "how", "all", "each", "few", "more", "most", "other",
+            "some", "such", "no", "nor", "not", "only", "own", "same", "so", "than",
+            "too", "very", "just", "also", "now", "and", "but", "or", "if", "because",
+            "until", "while", "what", "which", "who", "whom", "this", "that", "these",
+            "those", "am", "it", "its", "about", "tell", "me", "explain", "describe"
+        };
+
+        var keywords = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        // Extract all words (including compound terms)
+        var rawWords = Regex.Matches(query, @"\b[a-zA-Z]{3,}\b")
+            .Select(m => m.Value)
+            .Where(w => !stopwords.Contains(w))
+            .ToList();
+
+        foreach (var word in rawWords)
+        {
+            var lower = word.ToLowerInvariant();
+
+            // Add the original word
+            keywords.Add(lower);
+
+            // Split compound terms (GraphRAG -> graph, rag; EntityFramework -> entity, framework)
+            var parts = SplitCompoundTerm(word);
+            foreach (var part in parts)
+            {
+                if (part.Length >= 3 && !stopwords.Contains(part))
+                {
+                    keywords.Add(part.ToLowerInvariant());
+                }
+            }
+
+            // Add stemmed version (simple suffix stripping)
+            var stemmed = SimpleStem(lower);
+            if (stemmed.Length >= 3 && stemmed != lower)
+            {
+                keywords.Add(stemmed);
+            }
+        }
+
+        return keywords;
+    }
+
+    /// <summary>
+    /// Split compound terms like GraphRAG, EntityFramework into components.
+    /// </summary>
+    private static IEnumerable<string> SplitCompoundTerm(string term)
+    {
+        // Split on case boundaries (GraphRAG -> Graph, RAG)
+        var parts = Regex.Split(term, @"(?<=[a-z])(?=[A-Z])|(?<=[A-Z])(?=[A-Z][a-z])")
+            .Where(p => p.Length >= 2)
+            .ToList();
+
+        // If we got meaningful splits, return them
+        if (parts.Count > 1)
+        {
+            return parts;
+        }
+
+        // Also try splitting on common boundaries (like numbers or known suffixes)
+        return [term];
+    }
+
+    /// <summary>
+    /// Simple stemming by removing common suffixes.
+    /// Not a full Porter stemmer, but handles common cases.
+    /// </summary>
+    private static string SimpleStem(string word)
+    {
+        if (word.Length < 5) return word;
+
+        // Order matters - check longer suffixes first
+        string[] suffixes = ["ization", "isation", "ational", "fulness", "ousness",
+                            "iveness", "ements", "ically", "ations", "abling",
+                            "izing", "ising", "ating", "ities", "ments", "ness",
+                            "ings", "tion", "sion", "ally", "ible", "able", "ment",
+                            "ive", "ful", "ous", "ing", "ies", "ied", "ion", "ers",
+                            "est", "ity", "ed", "ly", "er", "es", "s"];
+
+        foreach (var suffix in suffixes)
+        {
+            if (word.EndsWith(suffix) && word.Length - suffix.Length >= 3)
+            {
+                var stem = word[..^suffix.Length];
+                // Handle doubling (e.g., running -> run)
+                if (stem.Length >= 3 && stem[^1] == stem[^2])
+                {
+                    stem = stem[..^1];
+                }
+                return stem;
+            }
+        }
+
+        return word;
     }
 
     /// <summary>

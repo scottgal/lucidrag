@@ -29,17 +29,27 @@ public class SearchController(
 
         try
         {
+            // Parse search mode from string (default to Hybrid)
+            var searchMode = request.SearchMode?.ToLowerInvariant() switch
+            {
+                "semantic" => Services.SearchMode.Semantic,
+                "keyword" => Services.SearchMode.Keyword,
+                _ => Services.SearchMode.Hybrid
+            };
+
             var searchRequest = new SearchRequest(
                 Query: request.Query,
                 CollectionId: request.CollectionId,
                 DocumentIds: request.DocumentIds,
-                TopK: request.TopK ?? 10);
+                TopK: request.TopK ?? 10,
+                SearchMode: searchMode);
 
             var result = await searchService.SearchAsync(searchRequest, ct);
 
             return Ok(new
             {
                 query = request.Query,
+                searchMode = searchMode.ToString().ToLowerInvariant(),
                 results = result.Results.Select(r => new
                 {
                     documentId = r.DocumentId,

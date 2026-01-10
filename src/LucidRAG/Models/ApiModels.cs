@@ -22,12 +22,22 @@ public record RemoveDocumentsRequest(Guid[] DocumentIds);
 // Search API
 // ═══════════════════════════════════════════════════════════════════════════
 
+/// <summary>
+/// Search API request model.
+/// </summary>
+/// <param name="Query">The search query text</param>
+/// <param name="CollectionId">Optional: limit search to a specific collection</param>
+/// <param name="DocumentIds">Optional: limit search to specific document IDs</param>
+/// <param name="TopK">Number of results to return (default 10)</param>
+/// <param name="SystemPrompt">Optional system prompt for answer synthesis</param>
+/// <param name="SearchMode">Search mode: "hybrid" (default), "semantic", or "keyword"</param>
 public record SearchApiRequest(
     string Query,
     Guid? CollectionId = null,
     Guid[]? DocumentIds = null,
     int? TopK = null,
-    string? SystemPrompt = null);
+    string? SystemPrompt = null,
+    string? SearchMode = null);
 
 // ═══════════════════════════════════════════════════════════════════════════
 // Config API

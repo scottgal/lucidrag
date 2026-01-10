@@ -2,6 +2,19 @@ using LucidRAG.Services.Sentinel;
 
 namespace LucidRAG.Services;
 
+/// <summary>
+/// Search mode for controlling the retrieval strategy.
+/// </summary>
+public enum SearchMode
+{
+    /// <summary>Hybrid search: semantic + keyword boosting (default, best quality)</summary>
+    Hybrid,
+    /// <summary>Pure semantic/vector search only</summary>
+    Semantic,
+    /// <summary>Keyword/BM25-style search - boosts exact keyword matches heavily</summary>
+    Keyword
+}
+
 public interface IAgenticSearchService
 {
     Task<SearchResult> SearchAsync(SearchRequest request, CancellationToken ct = default);
@@ -15,7 +28,8 @@ public record SearchRequest(
     Guid[]? DocumentIds = null,
     int TopK = 10,
     string? SystemPrompt = null,
-    ExecutionMode? Mode = null);
+    ExecutionMode? Mode = null,
+    SearchMode SearchMode = SearchMode.Hybrid);
 
 public record SearchResult(
     List<SearchResultItem> Results,
