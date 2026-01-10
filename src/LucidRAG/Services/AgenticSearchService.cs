@@ -86,12 +86,29 @@ public class AgenticSearchService(
             logger.LogDebug("Executing sub-query: {Query} (purpose: {Purpose})", subQuery.Query, subQuery.Purpose);
 
             var queryEmbedding = await embeddingService.EmbedAsync(subQuery.Query, ct);
+
+            // Debug: Log embedding info
+            logger.LogDebug("Query embedding dimension: {Dim}, first values: [{V0:F4}, {V1:F4}, {V2:F4}]",
+                queryEmbedding.Length,
+                queryEmbedding.Length > 0 ? queryEmbedding[0] : 0,
+                queryEmbedding.Length > 1 ? queryEmbedding[1] : 0,
+                queryEmbedding.Length > 2 ? queryEmbedding[2] : 0);
+
             var segments = await vectorStore.SearchAsync(
                 collectionName,
                 queryEmbedding,
                 subQuery.TopK,
                 docId: null,
                 ct);
+
+            // Debug: Log search results
+            if (segments.Count > 0)
+            {
+                logger.LogDebug("Search returned {Count} segments. Top result: '{Text}' (score: {Score:F4})",
+                    segments.Count,
+                    segments[0].Text?.Substring(0, Math.Min(50, segments[0].Text?.Length ?? 0)),
+                    segments[0].QuerySimilarity);
+            }
 
             var subResults = segments
                 .Select((s, i) =>
@@ -320,20 +337,19 @@ public class AgenticSearchService(
         // Create prompt for LLM synthesis - with strict anti-leak rules
         var prompt = $@"{systemPrompt}
 
-Answer the question using ONLY directly relevant evidence below.
+Answer the question using ONLY the evidence below.
 
 QUESTION: {query}
 
 EVIDENCE:
 {sourceTexts}
 
-STRICT RULES:
-1. If evidence DIRECTLY answers the question: give bullet points with [N] citations
-2. If evidence is NOT relevant: say ""I don't have information about [topic] in the documents.""
-3. NEVER describe evidence that doesn't answer the question
-4. NO meta phrases: ""based on"", ""according to"", ""sources show"", ""can be inferred""
-5. NO system words: models, tools, pipelines, RAG, embeddings, vectors, Ollama
-6. Use the user's exact terms - don't correct spelling
+RULES:
+1. If evidence answers the question: explain clearly with [N] citations after each point
+2. If evidence is NOT relevant: say ""I don't have specific information about [topic] in the documents.""
+3. Write complete sentences - never output just citation numbers alone
+4. NO meta phrases like ""based on sources"" or ""the documents show""
+5. NO system terms: models, pipelines, embeddings, vectors
 
 ANSWER:";
 

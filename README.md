@@ -1,125 +1,414 @@
 # LucidRAG
 
-Multi-document Agentic RAG with GraphRAG-style entity extraction.
+**Production-ready Multi-Document RAG System with GraphRAG Entity Extraction, 22-Wave Image Intelligence, and Multi-Tenant SaaS Support**
 
-## Features
+> 🚨🚨 PRERELEASE - I will update here when it's stable 🚨🚨
 
-- **Multi-document RAG** - Upload PDFs, DOCX, Markdown, HTML, TXT
-- **Hybrid Search** - BM25 + BERT embeddings with RRF fusion
-- **GraphRAG** - Entity extraction and knowledge graph visualization
-- **Agentic Chat** - Conversation memory, query clarification, self-correction
-- **ONNX Embeddings** - Zero-config local embeddings (no API keys needed)
-- **D3.js Visualization** - Interactive knowledge graph explorer
+LucidRAG is a feature-rich Retrieval-Augmented Generation system that goes far beyond basic RAG. It combines hybrid search (BM25 + semantic embeddings), agentic query decomposition, knowledge graph construction, and a powerful 22-wave image analysis engine - all deployable with zero API keys using local ONNX & Ollama models.
+
+## Key Differentiators
+
+- **Truly Local**: ONNX embeddings + DuckDB/SQLite = no API keys, no cloud dependencies
+- **22-Wave Image Analysis**: Modular, composable ML pipeline with signal-based coordination
+- **Agentic Query Decomposition**: Sentinel service breaks complex queries into sub-queries
+- **GraphRAG Integration**: Entity extraction with community detection and summarization
+- **Multi-Provider LLM**: Swap between Ollama (local) / LMStudio (local) / Anthropic (paid), OpenAI (paid) at runtime
+- **Evidence Artifacts**: Structured storage of OCR results, frame data, transcripts
+- **Multi-Tenant SaaS**: Schema-per-tenant isolation with automatic provisioning
+
+---
 
 ## Quick Start
 
 ### Docker (Recommended)
 
 ```bash
-# Pull the image
 docker pull scottgal/lucidrag:latest
-
-# Start with docker-compose
 cd src/LucidRAG
 docker-compose up -d
 ```
 
-Then open http://localhost:5080 in your browser.
+Open http://localhost:5080
 
-### CLI Tool
-
-Download from [Releases](https://github.com/scottgal/lucidrag/releases) or build from source:
+### Standalone Mode (Zero Config)
 
 ```bash
-# Build CLI
-dotnet publish src/LucidRAG.Cli/LucidRAG.Cli.csproj -c Release -o ./publish
-
-# Usage
-./publish/lucidrag-cli index document.pdf
-./publish/lucidrag-cli search "your query"
-./publish/lucidrag-cli chat
-./publish/lucidrag-cli serve
+dotnet run --project src/LucidRAG/LucidRAG.csproj -- --standalone
 ```
 
-### ImageSummarizer (Standalone OCR Tool)
+Uses SQLite + DuckDB locally - no PostgreSQL or external services needed.
 
-Standalone image analysis and OCR tool with MCP server support:
+---
 
-```bash
-# Install as global tool
-dotnet pack src/Mostlylucid.ImageSummarizer.Cli/Mostlylucid.ImageSummarizer.Cli.csproj
-dotnet tool install --global --add-source ./nupkg Mostlylucid.ImageSummarizer.Cli
+## Supported Document Types
 
-# Extract text from images/GIFs
-imagesummarizer screenshot.png
-imagesummarizer animation.gif --pipeline advancedocr
+| Category | Formats |
+|----------|---------|
+| **Text** | PDF, DOCX, Markdown, HTML, TXT |
+| **Images** | PNG, JPG, GIF, WebP, SVG, BMP, TIFF |
+| **Data** | CSV, XLSX, Parquet, JSON, XML, SQLite, DuckDB |
+| **Video** | MP4, WebM, MOV, AVI |
+| **Audio** | MP3, WAV, M4A, FLAC |
 
-# MCP server mode for Claude Desktop
-imagesummarizer --mcp
-```
+---
 
-**Features:**
-- **9 MCP Tools**: OCR, quality analysis, GIF summarization, captions, templates
-- **Advanced GIF OCR**: Temporal processing, frame stabilization, multi-frame voting
-- **Template System**: 9 predefined output templates (social media, accessibility, SEO, etc.)
-- **Zero Dependencies**: Runs entirely offline with ONNX models
-
-See [ImageSummarizer README](src/Mostlylucid.ImageSummarizer.Cli/README.md) and [MCP Enhancements Summary](MCP-ENHANCEMENTS-SUMMARY.md) for details.
-
-## Project Structure
+## Architecture
 
 ```
 src/
-  LucidRAG/                            # Main web application
-  LucidRAG.Cli/                        # CLI tool
-  LucidRAG.Tests/                      # Integration tests
-  Mostlylucid.DocSummarizer.Core/      # Document processing & embeddings
-  Mostlylucid.DocSummarizer.Images/    # Image analysis & OCR engine
+  LucidRAG/                            # Main web application (ASP.NET Core 10)
+  LucidRAG.Cli/                        # Command-line tool
+  LucidRAG.Tests/                      # Integration tests with TestContainers
+  Mostlylucid.DocSummarizer.Core/      # Document processing, embeddings, BM25
+  Mostlylucid.DocSummarizer.Images/    # 22-wave image analysis engine
+  Mostlylucid.DocSummarizer.Anthropic/ # Claude provider
+  Mostlylucid.DocSummarizer.OpenAI/    # OpenAI/GPT-4o provider
   Mostlylucid.ImageSummarizer.Cli/     # Standalone OCR tool with MCP support
-  Mostlylucid.GraphRag/                # Entity extraction & graph
-  Mostlylucid.RAG/                     # Vector store services
+  Mostlylucid.GraphRag/                # Entity extraction & knowledge graph
+  Mostlylucid.RAG/                     # Vector store abstraction (Qdrant)
 ```
 
-## Building from Source
+---
 
-```bash
-# Clone the repository
-git clone https://github.com/scottgal/lucidrag.git
-cd lucidrag
+## Features
 
-# Build all projects
-dotnet build LucidRAG.sln
+### Hybrid Search & Retrieval
 
-# Run web app
-dotnet run --project src/LucidRAG/LucidRAG.csproj
+- **BM25 + Semantic**: Full-text lexical search combined with BERT embeddings
+- **RRF Fusion**: Reciprocal Rank Fusion for optimal result merging
+- **Configurable Alpha**: Tune semantic vs lexical weighting
+- **Minimum Similarity Threshold**: Filter low-confidence matches
 
-# Run tests
-dotnet test src/LucidRAG.Tests/LucidRAG.Tests.csproj
+### Agentic Query Decomposition (Sentinel)
+
+The Sentinel service analyzes incoming queries and intelligently decomposes them:
+
+- **Query Classification**: Keyword, Semantic, Comparison, Aggregation, Navigation
+- **Sub-Query Generation**: Breaks complex questions into focused searches
+- **Clarification Requests**: Asks for ambiguous queries (configurable threshold)
+- **Confidence Scoring**: Tracks decomposition confidence
+- **Plan Caching**: 15-minute TTL for repeated queries
+
+### Knowledge Graph (GraphRAG)
+
+- **Entity Extraction**: Person, Organization, Location, Event, Concept
+- **Relationship Tracking**: Source → Relationship Type → Target with weights
+- **Community Detection**: Louvain algorithm for clustering
+- **Community Summarization**: LLM-generated summaries
+- **D3.js Visualization**: Interactive graph explorer with pan/zoom
+
+### Conversational AI
+
+- **Multi-Turn Memory**: Persistent conversation state
+- **Custom System Prompts**: 4 predefined + custom injection
+- **Streaming Responses**: Server-sent events (SSE)
+- **Source Citations**: Inline `[N]` references with hover previews
+- **Off-Topic Detection**: Filters irrelevant queries in demo mode
+
+### 22-Wave Image Analysis
+
+A modular, signal-based ML pipeline for comprehensive image understanding:
+
+| Wave | Purpose |
+|------|---------|
+| AdvancedOcrWave | Multi-frame OCR with temporal voting |
+| MlOcrWave | ML-based text detection |
+| Florence2Wave | Vision foundation model |
+| VisionLlmWave | Vision LLM fallback (Claude/GPT-4o) |
+| ClipEmbeddingWave | CLIP embeddings for visual search |
+| ColorWave | Dominant color extraction (3x3 grid) |
+| MotionWave | Optical flow motion detection |
+| FaceDetectionWave | Face detection with bounding boxes |
+| SceneDetectionWave | Indoor/outdoor/meme classification |
+| OcrQualityWave | OCR confidence validation |
+| TextDetectionWave | EAST text region detection |
+| ExifForensicsWave | EXIF metadata extraction |
+| ContradictionWave | Logical consistency checks |
+| AutoRoutingWave | Intelligent pipeline selection |
+| *...and 8 more* | |
+
+**Execution Profiles**: Fast (~100ms), Balanced, Quality
+
+### Animated GIF/WebP Processing
+
+- **Frame Deduplication**: SSIM-based (0.95 threshold)
+- **Subtitle Extraction**: Text-only strip mode
+- **Filmstrip Generation**: 30x token reduction for Vision LLMs
+- **Temporal Voting**: Multi-frame consensus
+- **Motion Intensity Tracking**: Optical flow analysis
+
+### Evidence Artifacts
+
+Structured storage for all extracted data:
+
 ```
+Evidence Types:
+- ocr_text          : Extracted text with confidence
+- ocr_word_boxes    : Bounding box coordinates
+- llm_summary       : AI-generated summaries
+- filmstrip         : Video frame strips
+- key_frame         : Representative frames
+- transcript        : Audio transcriptions
+- signal_dump       : Raw wave outputs
+```
+
+### Multi-Tenancy
+
+- **Schema-per-Tenant**: PostgreSQL schema isolation
+- **Automatic Provisioning**: Create tenants on first access
+- **Domain-Based Routing**: Subdomain or path-based detection
+- **Per-Tenant Collections**: Isolated Qdrant collections
+
+### Ingestion Sources
+
+Pull documents from multiple sources:
+
+- **Local Directory**: Recursive with pattern matching
+- **GitHub Repositories**: Track commits for incremental sync
+- **FTP Servers**: Standard FTP with credentials
+- **S3 Buckets**: AWS-compatible object storage
+
+### Web Crawler
+
+```json
+POST /api/crawl
+{
+  "seedUrls": ["https://example.com"],
+  "maxDepth": 3,
+  "maxPages": 100,
+  "contentSelector": "article"
+}
+```
+
+---
+
+## API Endpoints
+
+| Endpoint | Methods | Description |
+|----------|---------|-------------|
+| `/api/chat` | POST, GET | Conversational AI with memory |
+| `/api/search` | POST | Stateless semantic search |
+| `/api/documents` | GET, POST, DELETE | Document management |
+| `/api/collections` | CRUD | Collection management |
+| `/api/graph` | GET | Knowledge graph data |
+| `/api/communities` | GET, POST | Community detection |
+| `/api/evidence` | GET | Artifact retrieval |
+| `/api/tenants` | CRUD | Multi-tenant management |
+| `/api/ingestion` | CRUD | Source management |
+| `/api/crawl` | POST, GET | Web crawling |
+
+Full OpenAPI documentation at `/scalar/v1`
+
+---
 
 ## Configuration
 
-Configuration is done via `appsettings.json`:
+### Embedding Backends
 
 ```json
 {
-  "RagDocuments": {
-    "OllamaUrl": "http://localhost:11434",
-    "OllamaModel": "llama3.2:latest",
-    "EmbeddingsMode": "ONNX",
-    "DemoMode": false
+  "DocSummarizer": {
+    "EmbeddingBackend": "Onnx",  // Onnx, Ollama, OpenAI, Anthropic
+    "BertRag": {
+      "VectorStore": "DuckDB",   // DuckDB, Qdrant
+      "CollectionName": "ragdocs"
+    }
   }
 }
 ```
 
+### LLM Providers
+
+```json
+{
+  "DocSummarizer": {
+    "LlmBackend": "Ollama",
+    "Ollama": {
+      "BaseUrl": "http://localhost:11434",
+      "Model": "qwen2.5:3b"
+    }
+  }
+}
+```
+
+Or use cloud providers:
+
+```json
+{
+  "DocSummarizer": {
+    "LlmBackend": "Anthropic",
+    "Anthropic": {
+      "Model": "claude-3-5-haiku-latest"
+    }
+  }
+}
+```
+
+### Demo Mode
+
+For public deployments:
+
+```json
+{
+  "RagDocuments": {
+    "DemoMode": {
+      "Enabled": true,
+      "BannerMessage": "Demo mode - uploads disabled",
+      "MinRelevanceScore": 0.3,
+      "OffTopicMessage": "I can only answer questions about the indexed documents."
+    }
+  }
+}
+```
+
+---
+
+## CLI Tool
+
+```bash
+# Index documents
+lucidrag-cli index document.pdf
+lucidrag-cli index ./documents --collection my-docs
+
+# Search
+lucidrag-cli search "your query"
+
+# Interactive chat
+lucidrag-cli chat
+
+# Run web server
+lucidrag-cli serve --port 5080
+
+# OCR standalone
+lucidrag-cli ocr screenshot.png --pipeline advancedocr
+```
+
+---
+
+## ImageSummarizer (Standalone Tool)
+
+A powerful standalone image analysis tool with MCP server support for Claude Desktop integration:
+
+```bash
+# Install globally
+dotnet tool install -g Mostlylucid.ImageSummarizer.Cli
+
+# Extract text
+imagesummarizer screenshot.png
+
+# Analyze animated GIF
+imagesummarizer animation.gif --pipeline advancedocr
+
+# Run as MCP server
+imagesummarizer --mcp
+```
+
+### MCP Tools (9 Available)
+
+- `summarize_animated_gif` - GIF motion analysis
+- `generate_caption` - Accessibility-optimized captions (WCAG)
+- `generate_detailed_description` - Comprehensive analysis
+- `analyze_with_template` - Template-based formatting
+- `ocr_text` - OCR from images/GIFs
+- `analyze_quality` - Quality assessment
+- `extract_gif_summary` - GIF summarization
+- `guess_intent` - Intent detection
+- `list_output_templates` - Available templates
+
+### Output Templates
+
+| Template | Use Case |
+|----------|----------|
+| social_media | 280 chars max |
+| accessibility | WCAG-compliant, 125 chars |
+| seo | Keyword-optimized |
+| technical_report | Detailed analysis |
+| animated_gif_summary | Motion-focused |
+| custom | User-defined |
+
+---
+
+## Docker Deployment
+
+```yaml
+# docker-compose.yml
+services:
+  lucidrag:
+    image: scottgal/lucidrag:latest
+    ports:
+      - "5080:5080"
+    volumes:
+      - ./data:/app/data
+      - ./uploads:/app/uploads
+    environment:
+      - ConnectionStrings__DefaultConnection=Host=db;Database=lucidrag;Username=postgres;Password=postgres
+    depends_on:
+      - db
+
+  db:
+    image: postgres:16
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    environment:
+      - POSTGRES_DB=lucidrag
+      - POSTGRES_PASSWORD=postgres
+```
+
+---
+
+## Development
+
+```bash
+# Build
+dotnet build LucidRAG.sln
+
+# Run with hot reload
+dotnet watch run --project src/LucidRAG/LucidRAG.csproj
+
+# Build CSS (Tailwind)
+cd src/LucidRAG
+npm install
+npm run build:css
+
+# Run tests
+dotnet test --filter "Category!=Browser"
+```
+
+---
+
 ## Requirements
 
-- .NET 10.0 SDK
-- PostgreSQL 16+ (or SQLite for standalone)
-- Optional: Ollama for LLM-enhanced features
-- Optional: Docling for advanced PDF/DOCX conversion
-- Optional: Qdrant for scalable vector storage
+| Component | Version |
+|-----------|---------|
+| .NET SDK | 10.0+ |
+| PostgreSQL | 16+ (or SQLite for standalone) |
+| Node.js | 18+ (for CSS build) |
+
+**Optional:**
+- Ollama - Local LLM inference
+- Qdrant - Scalable vector storage
+- Docling - Advanced PDF/DOCX conversion
+
+---
+
+## CI/CD
+
+- **build.yml** - PR/push builds with PostgreSQL test containers
+- **release-lucidrag.yml** - Docker multi-arch (amd64/arm64) on `lucidrag-v*` tags
+- **release-lucidrag-cli.yml** - CLI binary releases
+- **release-imagesummarizer.yml** - ImageSummarizer releases
+- **publish-docsummarizer-nuget.yml** - NuGet publishing
+
+---
 
 ## License
 
 MIT License - see [LICENSE](LICENSE)
+
+---
+
+## Links
+
+- **Demo**: https://lucidrag.com (coming soon)
+- **Docker Hub**: https://hub.docker.com/r/scottgal/lucidrag
+- **Issues**: https://github.com/scottgal/lucidrag/issues
