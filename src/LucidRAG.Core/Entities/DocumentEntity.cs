@@ -15,6 +15,7 @@ public class DocumentEntity
     public float ProcessingProgress { get; set; }
     public int SegmentCount { get; set; }
     public int EntityCount { get; set; }
+    public int TableCount { get; set; }
     public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.UtcNow;
     public DateTimeOffset? ProcessedAt { get; set; }
     public string? Metadata { get; set; }

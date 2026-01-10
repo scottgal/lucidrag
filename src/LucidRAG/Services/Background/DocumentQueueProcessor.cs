@@ -242,6 +242,7 @@ public class DocumentQueueProcessor(
                         logger.LogInformation("Extracted {TableCount} tables from document {DocumentId}",
                             tableEntities.Count, job.DocumentId);
 
+                        document.TableCount = tableEntities.Count;
                         document.ProcessingProgress = 70;
                         await db.SaveChangesAsync(ct);
                     }
@@ -329,14 +330,14 @@ public class DocumentQueueProcessor(
             await db.SaveChangesAsync(ct);
 
             // Notify completion via SignalR
-            await notifications.NotifyDocumentCompleted(document.Id, document.Name, document.SegmentCount, document.EntityCount, document.CollectionId);
+            await notifications.NotifyDocumentCompleted(document.Id, document.Name, document.SegmentCount, document.EntityCount, document.TableCount, document.CollectionId);
 
             // Report completion (channel may already be completed by summarizer)
             progressChannel.Writer.TryWrite(
-                ProgressUpdates.Completed($"Completed! {document.SegmentCount} segments, {document.EntityCount} entities.", 0));
+                ProgressUpdates.Completed($"Completed! {document.SegmentCount} segments, {document.EntityCount} entities, {document.TableCount} tables.", 0));
 
-            logger.LogInformation("Document {DocumentId} processed successfully with {SegmentCount} segments, {EntityCount} entities",
-                job.DocumentId, document.SegmentCount, document.EntityCount);
+            logger.LogInformation("Document {DocumentId} processed successfully with {SegmentCount} segments, {EntityCount} entities, {TableCount} tables",
+                job.DocumentId, document.SegmentCount, document.EntityCount, document.TableCount);
         }
         catch (Exception ex)
         {

@@ -3,7 +3,18 @@
 @switch (Model.Status)
 {
     case DocumentStatus.Completed:
-        <span class="badge badge-success badge-xs" title="@Model.SegmentCount segments">Ready</span>
+        var tooltipParts = new List<string>();
+        if (Model.SegmentCount > 0) tooltipParts.Add($"{Model.SegmentCount} segments");
+        if (Model.EntityCount > 0) tooltipParts.Add($"{Model.EntityCount} entities");
+        if (Model.TableCount > 0) tooltipParts.Add($"{Model.TableCount} tables");
+        var tooltip = string.Join(", ", tooltipParts);
+        <span class="badge badge-success badge-xs" title="@tooltip">
+            Ready
+            @if (Model.TableCount > 0)
+            {
+                <span class="ml-1 opacity-75">📊@Model.TableCount</span>
+            }
+        </span>
         break;
 
     case DocumentStatus.Processing:

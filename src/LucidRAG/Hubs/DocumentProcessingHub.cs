@@ -32,7 +32,7 @@ public interface IProcessingNotificationService
 {
     Task NotifyDocumentStarted(Guid documentId, string documentName, Guid? collectionId);
     Task NotifyDocumentProgress(Guid documentId, string documentName, float progress, string stage, Guid? collectionId);
-    Task NotifyDocumentCompleted(Guid documentId, string documentName, int segmentCount, int entityCount, Guid? collectionId);
+    Task NotifyDocumentCompleted(Guid documentId, string documentName, int segmentCount, int entityCount, int tableCount, Guid? collectionId);
     Task NotifyDocumentFailed(Guid documentId, string documentName, string error, Guid? collectionId);
     Task NotifyQueueStatus(int pending, int processing, int completed, int failed);
 }
@@ -79,7 +79,7 @@ public class ProcessingNotificationService(IHubContext<DocumentProcessingHub> hu
         }
     }
 
-    public async Task NotifyDocumentCompleted(Guid documentId, string documentName, int segmentCount, int entityCount, Guid? collectionId)
+    public async Task NotifyDocumentCompleted(Guid documentId, string documentName, int segmentCount, int entityCount, int tableCount, Guid? collectionId)
     {
         var payload = new
         {
@@ -88,6 +88,7 @@ public class ProcessingNotificationService(IHubContext<DocumentProcessingHub> hu
             documentName,
             segmentCount,
             entityCount,
+            tableCount,
             collectionId,
             timestamp = DateTimeOffset.UtcNow
         };
