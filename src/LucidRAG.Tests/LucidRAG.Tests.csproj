@@ -26,6 +26,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\LucidRAG\LucidRAG.csproj" />
+    <ProjectReference Include="..\LucidRAG.Core\LucidRAG.Core.csproj" />
   </ItemGroup>
 
   <ItemGroup>
