@@ -266,16 +266,16 @@ public class IngestionController(
     /// <summary>
     /// Cancel an ingestion job
     /// </summary>
-    [HttpPost("jobs/{id:guid}/cancel")]
+    [HttpDelete("jobs/{id:guid}")]
     public async Task<IActionResult> CancelJob(Guid id, CancellationToken ct = default)
     {
         var cancelled = await ingestionService.CancelJobAsync(id, ct);
         if (!cancelled)
         {
-            return NotFound(new { error = "Job not found or already completed" });
+            return NotFound(new Models.ApiError("Job not found or already completed", "JOB_NOT_FOUND"));
         }
 
-        return Ok(new { success = true, message = "Cancellation requested" });
+        return Ok(new { cancelled = true, jobId = id });
     }
 
     /// <summary>

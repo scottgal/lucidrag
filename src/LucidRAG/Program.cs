@@ -166,6 +166,14 @@ builder.Services.AddControllersWithViews();
 // OpenAPI
 builder.Services.AddOpenApi();
 
+// GraphQL for knowledge graph queries
+builder.Services
+    .AddGraphQLServer()
+    .AddQueryType<LucidRAG.GraphQL.KnowledgeGraphQuery>()
+    .AddFiltering()
+    .AddSorting()
+    .ModifyRequestOptions(opt => opt.IncludeExceptionDetails = builder.Environment.IsDevelopment());
+
 // Health checks
 if (!string.IsNullOrEmpty(connectionString) && !connectionString.StartsWith("Data Source="))
 {
@@ -176,6 +184,37 @@ else
 {
     builder.Services.AddHealthChecks();
 }
+
+// ASP.NET Core Identity
+builder.Services.AddIdentity<LucidRAG.Identity.ApplicationUser, Microsoft.AspNetCore.Identity.IdentityRole>(options =>
+{
+    // Password settings
+    options.Password.RequireDigit = true;
+    options.Password.RequireLowercase = true;
+    options.Password.RequireUppercase = false;
+    options.Password.RequireNonAlphanumeric = false;
+    options.Password.RequiredLength = 8;
+
+    // Lockout settings
+    options.Lockout.DefaultLockoutTimeSpan = TimeSpan.FromMinutes(15);
+    options.Lockout.MaxFailedAccessAttempts = 5;
+
+    // User settings
+    options.User.RequireUniqueEmail = true;
+})
+.AddEntityFrameworkStores<RagDocumentsDbContext>();
+
+// Cookie settings for auth
+builder.Services.ConfigureApplicationCookie(options =>
+{
+    options.LoginPath = "/auth/login";
+    options.LogoutPath = "/auth/logout";
+    options.AccessDeniedPath = "/auth/access-denied";
+    options.Cookie.HttpOnly = true;
+    options.Cookie.SameSite = SameSiteMode.Strict;
+    options.ExpireTimeSpan = TimeSpan.FromDays(7);
+    options.SlidingExpiration = true;
+});
 
 // Data Protection - persist keys for antiforgery tokens to survive restarts
 var keysDir = standaloneMode
@@ -211,6 +250,10 @@ app.UseStaticFiles();
 // Routing
 app.UseRouting();
 
+// Authentication & Authorization
+app.UseAuthentication();
+app.UseAuthorization();
+
 // Multi-tenancy middleware (if enabled)
 if (multitenancyEnabled)
 {
@@ -225,6 +268,9 @@ app.MapHealthChecks("/healthz");
 
 // SignalR hubs
 app.MapHub<DocumentProcessingHub>("/hubs/processing");
+
+// GraphQL endpoint
+app.MapGraphQL();
 
 // Controllers
 app.MapControllers();

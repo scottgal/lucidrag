@@ -1,7 +1,9 @@
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.Extensions.Options;
 using LucidRAG.Config;
 using LucidRAG.Filters;
+using LucidRAG.Models;
 using LucidRAG.Services;
 
 namespace LucidRAG.Controllers.Api;
@@ -21,14 +23,12 @@ public class DocumentsController(
     /// Get demo mode status for UI
     /// </summary>
     [HttpGet("demo-status")]
-    public IActionResult GetDemoStatus()
+    public Ok<DemoStatusResponse> GetDemoStatus()
     {
-        return Ok(new
-        {
-            demoMode = _config.DemoMode.Enabled,
-            message = _config.DemoMode.Enabled ? _config.DemoMode.BannerMessage : null,
-            uploadsEnabled = !_config.DemoMode.Enabled
-        });
+        return TypedResults.Ok(new DemoStatusResponse(
+            DemoMode: _config.DemoMode.Enabled,
+            Message: _config.DemoMode.Enabled ? _config.DemoMode.BannerMessage : null,
+            UploadsEnabled: !_config.DemoMode.Enabled));
     }
 
     /// <summary>
@@ -37,12 +37,11 @@ public class DocumentsController(
     [HttpPost]
     [HttpPost("upload")]
     [RequestSizeLimit(100 * 1024 * 1024)] // 100MB
-    public async Task<IActionResult> Upload(
+    public async Task<Results<Ok<DocumentUploadResponse>, BadRequest<ApiError>, StatusCodeHttpResult>> Upload(
         IFormFile? file,
         [FromForm] Guid? collectionId = null,
         CancellationToken ct = default)
     {
-        // Log all form data for debugging
         logger.LogInformation("Upload request - File: {FileName}, Size: {Size}, ContentType: {ContentType}, CollectionId: {CollectionId}",
             file?.FileName ?? "NULL",
             file?.Length ?? 0,
@@ -53,7 +52,7 @@ public class DocumentsController(
         {
             logger.LogWarning("Upload failed: No file provided or file is empty. Request ContentType: {ContentType}",
                 Request.ContentType);
-            return BadRequest(new { error = "No file provided", details = $"File was {(file == null ? "null" : "empty")}" });
+            return TypedResults.BadRequest(new ApiError("No file provided", "FILE_REQUIRED"));
         }
 
         try
@@ -63,23 +62,21 @@ public class DocumentsController(
 
             logger.LogInformation("Document queued successfully: {DocumentId} ({FileName})", documentId, file.FileName);
 
-            return Ok(new
-            {
-                documentId,
-                filename = file.FileName,
-                status = "queued",
-                message = "Document queued for processing"
-            });
+            return TypedResults.Ok(new DocumentUploadResponse(
+                DocumentId: documentId,
+                Filename: file.FileName,
+                Status: "queued",
+                Message: "Document queued for processing"));
         }
         catch (ArgumentException ex)
         {
             logger.LogWarning(ex, "Upload validation failed for {FileName}: {Message}", file.FileName, ex.Message);
-            return BadRequest(new { error = ex.Message });
+            return TypedResults.BadRequest(new ApiError(ex.Message, "VALIDATION_ERROR"));
         }
         catch (Exception ex)
         {
             logger.LogError(ex, "Error uploading document {Filename}", file.FileName);
-            return StatusCode(500, new { error = "Failed to upload document" });
+            return TypedResults.StatusCode(500);
         }
     }
 
@@ -237,56 +234,71 @@ public class DocumentsController(
     }
 
     [HttpGet("{id:guid}")]
-    public async Task<IActionResult> Get(Guid id, CancellationToken ct = default)
+    public async Task<Results<Ok<DocumentResponse>, NotFound<ApiError>>> Get(Guid id, CancellationToken ct = default)
     {
         var document = await documentService.GetDocumentAsync(id, ct);
         if (document is null)
         {
-            return NotFound(new { error = "Document not found" });
+            return TypedResults.NotFound(new ApiError("Document not found", "NOT_FOUND"));
         }
 
-        return Ok(new
-        {
-            id = document.Id,
-            name = document.Name,
-            originalFilename = document.OriginalFilename,
-            status = document.Status.ToString().ToLowerInvariant(),
-            statusMessage = document.StatusMessage,
-            progress = document.ProcessingProgress,
-            segmentCount = document.SegmentCount,
-            entityCount = document.EntityCount,
-            fileSizeBytes = document.FileSizeBytes,
-            mimeType = document.MimeType,
-            createdAt = document.CreatedAt,
-            processedAt = document.ProcessedAt,
-            collectionId = document.CollectionId,
-            collectionName = document.Collection?.Name,
-            sourceUrl = document.SourceUrl
-        });
+        return TypedResults.Ok(new DocumentResponse(
+            Id: document.Id,
+            Name: document.Name,
+            OriginalFilename: document.OriginalFilename,
+            Status: document.Status.ToString().ToLowerInvariant(),
+            StatusMessage: document.StatusMessage,
+            Progress: document.ProcessingProgress,
+            SegmentCount: document.SegmentCount,
+            EntityCount: document.EntityCount,
+            FileSizeBytes: document.FileSizeBytes,
+            MimeType: document.MimeType,
+            CreatedAt: document.CreatedAt,
+            ProcessedAt: document.ProcessedAt,
+            CollectionId: document.CollectionId,
+            CollectionName: document.Collection?.Name,
+            SourceUrl: document.SourceUrl));
     }
 
+    /// <summary>
+    /// List documents with pagination.
+    /// </summary>
     [HttpGet]
-    public async Task<IActionResult> List([FromQuery] Guid? collectionId = null, CancellationToken ct = default)
+    public async Task<Ok<PagedResponse<DocumentListItem>>> List(
+        [FromQuery] Guid? collectionId = null,
+        [FromQuery] int page = 1,
+        [FromQuery] int pageSize = 20,
+        [FromQuery] string? status = null,
+        CancellationToken ct = default)
     {
+        page = Math.Max(1, page);
+        pageSize = Math.Clamp(pageSize, 1, 100);
+
         var documents = await documentService.GetDocumentsAsync(collectionId, ct);
 
-        return Ok(new
+        if (!string.IsNullOrEmpty(status) && Enum.TryParse<Entities.DocumentStatus>(status, true, out var statusEnum))
         {
-            documents = documents.Select(d => new
-            {
-                id = d.Id,
-                name = d.Name,
-                originalFilename = d.OriginalFilename,
-                status = d.Status.ToString().ToLowerInvariant(),
-                statusMessage = d.StatusMessage, // Include error message for failed docs
-                progress = d.ProcessingProgress,
-                segmentCount = d.SegmentCount,
-                createdAt = d.CreatedAt,
-                collectionId = d.CollectionId,
-                collectionName = d.Collection?.Name,
-                sourceUrl = d.SourceUrl
-            })
-        });
+            documents = documents.Where(d => d.Status == statusEnum).ToList();
+        }
+
+        var total = documents.Count;
+        var paged = documents
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
+            .Select(d => new DocumentListItem(
+                Id: d.Id,
+                Name: d.Name,
+                OriginalFilename: d.OriginalFilename,
+                Status: d.Status.ToString().ToLowerInvariant(),
+                StatusMessage: d.StatusMessage,
+                Progress: d.ProcessingProgress,
+                SegmentCount: d.SegmentCount,
+                CreatedAt: d.CreatedAt,
+                CollectionId: d.CollectionId,
+                CollectionName: d.Collection?.Name,
+                SourceUrl: d.SourceUrl));
+
+        return TypedResults.Ok(ApiResponseHelpers.Paged(paged, page, pageSize, total, "/api/documents"));
     }
 
     [HttpGet("{id:guid}/status")]
@@ -314,28 +326,43 @@ public class DocumentsController(
     }
 
     [HttpDelete("{id:guid}")]
-    public async Task<IActionResult> Delete(Guid id, CancellationToken ct = default)
+    public async Task<Ok<DeleteResponse>> Delete(Guid id, CancellationToken ct = default)
     {
         await documentService.DeleteDocumentAsync(id, ct);
-        return Ok(new { success = true });
+        return TypedResults.Ok(new DeleteResponse(Success: true));
     }
 
     /// <summary>
-    /// Retry processing a stuck or failed document.
+    /// Reprocess a document. Use when a document is stuck or failed.
+    /// POST body: { "mode": "full" | "signals" } - defaults to "signals"
     /// </summary>
-    [HttpPost("{id:guid}/retry")]
-    public async Task<IActionResult> Retry(Guid id, [FromQuery] bool fullReprocess = false, CancellationToken ct = default)
+    [HttpPost("{id:guid}/reprocess")]
+    public async Task<Results<Ok<JobResponse>, NotFound<ApiError>>> Reprocess(
+        Guid id,
+        [FromBody] ReprocessRequest? request = null,
+        CancellationToken ct = default)
     {
         try
         {
+            var fullReprocess = request?.Mode?.Equals("full", StringComparison.OrdinalIgnoreCase) ?? false;
             await documentService.RetryProcessingAsync(id, fullReprocess, ct);
-            return Ok(new { success = true, message = fullReprocess ? "Document queued for full reprocessing" : "Document queued for signal recovery" });
+
+            return TypedResults.Ok(ApiResponseHelpers.Job(
+                id,
+                "queued",
+                fullReprocess ? "Document queued for full reprocessing" : "Document queued for signal recovery",
+                "/api/documents"));
         }
         catch (ArgumentException ex)
         {
-            return NotFound(new { error = ex.Message });
+            return TypedResults.NotFound(new ApiError(ex.Message, "DOCUMENT_NOT_FOUND"));
         }
     }
+
+    /// <summary>
+    /// Request model for reprocessing a document.
+    /// </summary>
+    public record ReprocessRequest(string? Mode = null);
 
     /// <summary>
     /// Get detailed information about a document including segments, signals, and evidence.
@@ -494,27 +521,36 @@ public class DocumentsController(
     }
 
     /// <summary>
-    /// Clear all documents, vectors, and related data (DEV/TESTING ONLY).
+    /// Delete all documents. Requires X-Confirm-Delete: true header for safety.
+    /// Use DELETE /api/documents/{id} for single document deletion.
     /// </summary>
-    [HttpDelete("clear-all")]
-    public async Task<IActionResult> ClearAll([FromQuery] bool clearVectors = true, CancellationToken ct = default)
+    [HttpDelete]
+    public async Task<Results<Ok<BulkDeleteResponse>, BadRequest<ApiError>, StatusCodeHttpResult>> DeleteAll(
+        [FromHeader(Name = "X-Confirm-Delete")] bool confirm = false,
+        [FromQuery] bool clearVectors = true,
+        CancellationToken ct = default)
     {
+        if (!confirm)
+        {
+            return TypedResults.BadRequest(new ApiError(
+                "Bulk delete requires confirmation. Set X-Confirm-Delete: true header.",
+                "CONFIRMATION_REQUIRED"));
+        }
+
         try
         {
             var count = await documentService.ClearAllAsync(clearVectors, ct);
-            logger.LogWarning("CLEAR ALL: Deleted {Count} documents and all related data", count);
-            return Ok(new
-            {
-                success = true,
-                message = $"Cleared {count} documents and all related data",
-                documentsDeleted = count,
-                vectorsCleared = clearVectors
-            });
+            logger.LogWarning("DELETE ALL: Deleted {Count} documents and all related data", count);
+
+            return TypedResults.Ok(new BulkDeleteResponse(
+                Deleted: count,
+                VectorsCleared: clearVectors,
+                Message: $"Deleted {count} documents and all related data"));
         }
         catch (Exception ex)
         {
-            logger.LogError(ex, "Failed to clear all data");
-            return StatusCode(500, new { error = "Failed to clear all data", details = ex.Message });
+            logger.LogError(ex, "Failed to delete all data");
+            return TypedResults.StatusCode(500);
         }
     }
 }

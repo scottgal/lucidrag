@@ -67,6 +67,17 @@
         <PackageReference Include="Htmx.TagHelpers" Version="1.9.0" />
     </ItemGroup>
 
+    <!-- GraphQL -->
+    <ItemGroup>
+        <PackageReference Include="HotChocolate.AspNetCore" Version="15.1.11" />
+        <PackageReference Include="HotChocolate.Data.EntityFramework" Version="15.1.11" />
+    </ItemGroup>
+
+    <!-- Authentication -->
+    <ItemGroup>
+        <PackageReference Include="Microsoft.AspNetCore.Identity.EntityFrameworkCore" Version="10.0.1" />
+    </ItemGroup>
+
     <!-- Project references -->
     <ItemGroup>
         <ProjectReference Include="..\Mostlylucid.DocSummarizer.Core\Mostlylucid.DocSummarizer.Core.csproj" />

@@ -3,7 +3,8 @@ module.exports = {
   content: [
     './Views/**/*.cshtml',
     './wwwroot/**/*.html',
-    './wwwroot/**/*.js'
+    './wwwroot/**/*.js',
+    './src/js/**/*.js'
   ],
   theme: {
     extend: {
@@ -13,7 +14,9 @@ module.exports = {
     }
   },
   plugins: [
-    require('daisyui')
+    require('daisyui'),
+    require('@tailwindcss/forms'),
+    require('@tailwindcss/typography')
   ],
   daisyui: {
     themes: ['light', 'dark'],

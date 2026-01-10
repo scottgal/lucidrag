@@ -1,10 +1,13 @@
+using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using LucidRAG.Entities;
+using LucidRAG.Identity;
 
 namespace LucidRAG.Data;
 
-public class RagDocumentsDbContext(DbContextOptions<RagDocumentsDbContext> options) : DbContext(options)
+public class RagDocumentsDbContext(DbContextOptions<RagDocumentsDbContext> options)
+    : IdentityDbContext<ApplicationUser>(options)
 {
     public DbSet<CollectionEntity> Collections => Set<CollectionEntity>();
     public DbSet<DocumentEntity> Documents => Set<DocumentEntity>();

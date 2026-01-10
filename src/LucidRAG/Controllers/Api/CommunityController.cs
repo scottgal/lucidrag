@@ -1,7 +1,9 @@
 using Microsoft.AspNetCore.Mvc;
-using LucidRAG.Services;
-using LucidRAG.Data;
+using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.EntityFrameworkCore;
+using LucidRAG.Data;
+using LucidRAG.Models;
+using LucidRAG.Services;
 
 namespace LucidRAG.Controllers.Api;
 
@@ -18,71 +20,73 @@ public class CommunityController(
 {
     /// <summary>
     /// Run community detection on the entity graph using Louvain algorithm.
+    /// Creates/updates community structure from the entity graph.
     /// </summary>
-    [HttpPost("detect")]
-    public async Task<IActionResult> DetectCommunities(CancellationToken ct)
+    [HttpPost]
+    public async Task<Results<Ok<CommunityDetectionResponse>, StatusCodeHttpResult>> DetectCommunities(CancellationToken ct)
     {
         logger.LogInformation("Starting community detection");
+        var sw = System.Diagnostics.Stopwatch.StartNew();
 
         try
         {
             var result = await communityService.DetectCommunitiesAsync(ct);
+            sw.Stop();
 
-            return Ok(new
-            {
-                success = true,
-                communitiesDetected = result.CommunitiesDetected,
-                entitiesAssigned = result.EntitiesAssigned,
-                modularity = result.Modularity,
-                duration = result.ProcessingTime.TotalSeconds,
-                message = $"Detected {result.CommunitiesDetected} communities from {result.EntitiesAssigned} entities"
-            });
+            return TypedResults.Ok(new CommunityDetectionResponse(
+                CommunitiesDetected: result.CommunitiesDetected,
+                EntitiesAssigned: result.EntitiesAssigned,
+                Modularity: result.Modularity,
+                DurationSeconds: result.ProcessingTime.TotalSeconds,
+                Meta: new ApiMeta(DateTimeOffset.UtcNow, sw.ElapsedMilliseconds)));
         }
         catch (Exception ex)
         {
             logger.LogError(ex, "Community detection failed");
-            return StatusCode(500, new { success = false, error = ex.Message });
+            return TypedResults.StatusCode(500);
         }
     }
 
     /// <summary>
     /// Generate or regenerate LLM summaries for all communities.
     /// </summary>
-    [HttpPost("summarize")]
-    public async Task<IActionResult> GenerateSummaries(CancellationToken ct)
+    [HttpPost("summaries")]
+    public async Task<Results<Ok<CommunitySummaryResponse>, StatusCodeHttpResult>> GenerateSummaries(CancellationToken ct)
     {
         logger.LogInformation("Generating community summaries");
+        var sw = System.Diagnostics.Stopwatch.StartNew();
 
         try
         {
             await communityService.GenerateCommunitySummariesAsync(ct);
+            sw.Stop();
 
             var count = await db.Communities.CountAsync(c => c.Summary != null, ct);
 
-            return Ok(new
-            {
-                success = true,
-                summarized = count,
-                message = $"Generated summaries for {count} communities"
-            });
+            return TypedResults.Ok(new CommunitySummaryResponse(
+                Summarized: count,
+                Meta: new ApiMeta(DateTimeOffset.UtcNow, sw.ElapsedMilliseconds)));
         }
         catch (Exception ex)
         {
             logger.LogError(ex, "Summary generation failed");
-            return StatusCode(500, new { success = false, error = ex.Message });
+            return TypedResults.StatusCode(500);
         }
     }
 
     /// <summary>
-    /// List all detected communities.
+    /// List all detected communities with pagination.
     /// </summary>
     [HttpGet]
-    public async Task<IActionResult> List(
-        [FromQuery] int skip = 0,
-        [FromQuery] int take = 50,
+    public async Task<Ok<PagedResponse<CommunityListItem>>> List(
+        [FromQuery] int page = 1,
+        [FromQuery] int pageSize = 20,
         [FromQuery] int? level = null,
         CancellationToken ct = default)
     {
+        page = Math.Max(1, page);
+        pageSize = Math.Clamp(pageSize, 1, 100);
+
         var query = db.Communities.AsQueryable();
 
         if (level.HasValue)
@@ -92,10 +96,9 @@ public class CommunityController(
 
         var communities = await query
             .OrderByDescending(c => c.EntityCount)
-            .Skip(skip)
-            .Take(take)
-            .Select(c => new
-            {
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
+            .Select(c => new CommunityListItem(
                 c.Id,
                 c.Name,
                 c.Summary,
@@ -104,17 +107,10 @@ public class CommunityController(
                 c.EntityCount,
                 c.Cohesion,
                 c.ParentCommunityId,
-                c.CreatedAt
-            })
+                c.CreatedAt))
             .ToListAsync(ct);
 
-        return Ok(new
-        {
-            total,
-            skip,
-            take,
-            items = communities
-        });
+        return TypedResults.Ok(ApiResponseHelpers.Paged(communities, page, pageSize, total, "/api/communities"));
     }
 
     /// <summary>
