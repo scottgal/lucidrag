@@ -99,6 +99,7 @@ builder.Services.AddScoped<IAgenticSearchService, AgenticSearchService>();
 builder.Services.AddScoped<IEntityGraphService, EntityGraphService>();
 builder.Services.AddScoped<ICommunityDetectionService, CommunityDetectionService>();
 builder.Services.AddScoped<IRetrievalEntityService, RetrievalEntityService>();
+builder.Services.AddSingleton<IQueryExpansionService, EmbeddingQueryExpansionService>();
 builder.Services.AddSingleton<DocumentProcessingQueue>();
 builder.Services.AddHostedService<DocumentQueueProcessor>();
 builder.Services.AddHostedService<DemoContentSeeder>();

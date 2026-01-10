@@ -23,6 +23,7 @@ public class AgenticSearchService(
     IEmbeddingService embeddingService,
     IConversationService conversationService,
     ISentinelService sentinelService,
+    IQueryExpansionService queryExpansion,
     ILlmService llmService,
     SynthesisCacheService synthesisCache,
     IOptions<PromptsConfig> promptsConfig,
@@ -129,13 +130,16 @@ public class AgenticSearchService(
         }
         else
         {
-            // Hybrid/Keyword mode - use BM25 + RRF (4-way: dense + sparse + salience + freshness)
-            var rrfResults = ApplyBm25Rrf(
+            // Hybrid/Keyword mode - use BM25 + RRF with query expansion
+            // (4-way: dense + sparse + salience + freshness)
+            // Query expansion: "golden" → "golden yellow gold amber"
+            var rrfResults = await ApplyBm25RrfAsync(
                 uniqueSegments,
                 request.Query,
                 request.SearchMode,
                 request.TopK,
-                documentLookup);
+                documentLookup,
+                ct);
 
             mergedResults = rrfResults
                 .Select(x => CreateSearchResultItem(x.Segment, x.RrfScore, documentLookup))
@@ -404,29 +408,42 @@ ANSWER:";
     ///
     /// This four-way fusion captures:
     /// - Semantic similarity (dense embeddings)
-    /// - Lexical matching (BM25 sparse retrieval)
+    /// - Lexical matching (BM25 sparse retrieval with query expansion)
     /// - Document importance (salience from extraction)
     /// - Freshness (recent documents boosted)
+    ///
+    /// Query expansion uses ML embeddings to find synonyms:
+    /// "golden sunset" → "golden yellow gold amber sunset sunrise evening"
+    /// This enables semantic-ish matching on signals at BM25 speed.
     /// </summary>
-    private List<(Segment Segment, double RrfScore)> ApplyBm25Rrf(
+    private async Task<List<(Segment Segment, double RrfScore)>> ApplyBm25RrfAsync(
         List<(Segment Segment, double DenseScore)> candidates,
         string query,
         SearchMode mode,
         int topK,
-        Dictionary<string, Entities.DocumentEntity>? documentLookup = null)
+        Dictionary<string, Entities.DocumentEntity>? documentLookup = null,
+        CancellationToken ct = default)
     {
         if (candidates.Count == 0) return [];
 
         const int rrfK = 60; // RRF smoothing constant
 
+        // Expand query terms using ML-based synonym detection
+        // "golden" → ["golden", "yellow", "gold", "amber"]
+        var expandedQuery = await queryExpansion.ExpandQueryAsync(query, maxExpansionsPerTerm: 3, ct);
+        var queryForBm25 = expandedQuery.ExpandedQueryText;
+
+        logger.LogDebug("Query expansion: '{Original}' → '{Expanded}'", query, queryForBm25);
+
         // Build BM25 corpus from candidate texts
         var corpus = Bm25Corpus.Build(candidates.Select(c => Bm25Scorer.Tokenize(c.Segment.Text)));
         var bm25 = new Bm25Scorer(corpus);
 
-        // Score all candidates with BM25 and get document freshness
+        // Score all candidates with BM25 (using expanded query) and get document freshness
         var scoredCandidates = candidates.Select(c =>
         {
-            var bm25Score = bm25.Score(query, c.Segment.Text);
+            // BM25 with expanded query for synonym matching
+            var bm25Score = bm25.Score(queryForBm25, c.Segment.Text);
 
             // Get document creation date for freshness scoring
             DateTimeOffset createdAt = DateTimeOffset.MinValue;

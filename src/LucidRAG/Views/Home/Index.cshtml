@@ -1397,7 +1397,8 @@ function ragApp() {
                         id: i,
                         role: m.role,
                         content: m.content,
-                        sources: []
+                        sources: [],
+                        timestamp: m.createdAt
                     }));
                     console.log(`Restored conversation ${savedConversationId} with ${this.messages.length} messages`);
                 } else {
@@ -1454,7 +1455,8 @@ function ragApp() {
                         id: m.id,
                         role: m.role,
                         content: m.content,
-                        sources: []
+                        sources: [],
+                        timestamp: m.createdAt
                     }));
                     this.setCookie('lucidrag-conversation', data.id);
                     this.showChatHistory = false;
@@ -1487,6 +1489,29 @@ function ragApp() {
             if (diff < 86400000) return `${Math.floor(diff / 3600000)}h ago`;
             if (diff < 604800000) return `${Math.floor(diff / 86400000)}d ago`;
             return date.toLocaleDateString();
+        },
+
+        formatTimestamp(timestamp) {
+            if (!timestamp) return '';
+            const date = new Date(timestamp);
+            const now = new Date();
+            const diff = now - date;
+            // Within the last minute
+            if (diff < 60000) return 'Just now';
+            // Within the last hour
+            if (diff < 3600000) return `${Math.floor(diff / 60000)}m ago`;
+            // Within today - show time
+            if (date.toDateString() === now.toDateString()) {
+                return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+            }
+            // Within the last week
+            if (diff < 604800000) {
+                return date.toLocaleDateString([], { weekday: 'short' }) + ' ' +
+                       date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+            }
+            // Older - show date and time
+            return date.toLocaleDateString([], { month: 'short', day: 'numeric' }) + ' ' +
+                   date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
         },
 
         async loadExtractionModes() {
@@ -1857,7 +1882,8 @@ function ragApp() {
             const userMsg = {
                 id: Date.now(),
                 role: 'user',
-                content: query
+                content: query,
+                timestamp: new Date().toISOString()
             };
             this.messages.push(userMsg);
             this.currentMessage = '';
@@ -1901,7 +1927,8 @@ function ragApp() {
                         id: Date.now() + 1,
                         role: 'assistant',
                         content: result.answer,
-                        sources: result.sources
+                        sources: result.sources,
+                        timestamp: result.timestamp || new Date().toISOString()
                     };
                     this.messages.push(assistantMsg);
 

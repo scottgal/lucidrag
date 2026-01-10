@@ -242,6 +242,17 @@ public class RagDocumentsDbContext(DbContextOptions<RagDocumentsDbContext> optio
             entity.HasIndex(e => e.ContentHash);
             entity.HasIndex(e => new { e.EntityId, e.ArtifactType });
 
+            // GIN index on JSONB metadata for efficient signal filtering
+            // Enables fast queries on decomposed prompts like:
+            // - "all yellow images" -> WHERE metadata @> '{"dominantColor": "yellow"}'
+            // - "high salience segments" -> WHERE (metadata->>'salienceScore')::float > 0.8
+            // - "introduction sections" -> WHERE metadata->>'sectionTitle' ILIKE '%introduction%'
+            if (!isSqlite)
+            {
+                entity.HasIndex(e => e.Metadata)
+                    .HasMethod("gin");
+            }
+
             entity.HasOne(e => e.Entity)
                 .WithMany(e => e.EvidenceArtifacts)
                 .HasForeignKey(e => e.EntityId)
