@@ -1,3 +1,5 @@
+using System.Text;
+using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using Mostlylucid.DocSummarizer;
@@ -180,6 +182,7 @@ public class DocumentQueueProcessor(
         var vectorStore = scope.ServiceProvider.GetRequiredService<IVectorStore>();
         var entityGraph = scope.ServiceProvider.GetRequiredService<IEntityGraphService>();
         var retrievalEntityService = scope.ServiceProvider.GetRequiredService<IRetrievalEntityService>();
+        var evidenceRepository = scope.ServiceProvider.GetRequiredService<IEvidenceRepository>();
 
         var document = await db.Documents.FindAsync([job.DocumentId], ct);
         if (document is null)
@@ -259,8 +262,14 @@ public class DocumentQueueProcessor(
                             .Select(del => del.Entity!)
                             .ToListAsync(ct);
 
-                        await retrievalEntityService.StoreDocumentAsync(document, segments, extractedEntities, result, ct);
+                        var retrievalEntity = await retrievalEntityService.StoreDocumentAsync(document, segments, extractedEntities, result, ct);
                         logger.LogInformation("Stored document {DocumentId} as RetrievalEntity with summary for cross-modal search", job.DocumentId);
+
+                        // Store each segment as evidence artifact
+                        progressChannel.Writer.TryWrite(
+                            ProgressUpdates.Stage("Evidence", $"Storing {segments.Count} segment evidence artifacts...", 0, 0));
+
+                        await StoreSegmentEvidenceAsync(evidenceRepository, retrievalEntity, segments, logger, ct);
                     }
                     catch (Exception ex)
                     {
@@ -309,5 +318,74 @@ public class DocumentQueueProcessor(
         {
             queue.CompleteProgressChannel(job.DocumentId);
         }
+    }
+
+    /// <summary>
+    /// Store segment text as evidence artifacts.
+    /// Each segment becomes an evidence artifact linked to the RetrievalEntity.
+    /// Evidence type: segment_text - the actual content extracted from document.
+    ///
+    /// This allows the RAG vector store to contain only embeddings,
+    /// with all plaintext stored securely in the evidence repository.
+    /// </summary>
+    private static async Task StoreSegmentEvidenceAsync(
+        IEvidenceRepository evidenceRepository,
+        StyloFlow.Retrieval.Entities.RetrievalEntity entity,
+        IReadOnlyList<Mostlylucid.DocSummarizer.Models.Segment> segments,
+        ILogger logger,
+        CancellationToken ct)
+    {
+        if (!Guid.TryParse(entity.Id, out var entityId))
+        {
+            logger.LogWarning("Invalid entity ID format for evidence storage: {EntityId}", entity.Id);
+            return;
+        }
+
+        var stored = 0;
+        foreach (var segment in segments)
+        {
+            try
+            {
+                // Create segment evidence with full metadata
+                var metadata = new
+                {
+                    segmentId = segment.Id,
+                    segmentType = segment.Type.ToString(),
+                    index = segment.Index,
+                    sectionTitle = segment.SectionTitle,
+                    headingPath = segment.HeadingPath,
+                    headingLevel = segment.HeadingLevel,
+                    pageNumber = segment.PageNumber,
+                    lineNumber = segment.LineNumber,
+                    startChar = segment.StartChar,
+                    endChar = segment.EndChar,
+                    contentHash = segment.ContentHash,
+                    salienceScore = segment.SalienceScore,
+                    positionWeight = segment.PositionWeight,
+                    chunkIndex = segment.ChunkIndex
+                };
+
+                using var textStream = new MemoryStream(Encoding.UTF8.GetBytes(segment.Text));
+
+                await evidenceRepository.StoreAsync(
+                    entityId: entityId,
+                    artifactType: EvidenceTypes.SegmentText,
+                    content: textStream,
+                    mimeType: "text/plain",
+                    producerSource: "BertRAG",
+                    confidence: segment.SalienceScore,
+                    metadata: metadata,
+                    ct: ct);
+
+                stored++;
+            }
+            catch (Exception ex)
+            {
+                logger.LogWarning(ex, "Failed to store segment evidence for segment {SegmentId}", segment.Id);
+            }
+        }
+
+        logger.LogInformation("Stored {Count}/{Total} segment evidence artifacts for entity {EntityId}",
+            stored, segments.Count, entityId);
     }
 }

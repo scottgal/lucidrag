@@ -203,7 +203,8 @@ public class AgenticSearchService(
                 [],
                 conversationId.Value,
                 AskedForClarification: true,
-                ClarificationQuestion: clarificationQuestion);
+                ClarificationQuestion: clarificationQuestion,
+                Timestamp: DateTimeOffset.UtcNow);
         }
 
         // Check if no results and low confidence - also ask for clarification
@@ -224,7 +225,8 @@ public class AgenticSearchService(
                 [],
                 conversationId.Value,
                 AskedForClarification: true,
-                ClarificationQuestion: noResultsMessage);
+                ClarificationQuestion: noResultsMessage,
+                Timestamp: DateTimeOffset.UtcNow);
         }
 
         // In demo mode, check if query is relevant to indexed documents
@@ -238,7 +240,7 @@ public class AgenticSearchService(
 
                 var offTopicAnswer = _ragConfig.DemoMode.OffTopicMessage;
                 await conversationService.AddMessageAsync(conversationId.Value, "assistant", offTopicAnswer, ct: ct);
-                return new ChatResponse(offTopicAnswer, [], conversationId.Value, IsOffTopic: true);
+                return new ChatResponse(offTopicAnswer, [], conversationId.Value, IsOffTopic: true, Timestamp: DateTimeOffset.UtcNow);
             }
         }
 
@@ -300,7 +302,7 @@ public class AgenticSearchService(
                 NeedsApproval: searchResult.QueryPlan.Confidence < 0.7)
             : null;
 
-        return new ChatResponse(answer, sources, conversationId.Value)
+        return new ChatResponse(answer, sources, conversationId.Value, Timestamp: DateTimeOffset.UtcNow)
         {
             QueryPlan = searchResult.QueryPlan,
             Decomposition = decomposition

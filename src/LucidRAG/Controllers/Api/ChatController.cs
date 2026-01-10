@@ -45,6 +45,7 @@ public class ChatController(
                 askedForClarification = response.AskedForClarification,
                 clarificationQuestion = response.ClarificationQuestion,
                 isOffTopic = response.IsOffTopic,
+                timestamp = response.Timestamp,
                 // Query decomposition for UI display
                 decomposition = response.Decomposition != null ? new
                 {

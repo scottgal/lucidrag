@@ -99,12 +99,20 @@ public class EvidenceArtifact
 public static class EvidenceTypes
 {
     // Document/Text Evidence
+    public const string SegmentText = "segment_text";     // RAG segment text content
+    public const string DocumentText = "document_text";   // Full document text
     public const string OcrText = "ocr_text";
     public const string OcrWordBoxes = "ocr_word_boxes";
     public const string OcrConfidenceMap = "ocr_confidence_map";
     public const string LlmSummary = "llm_summary";
     public const string LlmClaims = "llm_claims";
     public const string LlmEntities = "llm_entities";
+
+    // Image/Visual Evidence (from ImageSummarizer/VisionLLM)
+    public const string ImageCaption = "image_caption";       // AI-generated caption
+    public const string ImageAltText = "image_alt_text";      // Original alt text
+    public const string ImageOcrText = "image_ocr_text";      // Text extracted from image
+    public const string ImageMetadata = "image_metadata";     // EXIF, dimensions, etc.
 
     // Image Evidence
     public const string OriginalImage = "original_image";
