@@ -25,6 +25,28 @@ public class DocumentEntity
     public string? SourceUrl { get; set; }
 
     /// <summary>
+    /// Source file path for imported files. Used for change detection on re-import.
+    /// Combined with CollectionId to form a unique identifier.
+    /// </summary>
+    public string? SourcePath { get; set; }
+
+    /// <summary>
+    /// Original creation date of the source file (preserved from filesystem).
+    /// </summary>
+    public DateTimeOffset? SourceCreatedAt { get; set; }
+
+    /// <summary>
+    /// Last modified date of the source file at time of import.
+    /// Used for change detection.
+    /// </summary>
+    public DateTimeOffset? SourceModifiedAt { get; set; }
+
+    /// <summary>
+    /// Number of times this document has been updated/reimported.
+    /// </summary>
+    public int Version { get; set; } = 1;
+
+    /// <summary>
     /// The document ID used in the vector store (stableDocId).
     /// Format: {sanitized_filename}_{content_hash_from_canonicalized_markdown}
     /// Set after processing completes.

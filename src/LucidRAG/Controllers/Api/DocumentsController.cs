@@ -113,6 +113,129 @@ public class DocumentsController(
         return Ok(new { documents = results });
     }
 
+    /// <summary>
+    /// Import/upsert a document with change detection based on source path.
+    /// If a document with the same sourcePath exists in the collection, it will be updated if content changed.
+    /// </summary>
+    [HttpPost("import")]
+    [RequestSizeLimit(100 * 1024 * 1024)]
+    public async Task<IActionResult> Import(
+        IFormFile? file,
+        [FromForm] string? sourcePath = null,
+        [FromForm] Guid? collectionId = null,
+        [FromForm] DateTimeOffset? sourceCreatedAt = null,
+        [FromForm] DateTimeOffset? sourceModifiedAt = null,
+        CancellationToken ct = default)
+    {
+        if (file == null || file.Length == 0)
+        {
+            return BadRequest(new { error = "No file provided" });
+        }
+
+        try
+        {
+            await using var stream = file.OpenReadStream();
+            var result = await documentService.ImportDocumentAsync(
+                stream,
+                file.FileName,
+                collectionId,
+                sourcePath ?? file.FileName,
+                sourceCreatedAt,
+                sourceModifiedAt,
+                ct);
+
+            return Ok(new
+            {
+                documentId = result.DocumentId,
+                filename = file.FileName,
+                sourcePath = result.SourcePath,
+                action = result.Action.ToString().ToLowerInvariant(),
+                version = result.Version,
+                message = result.Action switch
+                {
+                    ImportAction.Created => "Document created and queued for processing",
+                    ImportAction.Updated => "Document updated and queued for reprocessing",
+                    ImportAction.Unchanged => "Document unchanged, skipped",
+                    _ => "Document processed"
+                }
+            });
+        }
+        catch (ArgumentException ex)
+        {
+            return BadRequest(new { error = ex.Message });
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Error importing document {Filename}", file.FileName);
+            return StatusCode(500, new { error = "Failed to import document" });
+        }
+    }
+
+    /// <summary>
+    /// Batch import with change detection.
+    /// </summary>
+    [HttpPost("import-batch")]
+    [RequestSizeLimit(500 * 1024 * 1024)]
+    public async Task<IActionResult> ImportBatch(
+        IFormFileCollection files,
+        [FromForm] Guid? collectionId = null,
+        [FromForm] string? sourceBasePath = null,
+        CancellationToken ct = default)
+    {
+        if (files.Count == 0)
+        {
+            return BadRequest(new { error = "No files provided" });
+        }
+
+        var results = new List<object>();
+        var created = 0;
+        var updated = 0;
+        var unchanged = 0;
+
+        foreach (var file in files)
+        {
+            try
+            {
+                var sourcePath = string.IsNullOrEmpty(sourceBasePath)
+                    ? file.FileName
+                    : Path.Combine(sourceBasePath, file.FileName);
+
+                await using var stream = file.OpenReadStream();
+                var result = await documentService.ImportDocumentAsync(
+                    stream,
+                    file.FileName,
+                    collectionId,
+                    sourcePath,
+                    null, null,
+                    ct);
+
+                switch (result.Action)
+                {
+                    case ImportAction.Created: created++; break;
+                    case ImportAction.Updated: updated++; break;
+                    case ImportAction.Unchanged: unchanged++; break;
+                }
+
+                results.Add(new
+                {
+                    documentId = result.DocumentId,
+                    filename = file.FileName,
+                    action = result.Action.ToString().ToLowerInvariant()
+                });
+            }
+            catch (Exception ex)
+            {
+                results.Add(new { filename = file.FileName, action = "error", error = ex.Message });
+            }
+        }
+
+        return Ok(new
+        {
+            summary = new { created, updated, unchanged, total = files.Count },
+            documents = results
+        });
+    }
+
     [HttpGet("{id:guid}")]
     public async Task<IActionResult> Get(Guid id, CancellationToken ct = default)
     {

@@ -84,6 +84,146 @@ public class DocumentProcessingService(
         return documentId;
     }
 
+    public async Task<ImportResult> ImportDocumentAsync(
+        Stream fileStream,
+        string filename,
+        Guid? collectionId,
+        string sourcePath,
+        DateTimeOffset? sourceCreatedAt,
+        DateTimeOffset? sourceModifiedAt,
+        CancellationToken ct = default)
+    {
+        // Validate extension
+        var extension = Path.GetExtension(filename).ToLowerInvariant();
+        if (!_config.AllowedExtensions.Contains(extension))
+        {
+            throw new ArgumentException($"File type '{extension}' is not allowed. Allowed types: {string.Join(", ", _config.AllowedExtensions)}");
+        }
+
+        // Compute content hash for change detection
+        using var sha = SHA256.Create();
+        var hashBytes = await sha.ComputeHashAsync(fileStream, ct);
+        var contentHash = Convert.ToHexString(hashBytes).ToLowerInvariant()[..32];
+        fileStream.Position = 0;
+
+        // Normalize source path for consistent matching
+        var normalizedSourcePath = sourcePath.Replace('\\', '/').ToLowerInvariant();
+
+        // Check for existing document with same source path in collection
+        var existingDoc = await db.Documents
+            .FirstOrDefaultAsync(d =>
+                d.SourcePath == normalizedSourcePath &&
+                d.CollectionId == collectionId, ct);
+
+        if (existingDoc != null)
+        {
+            // Document exists - check if content changed
+            if (existingDoc.ContentHash == contentHash)
+            {
+                // Content unchanged - skip
+                logger.LogDebug("Document unchanged (same hash), skipping: {SourcePath}", normalizedSourcePath);
+                return new ImportResult(existingDoc.Id, normalizedSourcePath, ImportAction.Unchanged, existingDoc.Version);
+            }
+
+            // Content changed - update the document
+            logger.LogInformation("Document content changed, updating: {SourcePath} (version {Version})",
+                normalizedSourcePath, existingDoc.Version + 1);
+
+            // Delete old vectors if they exist
+            if (!string.IsNullOrEmpty(existingDoc.VectorStoreDocId))
+            {
+                try
+                {
+                    await vectorStore.DeleteDocumentAsync(CollectionName, existingDoc.VectorStoreDocId, ct);
+                }
+                catch (Exception ex)
+                {
+                    logger.LogWarning(ex, "Failed to delete old vectors for document update: {DocId}", existingDoc.Id);
+                }
+            }
+
+            // Update file on disk
+            var existingFilePath = existingDoc.FilePath;
+            if (!string.IsNullOrEmpty(existingFilePath) && File.Exists(existingFilePath))
+            {
+                await using var fs = new FileStream(existingFilePath, FileMode.Create);
+                await fileStream.CopyToAsync(fs, ct);
+            }
+            else
+            {
+                // Create new file path
+                var uploadDir = Path.Combine(_config.UploadPath, existingDoc.Id.ToString());
+                Directory.CreateDirectory(uploadDir);
+                existingFilePath = Path.Combine(uploadDir, filename);
+                await using var fs = new FileStream(existingFilePath, FileMode.Create);
+                await fileStream.CopyToAsync(fs, ct);
+            }
+
+            // Update entity
+            existingDoc.ContentHash = contentHash;
+            existingDoc.FilePath = existingFilePath;
+            existingDoc.FileSizeBytes = new FileInfo(existingFilePath).Length;
+            existingDoc.OriginalFilename = filename;
+            existingDoc.SourceModifiedAt = sourceModifiedAt ?? DateTimeOffset.UtcNow;
+            existingDoc.Version++;
+            existingDoc.Status = DocumentStatus.Pending;
+            existingDoc.StatusMessage = null;
+            existingDoc.ProcessingProgress = 0;
+            existingDoc.ProcessedAt = null;
+            existingDoc.VectorStoreDocId = null;
+
+            await db.SaveChangesAsync(ct);
+
+            // Re-queue for processing
+            await queue.EnqueueAsync(new DocumentProcessingJob(existingDoc.Id, existingFilePath, collectionId), ct);
+
+            return new ImportResult(existingDoc.Id, normalizedSourcePath, ImportAction.Updated, existingDoc.Version);
+        }
+
+        // No existing document - create new
+        var documentId = Guid.NewGuid();
+        var uploadDirectory = Path.Combine(_config.UploadPath, documentId.ToString());
+        Directory.CreateDirectory(uploadDirectory);
+        var filePath = Path.Combine(uploadDirectory, filename);
+
+        await using (var fs = new FileStream(filePath, FileMode.Create))
+        {
+            await fileStream.CopyToAsync(fs, ct);
+        }
+
+        var document = new DocumentEntity
+        {
+            Id = documentId,
+            CollectionId = collectionId,
+            Name = Path.GetFileNameWithoutExtension(filename),
+            OriginalFilename = filename,
+            ContentHash = contentHash,
+            FilePath = filePath,
+            FileSizeBytes = new FileInfo(filePath).Length,
+            MimeType = GetMimeType(extension),
+            Status = DocumentStatus.Pending,
+            SourcePath = normalizedSourcePath,
+            SourceCreatedAt = sourceCreatedAt,
+            SourceModifiedAt = sourceModifiedAt ?? DateTimeOffset.UtcNow,
+            Version = 1
+        };
+
+        // Preserve original creation date if provided
+        if (sourceCreatedAt.HasValue)
+        {
+            document.CreatedAt = sourceCreatedAt.Value;
+        }
+
+        db.Documents.Add(document);
+        await db.SaveChangesAsync(ct);
+
+        await queue.EnqueueAsync(new DocumentProcessingJob(documentId, filePath, collectionId), ct);
+
+        logger.LogInformation("Document {DocumentId} imported and queued: {SourcePath}", documentId, normalizedSourcePath);
+
+        return new ImportResult(documentId, normalizedSourcePath, ImportAction.Created, 1);
+    }
+
     public async Task<DocumentEntity?> GetDocumentAsync(Guid documentId, CancellationToken ct = default)
     {
         return await db.Documents

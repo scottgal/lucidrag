@@ -17,6 +17,9 @@ services:
       - ragdocs-uploads:/app/uploads
       - ragdocs-data:/app/data
       - ragdocs-logs:/app/logs
+      # Source documents for auto-import by tenant/collection
+      # Structure: /mostlylucid/*.md, /project/*.md, /tenant_acme/*.md
+      - ./sourcedocs:/app/sourcedocs:ro
     depends_on:
       postgres:
         condition: service_healthy
