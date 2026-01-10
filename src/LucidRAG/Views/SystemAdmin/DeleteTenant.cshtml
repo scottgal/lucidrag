@@ -1,0 +1,90 @@
+@model LucidRAG.Controllers.UI.TenantDeleteViewModel
+@{
+    ViewData["Title"] = "Delete Tenant";
+}
+
+<div class="p-6 max-w-2xl">
+    <div class="mb-6">
+        <a href="@Url.Action("Tenants")" class="btn btn-ghost btn-sm">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" />
+            </svg>
+            Back to Tenants
+        </a>
+    </div>
+
+    <div class="card bg-base-100 shadow">
+        <div class="card-body">
+            <div class="flex items-start gap-4">
+                <div class="bg-error/10 p-3 rounded-full">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-8 w-8 text-error" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                    </svg>
+                </div>
+                <div>
+                    <h1 class="text-2xl font-bold text-error">Delete Tenant</h1>
+                    <p class="text-base-content/60 mt-1">This action cannot be undone</p>
+                </div>
+            </div>
+
+            <div class="alert alert-error my-6">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                </svg>
+                <div>
+                    <p class="font-medium">You are about to permanently delete:</p>
+                    <ul class="mt-2 ml-4 list-disc">
+                        <li>Tenant: <strong>@(Model.DisplayName ?? Model.TenantId)</strong></li>
+                        <li>Database schema: <strong>@Model.SchemaName</strong></li>
+                        <li>All collections, documents, and embeddings</li>
+                        <li>All user associations with this tenant</li>
+                    </ul>
+                </div>
+            </div>
+
+            <div class="bg-base-200 p-4 rounded-lg mb-6">
+                <p class="font-medium mb-2">This will:</p>
+                <ul class="space-y-2 text-sm">
+                    <li class="flex items-center gap-2">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-error" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                        </svg>
+                        Drop the PostgreSQL schema and all tables
+                    </li>
+                    <li class="flex items-center gap-2">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-error" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                        </svg>
+                        Delete the Qdrant vector collection
+                    </li>
+                    <li class="flex items-center gap-2">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-error" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                        </svg>
+                        Remove all stored documents and evidence artifacts
+                    </li>
+                    <li class="flex items-center gap-2">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-error" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                        </svg>
+                        Orphan any users associated with this tenant
+                    </li>
+                </ul>
+            </div>
+
+            <form method="post" asp-action="DeleteTenantConfirmed" asp-route-tenantId="@Model.TenantId">
+                @Html.AntiForgeryToken()
+
+                <div class="flex gap-2">
+                    <button type="submit" class="btn btn-error">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                        </svg>
+                        Delete Tenant Permanently
+                    </button>
+                    <a href="@Url.Action("TenantDetails", new { tenantId = Model.TenantId })" class="btn btn-ghost">Cancel</a>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>

@@ -6,6 +6,7 @@ public class CollectionEntity
     public required string Name { get; set; }
     public string? Description { get; set; }
     public string? Settings { get; set; } // JSON
+    public bool IsDefault { get; set; } // Auto-selected for public users
     public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.UtcNow;
     public DateTimeOffset UpdatedAt { get; set; } = DateTimeOffset.UtcNow;
 

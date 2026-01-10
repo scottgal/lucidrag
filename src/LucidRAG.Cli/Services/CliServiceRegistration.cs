@@ -6,6 +6,8 @@ using Mostlylucid.DocSummarizer.Extensions;
 using Mostlylucid.DocSummarizer.Services;
 using Mostlylucid.DocSummarizer.Images.Extensions;
 using Mostlylucid.DocSummarizer.Images.Config;
+using Mostlylucid.DocSummarizer.Data.Extensions;
+using Mostlylucid.Summarizer.Core.Extensions;
 using LucidRAG.Data;
 using Serilog;
 
@@ -87,10 +89,20 @@ public static class CliServiceRegistration
             opt.Ocr.EmitPerformanceMetrics = verbose;
         });
 
+        // DataSummarizer.Core for CSV, JSON, Excel, Parquet
+        services.AddDataSummarizer(opt =>
+        {
+            opt.ChunkSize = 50;
+            opt.ChunkOverlap = 5;
+        });
+
         // CLI-specific services
         services.AddSingleton(config);
         services.AddSingleton<CliProgressRenderer>();
         services.AddScoped<CliDocumentProcessor>();
+
+        // Pipeline registry - discovers all registered pipelines
+        services.AddPipelineRegistry();
 
         return services.BuildServiceProvider();
     }

@@ -80,12 +80,7 @@
 
     <!-- Project references -->
     <ItemGroup>
-        <ProjectReference Include="..\Mostlylucid.DocSummarizer.Core\Mostlylucid.DocSummarizer.Core.csproj" />
-        <ProjectReference Include="..\Mostlylucid.DocSummarizer.Images\Mostlylucid.DocSummarizer.Images.csproj" />
-        <ProjectReference Include="..\Mostlylucid.DocSummarizer.Anthropic\Mostlylucid.DocSummarizer.Anthropic.csproj" />
-        <ProjectReference Include="..\Mostlylucid.DocSummarizer.OpenAI\Mostlylucid.DocSummarizer.OpenAI.csproj" />
-        <ProjectReference Include="..\Mostlylucid.GraphRag\Mostlylucid.GraphRag.csproj" />
-        <ProjectReference Include="..\Mostlylucid.RAG\Mostlylucid.RAG.csproj" />
+        <ProjectReference Include="..\LucidRAG.Core\LucidRAG.Core.csproj" />
     </ItemGroup>
 
     <!-- Ensure static files and config are published -->

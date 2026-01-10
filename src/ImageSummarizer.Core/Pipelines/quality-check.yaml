@@ -1,0 +1,20 @@
+# Quality Check Pipeline
+# Assesses image quality using OpenCV metrics
+# Fast local analysis without LLM
+
+name: quality-check
+description: Assess image quality and technical metrics
+version: 1
+
+signals:
+  - identity.*          # Basic metadata
+  - quality.*           # Quality metrics (blur, noise, etc.)
+  - color.mean*         # Luminance and saturation
+
+output:
+  format: json
+  include_metadata: true
+  include_confidence: true
+
+llm:
+  enabled: false        # Quality check is fully local

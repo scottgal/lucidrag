@@ -1,14 +1,21 @@
+using LucidRAG.Authorization;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using LucidRAG.Services;
 
 namespace LucidRAG.Controllers.UI;
 
-[Route("")]
+/// <summary>
+/// Admin home controller - requires authentication.
+/// Provides full document management, upload, and chat functionality.
+/// </summary>
+[Route("admin")]
+[Authorize(Roles = Roles.AllAuthenticated)]
 public class HomeController(
-    IDocumentProcessingService documentService,
-    IConversationService conversationService) : Controller
+    IDocumentProcessingService documentService) : Controller
 {
     [HttpGet]
+    [HttpGet("~/home")]  // Also accessible at /home for backwards compat
     public async Task<IActionResult> Index(CancellationToken ct = default)
     {
         var documents = await documentService.GetDocumentsAsync(ct: ct);

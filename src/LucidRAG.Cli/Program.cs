@@ -109,6 +109,7 @@ internal static class Program
         rootCommand.Options.Add(ConfigOption);
 
         // Add subcommands
+        rootCommand.Subcommands.Add(CliCommands.ProcessCommand.Create());  // Unified ingestion pipeline
         rootCommand.Subcommands.Add(CliCommands.ConversationalCommand.Create());
         rootCommand.Subcommands.Add(CliCommands.IndexCommand.Create());
         rootCommand.Subcommands.Add(CliCommands.SearchCommand.Create());

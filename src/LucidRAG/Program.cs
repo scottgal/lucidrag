@@ -15,6 +15,8 @@ using LucidRAG.Services;
 using LucidRAG.Services.Background;
 using LucidRAG.Services.Sentinel;
 using LucidRAG.Services.Storage;
+using LucidRAG.Middleware;
+using LucidRAG.Authorization;
 using LucidRAG.Hubs;
 using Scalar.AspNetCore;
 using Serilog;
@@ -202,7 +204,14 @@ builder.Services.AddIdentity<LucidRAG.Identity.ApplicationUser, Microsoft.AspNet
     // User settings
     options.User.RequireUniqueEmail = true;
 })
+.AddRoles<Microsoft.AspNetCore.Identity.IdentityRole>()
 .AddEntityFrameworkStores<RagDocumentsDbContext>();
+
+// Demo admin seeder for development mode
+builder.Services.AddHostedService<DemoAdminSeeder>();
+
+// Authorization policies
+builder.Services.AddLucidRagAuthorization();
 
 // Cookie settings for auth
 builder.Services.ConfigureApplicationCookie(options =>
@@ -253,6 +262,9 @@ app.UseRouting();
 // Authentication & Authorization
 app.UseAuthentication();
 app.UseAuthorization();
+
+// Auto-login as demo admin in development mode
+app.UseDevAutoLogin();
 
 // Multi-tenancy middleware (if enabled)
 if (multitenancyEnabled)

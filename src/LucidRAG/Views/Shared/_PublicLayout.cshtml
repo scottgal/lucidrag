@@ -1,0 +1,327 @@
+@{
+    var tenantName = ViewData["TenantName"] as string ?? "LucidRAG";
+    var tenantLogo = ViewData["TenantLogo"] as string;
+}
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>@ViewData["Title"] - @tenantName</title>
+
+    <!-- Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+    <!-- Tailwind CSS + DaisyUI -->
+    <link href="/css/dist/main.css" rel="stylesheet" type="text/css" />
+
+    <!-- Alpine.js -->
+    <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.14.1/dist/cdn.min.js"></script>
+
+    <!-- HTMX -->
+    <script src="https://unpkg.com/htmx.org@2.0.3"></script>
+
+    <!-- Marked.js for markdown -->
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+
+    <style>
+        [x-cloak] { display: none !important; }
+        body { font-family: 'Inter', sans-serif; }
+    </style>
+</head>
+<body class="bg-base-200 min-h-screen">
+    <div x-data="publicApp()" x-cloak class="flex h-screen overflow-hidden">
+        <!-- Mobile sidebar backdrop -->
+        <div x-show="sidebarOpen"
+             x-transition:enter="transition-opacity ease-linear duration-300"
+             x-transition:enter-start="opacity-0"
+             x-transition:enter-end="opacity-100"
+             x-transition:leave="transition-opacity ease-linear duration-300"
+             x-transition:leave-start="opacity-100"
+             x-transition:leave-end="opacity-0"
+             @@click="sidebarOpen = false"
+             class="fixed inset-0 bg-black/50 z-40 lg:hidden"></div>
+
+        <!-- Sidebar -->
+        <aside :class="sidebarOpen ? 'translate-x-0' : '-translate-x-full'"
+               class="fixed lg:static inset-y-0 left-0 z-50 w-72 bg-base-100 border-r border-base-300
+                      transform transition-transform duration-300 ease-in-out lg:translate-x-0 flex flex-col">
+
+            <!-- Sidebar Header -->
+            <div class="p-4 border-b border-base-300">
+                <div class="flex items-center gap-3">
+                    @if (tenantLogo != null)
+                    {
+                        <img src="@tenantLogo" alt="@tenantName" class="h-8 w-8 rounded" />
+                    }
+                    else
+                    {
+                        <div class="h-8 w-8 rounded bg-primary flex items-center justify-center">
+                            <span class="text-primary-content font-bold text-sm">@(tenantName.Length > 0 ? tenantName[0] : 'L')</span>
+                        </div>
+                    }
+                    <span class="font-semibold text-lg">@tenantName</span>
+                </div>
+            </div>
+
+            <!-- Collections List -->
+            <div class="flex-1 overflow-y-auto p-4">
+                <h3 class="text-xs font-semibold text-base-content/60 uppercase tracking-wider mb-3">Collections</h3>
+
+                <template x-if="loading">
+                    <div class="space-y-2">
+                        <div class="skeleton h-12 w-full"></div>
+                        <div class="skeleton h-12 w-full"></div>
+                        <div class="skeleton h-12 w-full"></div>
+                    </div>
+                </template>
+
+                <template x-if="!loading && collections.length === 0">
+                    <p class="text-sm text-base-content/50">No collections available</p>
+                </template>
+
+                <ul class="space-y-1">
+                    <template x-for="collection in collections" :key="collection.id">
+                        <li>
+                            <button @@click="selectCollection(collection)"
+                                    :class="selectedCollection?.id === collection.id ? 'bg-primary/10 border-primary' : 'hover:bg-base-200 border-transparent'"
+                                    class="w-full text-left p-3 rounded-lg border transition-colors">
+                                <div class="flex items-center justify-between">
+                                    <span class="font-medium text-sm" x-text="collection.name"></span>
+                                    <span class="badge badge-sm" x-text="collection.completedDocuments + '/' + collection.totalDocuments"></span>
+                                </div>
+                                <!-- Progress bar for scanning -->
+                                <template x-if="collection.totalDocuments > 0 && collection.completedDocuments < collection.totalDocuments">
+                                    <div class="mt-2">
+                                        <progress class="progress progress-primary w-full h-1"
+                                                  :value="collection.completedDocuments"
+                                                  :max="collection.totalDocuments"></progress>
+                                        <span class="text-xs text-base-content/50">Processing...</span>
+                                    </div>
+                                </template>
+                                <template x-if="collection.description">
+                                    <p class="text-xs text-base-content/60 mt-1 line-clamp-2" x-text="collection.description"></p>
+                                </template>
+                            </button>
+                        </li>
+                    </template>
+                </ul>
+            </div>
+
+            <!-- Sidebar Footer -->
+            <div class="p-4 border-t border-base-300">
+                <div class="text-xs text-base-content/50">
+                    <span x-text="stats.totalDocuments + ' documents'"></span>
+                    <span class="mx-1">|</span>
+                    <span x-text="stats.totalEntities + ' entities'"></span>
+                </div>
+            </div>
+        </aside>
+
+        <!-- Main Content -->
+        <div class="flex-1 flex flex-col min-w-0">
+            <!-- Header -->
+            <header class="bg-base-100 border-b border-base-300 px-4 py-3 flex items-center gap-4">
+                <!-- Mobile menu button -->
+                <button @@click="sidebarOpen = !sidebarOpen" class="lg:hidden btn btn-ghost btn-sm btn-square">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16" />
+                    </svg>
+                </button>
+
+                <!-- Selected collection indicator -->
+                <div class="flex-1 min-w-0">
+                    <template x-if="selectedCollection">
+                        <div class="flex items-center gap-2">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-primary" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
+                            </svg>
+                            <span class="font-medium truncate" x-text="selectedCollection.name"></span>
+                            <button @@click="clearCollection()" class="btn btn-ghost btn-xs">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                                </svg>
+                            </button>
+                        </div>
+                    </template>
+                    <template x-if="!selectedCollection">
+                        <span class="text-base-content/50">Select a collection to start chatting</span>
+                    </template>
+                </div>
+
+                <!-- Theme toggle -->
+                <button @@click="toggleTheme()" class="btn btn-ghost btn-sm btn-square">
+                    <svg x-show="theme === 'light'" xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z" />
+                    </svg>
+                    <svg x-show="theme === 'dark'" xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z" />
+                    </svg>
+                </button>
+
+                <!-- Login link (if not authenticated) -->
+                @if (!User.Identity?.IsAuthenticated ?? true)
+                {
+                    <a href="/auth/login" class="btn btn-primary btn-sm">Sign In</a>
+                }
+            </header>
+
+            <!-- Main Panel -->
+            <main class="flex-1 overflow-hidden">
+                @RenderBody()
+            </main>
+        </div>
+    </div>
+
+    <script>
+        function publicApp() {
+            return {
+                sidebarOpen: false,
+                loading: true,
+                collections: [],
+                selectedCollection: null,
+                stats: { totalDocuments: 0, totalEntities: 0 },
+                theme: localStorage.getItem('lucidrag-theme') || 'light',
+                conversationId: null,
+                messages: [],
+                currentMessage: '',
+                isTyping: false,
+
+                async init() {
+                    // Apply theme
+                    document.documentElement.setAttribute('data-theme', this.theme);
+
+                    // Load collections and stats
+                    await Promise.all([
+                        this.loadCollections(),
+                        this.loadStats()
+                    ]);
+
+                    // Check URL for collection slug
+                    this.checkUrlForCollection();
+
+                    this.loading = false;
+                },
+
+                async loadCollections() {
+                    try {
+                        const response = await fetch('/api/public/collections?pageSize=100');
+                        const data = await response.json();
+                        this.collections = data.data || [];
+
+                        // Auto-select if only one collection
+                        if (this.collections.length === 1 && !this.selectedCollection) {
+                            this.selectCollection(this.collections[0]);
+                        }
+                    } catch (e) {
+                        console.error('Failed to load collections:', e);
+                    }
+                },
+
+                async loadStats() {
+                    try {
+                        const response = await fetch('/api/public/stats');
+                        this.stats = await response.json();
+                    } catch (e) {
+                        console.error('Failed to load stats:', e);
+                    }
+                },
+
+                checkUrlForCollection() {
+                    // Parse /collection/{slug} from URL
+                    const match = window.location.pathname.match(/\/collection\/([^\/]+)/);
+                    if (match) {
+                        const slug = decodeURIComponent(match[1]);
+                        const collection = this.collections.find(c =>
+                            c.name.toLowerCase().replace(/\s+/g, '-') === slug.toLowerCase() ||
+                            c.id === slug
+                        );
+                        if (collection) {
+                            this.selectCollection(collection);
+                        }
+                    }
+                },
+
+                selectCollection(collection) {
+                    this.selectedCollection = collection;
+                    this.messages = [];
+                    this.conversationId = null;
+                    this.sidebarOpen = false;
+
+                    // Update URL
+                    const slug = collection.name.toLowerCase().replace(/\s+/g, '-');
+                    history.pushState({}, '', `/collection/${slug}`);
+                },
+
+                clearCollection() {
+                    this.selectedCollection = null;
+                    this.messages = [];
+                    this.conversationId = null;
+                    history.pushState({}, '', '/');
+                },
+
+                toggleTheme() {
+                    this.theme = this.theme === 'light' ? 'dark' : 'light';
+                    document.documentElement.setAttribute('data-theme', this.theme);
+                    localStorage.setItem('lucidrag-theme', this.theme);
+                },
+
+                async sendMessage() {
+                    if (!this.currentMessage.trim() || !this.selectedCollection) return;
+
+                    const userMessage = this.currentMessage.trim();
+                    this.currentMessage = '';
+
+                    // Add user message
+                    this.messages.push({ role: 'user', content: userMessage });
+                    this.isTyping = true;
+
+                    try {
+                        const response = await fetch('/api/public/chat', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                message: userMessage,
+                                conversationId: this.conversationId,
+                                collectionId: this.selectedCollection.id
+                            })
+                        });
+
+                        const data = await response.json();
+
+                        if (response.ok) {
+                            this.conversationId = data.conversationId;
+                            this.messages.push({
+                                role: 'assistant',
+                                content: data.response,
+                                sourceCount: data.sourceCount
+                            });
+                        } else {
+                            this.messages.push({
+                                role: 'assistant',
+                                content: 'Sorry, I encountered an error. Please try again.',
+                                error: true
+                            });
+                        }
+                    } catch (e) {
+                        console.error('Chat error:', e);
+                        this.messages.push({
+                            role: 'assistant',
+                            content: 'Sorry, I could not connect to the server. Please try again.',
+                            error: true
+                        });
+                    } finally {
+                        this.isTyping = false;
+                        this.$nextTick(() => {
+                            const container = document.getElementById('chat-messages');
+                            if (container) container.scrollTop = container.scrollHeight;
+                        });
+                    }
+                }
+            };
+        }
+    </script>
+</body>
+</html>

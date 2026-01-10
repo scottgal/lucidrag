@@ -1,0 +1,101 @@
+@model LucidRAG.Controllers.UI.TenantFormViewModel
+@using LucidRAG.Multitenancy
+@{
+    ViewData["Title"] = "Create Tenant";
+}
+
+<div class="p-6 max-w-2xl">
+    <div class="mb-6">
+        <a href="@Url.Action("Tenants")" class="btn btn-ghost btn-sm">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" />
+            </svg>
+            Back to Tenants
+        </a>
+    </div>
+
+    <div class="card bg-base-100 shadow">
+        <div class="card-body">
+            <h1 class="card-title text-2xl mb-4">Create Tenant</h1>
+
+            <form method="post" asp-action="CreateTenant">
+                @Html.AntiForgeryToken()
+
+                <div class="form-control w-full mb-4">
+                    <label class="label">
+                        <span class="label-text font-medium">Tenant ID <span class="text-error">*</span></span>
+                    </label>
+                    <input type="text"
+                           asp-for="TenantId"
+                           placeholder="e.g., acme-corp"
+                           pattern="^[a-z0-9][a-z0-9-]{1,62}[a-z0-9]$"
+                           class="input input-bordered w-full @(ViewData.ModelState["TenantId"]?.Errors.Count > 0 ? "input-error" : "")"
+                           required />
+                    <label class="label">
+                        <span class="label-text-alt text-base-content/60">Lowercase letters, numbers, and hyphens only (3-64 chars)</span>
+                    </label>
+                    <span asp-validation-for="TenantId" class="label-text-alt text-error"></span>
+                </div>
+
+                <div class="form-control w-full mb-4">
+                    <label class="label">
+                        <span class="label-text font-medium">Display Name</span>
+                    </label>
+                    <input type="text"
+                           asp-for="DisplayName"
+                           placeholder="e.g., Acme Corporation"
+                           class="input input-bordered w-full" />
+                    <label class="label">
+                        <span class="label-text-alt text-base-content/60">Friendly name shown in the UI</span>
+                    </label>
+                </div>
+
+                <div class="form-control w-full mb-4">
+                    <label class="label">
+                        <span class="label-text font-medium">Contact Email</span>
+                    </label>
+                    <input type="email"
+                           asp-for="ContactEmail"
+                           placeholder="admin@example.com"
+                           class="input input-bordered w-full" />
+                </div>
+
+                <div class="form-control w-full mb-6">
+                    <label class="label">
+                        <span class="label-text font-medium">Plan</span>
+                    </label>
+                    <select asp-for="Plan" class="select select-bordered w-full">
+                        <option value="@TenantPlans.Free">Free</option>
+                        <option value="@TenantPlans.Starter">Starter</option>
+                        <option value="@TenantPlans.Pro">Pro</option>
+                        <option value="@TenantPlans.Enterprise">Enterprise</option>
+                    </select>
+                </div>
+
+                <div class="alert alert-info mb-6">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                    <div>
+                        <p class="font-medium">What happens when you create a tenant:</p>
+                        <ul class="mt-2 ml-4 list-disc text-sm">
+                            <li>A new database schema will be created</li>
+                            <li>A dedicated Qdrant collection will be provisioned</li>
+                            <li>The tenant will be immediately active and ready to use</li>
+                        </ul>
+                    </div>
+                </div>
+
+                <div class="flex gap-2">
+                    <button type="submit" class="btn btn-primary">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
+                        </svg>
+                        Create Tenant
+                    </button>
+                    <a href="@Url.Action("Tenants")" class="btn btn-ghost">Cancel</a>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>

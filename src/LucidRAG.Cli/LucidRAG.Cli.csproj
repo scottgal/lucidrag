@@ -29,9 +29,10 @@
 
     <!-- Core library references -->
     <ItemGroup>
-        <ProjectReference Include="..\Mostlylucid.DocSummarizer.Core\Mostlylucid.DocSummarizer.Core.csproj" />
-        <ProjectReference Include="..\Mostlylucid.GraphRag\Mostlylucid.GraphRag.csproj" />
-        <ProjectReference Include="..\LucidRAG\LucidRAG.csproj" />
+        <ProjectReference Include="..\LucidRAG.Core\LucidRAG.Core.csproj" />
+        <ProjectReference Include="..\ImageSummarizer.Core\ImageSummarizer.Core.csproj" />
+        <ProjectReference Include="..\DataSummarizer.Core\DataSummarizer.Core.csproj" />
+        <ProjectReference Include="..\Mostlylucid.Summarizer.Core\Mostlylucid.Summarizer.Core.csproj" />
     </ItemGroup>
 
     <!-- CLI dependencies -->

@@ -72,17 +72,7 @@ public class TenantContext
     }
 }
 
-/// <summary>
-/// Resolves the current tenant from the HTTP request.
-/// </summary>
-public interface ITenantResolver
-{
-    /// <summary>
-    /// Resolve the tenant context from the current HTTP request.
-    /// Returns null if no tenant can be resolved.
-    /// </summary>
-    Task<TenantContext?> ResolveAsync(HttpContext context, CancellationToken ct = default);
-}
+// ITenantResolver interface is in the web project (uses HttpContext)
 
 /// <summary>
 /// Provides access to the current tenant context.

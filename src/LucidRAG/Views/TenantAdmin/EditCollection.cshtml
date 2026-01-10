@@ -1,0 +1,64 @@
+@model LucidRAG.Controllers.UI.CollectionFormViewModel
+@{
+    ViewData["Title"] = "Edit Collection";
+}
+
+<div class="p-6 max-w-2xl">
+    <div class="mb-6">
+        <a href="@Url.Action("Collections")" class="btn btn-ghost btn-sm">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" />
+            </svg>
+            Back to Collections
+        </a>
+    </div>
+
+    <div class="card bg-base-100 shadow">
+        <div class="card-body">
+            <h1 class="card-title text-2xl mb-4">Edit Collection</h1>
+
+            <form method="post" asp-action="EditCollection" asp-route-id="@Model.Id">
+                @Html.AntiForgeryToken()
+
+                <div class="form-control w-full mb-4">
+                    <label class="label">
+                        <span class="label-text font-medium">Name <span class="text-error">*</span></span>
+                    </label>
+                    <input type="text"
+                           asp-for="Name"
+                           class="input input-bordered w-full @(ViewData.ModelState["Name"]?.Errors.Count > 0 ? "input-error" : "")"
+                           required />
+                    <span asp-validation-for="Name" class="label-text-alt text-error"></span>
+                </div>
+
+                <div class="form-control w-full mb-4">
+                    <label class="label">
+                        <span class="label-text font-medium">Description</span>
+                    </label>
+                    <textarea asp-for="Description"
+                              class="textarea textarea-bordered w-full h-24"></textarea>
+                </div>
+
+                <div class="form-control mb-6">
+                    <label class="label cursor-pointer justify-start gap-3">
+                        <input type="checkbox" asp-for="IsDefault" class="checkbox checkbox-primary" />
+                        <div>
+                            <span class="label-text font-medium">Set as default collection</span>
+                            <p class="text-xs text-base-content/60">Public users will start with this collection selected</p>
+                        </div>
+                    </label>
+                </div>
+
+                <div class="flex gap-2">
+                    <button type="submit" class="btn btn-primary">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+                        </svg>
+                        Save Changes
+                    </button>
+                    <a href="@Url.Action("Collections")" class="btn btn-ghost">Cancel</a>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>

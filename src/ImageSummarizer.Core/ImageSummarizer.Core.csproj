@@ -1,0 +1,84 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <LangVersion>latest</LangVersion>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+
+    <!-- Keep old namespace for compatibility until fully migrated -->
+    <RootNamespace>Mostlylucid.DocSummarizer.Images</RootNamespace>
+    <AssemblyName>ImageSummarizer.Core</AssemblyName>
+
+    <!-- Package metadata -->
+    <PackageId>ImageSummarizer.Core</PackageId>
+    <Description>Core image analysis pipeline with OCR, motion detection, and vision model captioning</Description>
+    <Authors>Scott Galloway</Authors>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <PackageProjectUrl>https://github.com/scottgal/lucidrag</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/scottgal/lucidrag</RepositoryUrl>
+    <PackageTags>image;ocr;vision;imagesharp;clip;florence2;onnx;tesseract</PackageTags>
+  </PropertyGroup>
+
+  <!-- Release configuration: no PDB files -->
+  <PropertyGroup Condition="'$(Configuration)' == 'Release'">
+    <DebugSymbols>false</DebugSymbols>
+    <DebugType>none</DebugType>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- StyloFlow.Retrieval.Core - Universal retrieval infrastructure -->
+    <ProjectReference Include="D:\Source\styloflow\src\StyloFlow.Retrieval.Core\StyloFlow.Retrieval.Core.csproj" />
+    <!-- Common pipeline abstractions -->
+    <ProjectReference Include="..\Mostlylucid.Summarizer.Core\Mostlylucid.Summarizer.Core.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- ONNX Runtime for Florence-2 and CLIP -->
+    <PackageReference Include="Microsoft.ML.OnnxRuntime" Version="1.23.2" />
+    <PackageReference Include="Microsoft.ML.OnnxRuntime.Gpu" Version="1.23.2" Condition="('$(RuntimeIdentifier)' == 'win-x64' OR '$(RuntimeIdentifier)' == 'linux-x64') OR (('$(RuntimeIdentifier)' == '') AND ($([MSBuild]::IsOSPlatform('Windows')) OR $([MSBuild]::IsOSPlatform('Linux'))))" NoWarn="NU1605" />
+    <PackageReference Include="Microsoft.ML.OnnxRuntime.DirectML" Version="1.23.0" Condition="('$(RuntimeIdentifier)' == 'win-x64') OR (('$(RuntimeIdentifier)' == '') AND $([MSBuild]::IsOSPlatform('Windows')))" NoWarn="NU1605" />
+
+    <!-- Florence-2 for fast local image captioning -->
+    <PackageReference Include="Florence2" Version="25.12.63049" />
+
+    <!-- Legacy ephemeral.complete for old code - to be removed after migration -->
+    <PackageReference Include="mostlylucid.ephemeral.complete" Version="2.3.2" Aliases="EphemeralComplete" />
+    <PackageReference Include="Mostlylucid.Ephemeral.Atoms.Taxonomy" Version="2.3.2" />
+
+    <!-- Tesseract for OCR -->
+    <PackageReference Include="Tesseract" Version="5.2.0" />
+
+    <!-- Spell checking for OCR quality detection -->
+    <PackageReference Include="WeCantSpell.Hunspell" Version="7.0.1" />
+
+    <!-- SQLite for signal storage -->
+    <PackageReference Include="Microsoft.Data.Sqlite" Version="10.0.1" />
+
+    <!-- Override vulnerable transitive dependencies -->
+    <PackageReference Include="Microsoft.Extensions.Caching.Memory" Version="10.0.1" />
+    <PackageReference Include="Npgsql" Version="10.0.1" />
+
+    <!-- OpenCV for motion analysis -->
+    <PackageReference Include="OpenCvSharp4" Version="4.11.0.20250507" />
+    <PackageReference Include="OpenCvSharp4.runtime.win" Version="4.11.0.20250507" />
+    <PackageReference Include="YamlDotNet" Version="16.3.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Mostlylucid.DocSummarizer.Core\Mostlylucid.DocSummarizer.Core.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <EmbeddedResource Include="Config\pipelines.json" />
+    <EmbeddedResource Include="waves\*.wave.yaml" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Content Include="Pipelines\*.yaml">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+  </ItemGroup>
+
+</Project>

@@ -1,0 +1,120 @@
+@model List<LucidRAG.Controllers.UI.CollectionListItemViewModel>
+@{
+    ViewData["Title"] = "Collections";
+}
+
+<div class="p-6">
+    <div class="flex items-center justify-between mb-6">
+        <div>
+            <h1 class="text-2xl font-bold">Collections</h1>
+            <p class="text-base-content/60">Manage your document collections</p>
+        </div>
+        <a href="@Url.Action("CreateCollection")" class="btn btn-primary">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
+            </svg>
+            New Collection
+        </a>
+    </div>
+
+    @if (TempData["Success"] != null)
+    {
+        <div class="alert alert-success mb-4">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+            <span>@TempData["Success"]</span>
+        </div>
+    }
+
+    @if (Model.Count == 0)
+    {
+        <div class="card bg-base-100 shadow">
+            <div class="card-body items-center text-center">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-16 w-16 text-base-content/30 mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
+                </svg>
+                <h2 class="card-title">No collections yet</h2>
+                <p class="text-base-content/60">Create your first collection to organize your documents</p>
+                <div class="card-actions mt-4">
+                    <a href="@Url.Action("CreateCollection")" class="btn btn-primary">Create Collection</a>
+                </div>
+            </div>
+        </div>
+    }
+    else
+    {
+        <div class="grid gap-4">
+            @foreach (var collection in Model)
+            {
+                <div class="card bg-base-100 shadow hover:shadow-md transition-shadow">
+                    <div class="card-body">
+                        <div class="flex items-start justify-between">
+                            <div class="flex-1 min-w-0">
+                                <a href="@Url.Action("CollectionDetails", new { id = collection.Id })" class="card-title link link-hover">
+                                    @collection.Name
+                                </a>
+                                @if (!string.IsNullOrEmpty(collection.Description))
+                                {
+                                    <p class="text-sm text-base-content/60 mt-1">@collection.Description</p>
+                                }
+                            </div>
+                            <div class="dropdown dropdown-end">
+                                <label tabindex="0" class="btn btn-ghost btn-sm btn-square">
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 5v.01M12 12v.01M12 19v.01M12 6a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2z" />
+                                    </svg>
+                                </label>
+                                <ul tabindex="0" class="dropdown-content z-10 menu p-2 shadow bg-base-100 rounded-box w-52">
+                                    <li><a href="@Url.Action("CollectionDetails", new { id = collection.Id })">View Details</a></li>
+                                    <li><a href="@Url.Action("EditCollection", new { id = collection.Id })">Edit</a></li>
+                                    <li><a href="@Url.Action("DeleteCollection", new { id = collection.Id })" class="text-error">Delete</a></li>
+                                </ul>
+                            </div>
+                        </div>
+
+                        <div class="flex flex-wrap gap-4 mt-4">
+                            <div class="flex items-center gap-2">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-base-content/50" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                                </svg>
+                                <span class="text-sm">@collection.DocumentCount documents</span>
+                            </div>
+                            <div class="flex items-center gap-2">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-base-content/50" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" />
+                                </svg>
+                                <span class="text-sm">@collection.EntityCount entities</span>
+                            </div>
+                            <div class="flex items-center gap-2 text-sm">
+                                @if (collection.ProcessingCount > 0)
+                                {
+                                    <span class="badge badge-warning badge-sm">@collection.ProcessingCount processing</span>
+                                }
+                                @if (collection.FailedCount > 0)
+                                {
+                                    <span class="badge badge-error badge-sm">@collection.FailedCount failed</span>
+                                }
+                                @if (collection.CompletedCount == collection.DocumentCount && collection.DocumentCount > 0)
+                                {
+                                    <span class="badge badge-success badge-sm">All complete</span>
+                                }
+                            </div>
+                        </div>
+
+                        @if (collection.ProcessingCount > 0 && collection.DocumentCount > 0)
+                        {
+                            <progress class="progress progress-primary w-full mt-2"
+                                      value="@collection.CompletedCount"
+                                      max="@collection.DocumentCount"></progress>
+                        }
+
+                        <div class="text-xs text-base-content/50 mt-2">
+                            Updated @collection.UpdatedAt.ToString("MMM d, yyyy")
+                        </div>
+                    </div>
+                </div>
+            }
+        </div>
+    }
+</div>

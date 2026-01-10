@@ -1,0 +1,149 @@
+# VisionLlmWave - Vision LLM for captions and text extraction
+name: VisionLlmWave
+priority: 50
+enabled: true
+
+scope:
+  sink: docsummarizer.images
+  coordinator: analysis
+  atom: VisionLlm
+
+triggers:
+  requires:
+    - signal: identity.width
+      condition: "> 0"
+  skip_when:
+    - wave.skipped.VisionLlmWave
+    - route.skip.VisionLlmWave
+    # Skip if Florence-2 or OCR already produced confident results
+    - florence2.early_exit
+    - ocr.early_exit
+    # Skip if florence2 explicitly said not to escalate
+    - florence2.no_escalate
+
+emits:
+  on_start:
+    - vision.llm.started
+
+  on_complete:
+    - key: vision.llm.caption
+      type: string
+      description: LLM-generated image caption
+      confidence_range: [0.7, 0.95]
+
+    - key: vision.llm.text
+      type: string
+      description: LLM-extracted text from image (subtitles, overlays)
+      confidence_range: [0.8, 0.98]
+
+    - key: vision.llm.scene
+      type: string
+      description: Detected scene type (meme, photo, screenshot, etc.)
+
+    - key: vision.llm.entities
+      type: List<EntityDetection>
+      description: Detected entities (people, objects, text)
+
+    - key: vision.llm.skipped
+      type: bool
+      description: Wave was skipped
+
+  on_failure:
+    - vision.llm.failed
+
+listens:
+  required:
+    - identity.is_animated
+    - identity.frame_count
+
+  optional:
+    # OCR signals - skip text extraction if OCR succeeded
+    - ocr.ml.fused_text
+    - ocr.full_text
+    - ocr.quality.is_garbled
+
+    # Cached frames from MlOcrWave for filmstrip
+    - ocr.frames
+    - ocr.opencv.per_frame_regions
+
+    # Text detection signals
+    - content.text_likeliness
+
+    # Route signals
+    - route.quality_tier
+
+# Escalation logic - when to extract text vs just caption
+escalation:
+  text_extraction:
+    when:
+      - signal: ocr.quality.is_garbled
+        value: true
+      - signal: ocr.ml.fused_text
+        condition: "IsNullOrWhiteSpace"
+      - signal: identity.is_animated
+        value: true
+        and_signal: ocr.ml.fused_text
+        and_condition: "IsNullOrWhiteSpace"
+    skip_when:
+      - signal: ocr.ml.fused_text
+        condition: "HasValue && !IsGarbled"
+
+cache:
+  uses:
+    - ocr.frames
+    - ocr.opencv.per_frame_regions
+
+config:
+  bindings:
+    - config_key: EnableVisionLlm
+      skip_if_false: true
+
+lane:
+  name: llm
+  max_concurrency: 1  # LLM calls are expensive
+
+tags:
+  - vision
+  - llm
+  - caption
+  - ocr
+  - escalation
+
+# ============================================
+# DEFAULT CONFIGURATION - NO MAGIC NUMBERS
+# Override via appsettings.json: DocSummarizer:Images:Waves:VisionLlmWave:*
+# ============================================
+defaults:
+  weights:
+    base: 1.0
+    high_confidence: 2.0
+    low_confidence: 0.5
+    verified: 3.0
+
+  confidence:
+    neutral: 0.5
+    high: 0.9
+    medium: 0.75
+    low: 0.6
+    high_threshold: 0.85
+    escalation_threshold: 0.5
+
+  timing:
+    timeout_ms: 60000  # 60 seconds - LLM calls can be slow
+    cache_ttl_sec: 3600
+
+  features:
+    detailed_logging: false
+    enable_cache: true
+    can_early_exit: false  # VisionLLM is already the escalation target
+    can_escalate: false
+
+  # Wave-specific parameters
+  parameters:
+    skip_if_florence2_confident: true     # Skip if Florence-2 was confident
+    skip_if_ocr_confident: true           # Skip if OCR extracted good text
+    min_ocr_words_to_skip: 10             # Skip if OCR has this many words
+    min_caption_length_to_skip: 50        # Skip if caption is this long
+    require_escalation_signal: false      # Only run if explicitly escalated
+    max_tokens: 500                        # Max tokens for LLM response
+    filmstrip_frames: 4                    # Frames to extract for animated

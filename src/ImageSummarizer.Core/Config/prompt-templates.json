@@ -1,0 +1,194 @@
+{
+  "version": "2.4",
+  "description": "Vision LLM prompt templates with PURPOSE-DRIVEN output and salience-based compression",
+
+  "image_types": {
+    "animated": {
+      "name": "Animated Image",
+      "description": "GIF or animated WebP",
+      "focus": "the action/movement, what is happening, any text shown",
+      "context": "Filmstrip of frames - describe the animation.",
+      "example": "{\"caption\": \"A cat repeatedly knocking items off a shelf.\"}",
+      "signal_globs": {
+        "motion.*": 1.0,
+        "content.text*": 0.8,
+        "color.*": 0.5,
+        "complexity.*": 0.6
+      }
+    },
+    "photo": {
+      "name": "Photograph",
+      "description": "Natural photograph",
+      "focus": "main subject, setting, action/pose",
+      "context": null,
+      "example": "{\"caption\": \"A golden retriever playing in a grassy park.\"}",
+      "signal_globs": {
+        "color.*": 0.6,
+        "quality.*": 0.4,
+        "identity.*": 0.2
+      }
+    },
+    "screenshot": {
+      "name": "Screenshot",
+      "description": "Screen capture",
+      "focus": "UI elements, visible text, application",
+      "context": "Include key visible text.",
+      "example": "{\"caption\": \"Code editor showing Python with syntax error.\"}",
+      "signal_globs": {
+        "content.text*": 1.0,
+        "ocr.*": 1.0,
+        "color.*": 0.4,
+        "quality.edge*": 0.3
+      }
+    },
+    "diagram": {
+      "name": "Diagram",
+      "description": "Technical diagram",
+      "focus": "diagram type, labels, relationships",
+      "context": "Explain what it communicates.",
+      "example": "{\"caption\": \"Flowchart showing authentication process.\"}",
+      "signal_globs": {
+        "content.text*": 0.9,
+        "ocr.*": 0.9,
+        "quality.edge*": 0.8,
+        "color.*": 0.5
+      }
+    },
+    "chart": {
+      "name": "Chart",
+      "description": "Data visualization",
+      "focus": "chart type, data, labels, takeaway",
+      "context": "Summarize data trend.",
+      "example": "{\"caption\": \"Bar chart comparing quarterly sales.\"}",
+      "signal_globs": {
+        "content.text*": 1.0,
+        "ocr.*": 1.0,
+        "color.dominant*": 0.7,
+        "quality.edge*": 0.4
+      }
+    },
+    "artwork": {
+      "name": "Artwork",
+      "description": "Digital art or illustration",
+      "focus": "subject, style, colors, mood",
+      "context": null,
+      "example": "{\"caption\": \"Watercolor castle on cliff with storm clouds.\"}",
+      "signal_globs": {
+        "color.*": 1.0,
+        "quality.*": 0.5,
+        "quality.edge*": 0.3
+      }
+    },
+    "meme": {
+      "name": "Meme",
+      "description": "Meme or reaction image",
+      "focus": "visual content and text/captions",
+      "context": "Quote meme text exactly.",
+      "example": "{\"caption\": \"Drake meme: 'Complex code' rejected, 'StackOverflow' approved.\"}",
+      "signal_globs": {
+        "content.text*": 1.0,
+        "ocr.*": 1.0,
+        "content.extracted*": 1.0
+      }
+    },
+    "scanned_document": {
+      "name": "Document",
+      "description": "Scanned paper document",
+      "focus": "document type and key text",
+      "context": "Identify document type.",
+      "example": "{\"caption\": \"Scanned receipt totaling $47.32.\"}",
+      "signal_globs": {
+        "content.text*": 1.0,
+        "ocr.*": 1.0,
+        "quality.sharpness": 0.6
+      }
+    },
+    "icon": {
+      "name": "Icon",
+      "description": "Small icon or logo",
+      "focus": "what it represents, shape, colors",
+      "context": null,
+      "example": "{\"caption\": \"Blue bird logo on white background.\"}",
+      "signal_globs": {
+        "color.dominant*": 0.9,
+        "identity.*": 0.5,
+        "quality.edge*": 0.3
+      }
+    },
+    "unknown": {
+      "name": "Image",
+      "description": "Unclassified image",
+      "focus": "main subject and visible details",
+      "context": null,
+      "example": "{\"caption\": \"Geometric shapes and colors.\"}",
+      "signal_globs": {
+        "color.*": 0.5,
+        "content.text*": 0.5,
+        "quality.*": 0.4,
+        "motion.*": 0.2
+      }
+    }
+  },
+
+  "signal_categories": {
+    "motion": {
+      "globs": ["motion.*", "complexity.*"],
+      "compact_format": "{direction}-{intensity}-{frames}f"
+    },
+    "colors": {
+      "globs": ["color.*"],
+      "compact_format": "{dominant}|{saturation}"
+    },
+    "text": {
+      "globs": ["content.text*", "content.extracted*", "ocr.*"],
+      "compact_format": "{confidence}"
+    },
+    "quality": {
+      "globs": ["quality.*"],
+      "compact_format": "{sharpness}"
+    },
+    "identity": {
+      "globs": ["identity.*"],
+      "compact_format": "{w}x{h}"
+    }
+  },
+
+  "output_formats": {
+    "alttext": {
+      "name": "Alt Text (WCAG 2.1)",
+      "purpose": "WCAG: Answer what someone would miss if they couldn't see this image",
+      "instruction": "1 sentence under 125 chars. Subjects first, then observable context. No inventory lists.",
+      "max_length": 125,
+      "rules": ["subjects-first", "no-image-of-prefix", "observable-context-ok", "no-inventory", "no-names", "under-125-chars"],
+      "priority_order": ["people/subjects", "action/pose", "key-objects", "observable-context"],
+      "drop_order": ["wallpaper", "furniture-details", "exact-colors", "decorative-items", "background-objects"]
+    },
+    "caption": {
+      "name": "Caption",
+      "purpose": "Describe the scene for understanding, ordered by importance",
+      "instruction": "2-3 sentences. Main subjects first, then setting. No inventory lists.",
+      "max_length": 300,
+      "rules": ["salient-first", "subjects-then-setting", "factual", "no-names"],
+      "priority_order": ["subject", "action", "setting", "text", "mood"],
+      "drop_order": ["minor-decorations", "furniture-brands", "exact-colors"]
+    },
+    "socialmedia": {
+      "name": "Social",
+      "purpose": "Engaging description that captures the moment",
+      "instruction": "Brief, direct. Can aggregate observable context (decorations + cards = celebration).",
+      "max_length": 280,
+      "rules": ["engaging", "brief", "context-aggregation-ok", "no-hashtags"],
+      "priority_order": ["subject", "action", "observable-context"],
+      "drop_order": ["technical-details", "exact-counts"]
+    }
+  },
+
+  "global_rules": [
+    "OUT:JSON {\"caption\":\"...\"}",
+    "factual only",
+    "no-names",
+    "no-guess"
+  ],
+
+  "signal_threshold": 0.5
+}

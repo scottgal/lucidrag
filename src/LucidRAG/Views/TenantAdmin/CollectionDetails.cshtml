@@ -1,0 +1,135 @@
+@model LucidRAG.Controllers.UI.CollectionDetailsViewModel
+@using LucidRAG.Entities
+@{
+    ViewData["Title"] = Model.Name;
+}
+
+<div class="p-6">
+    <div class="mb-6">
+        <a href="@Url.Action("Collections")" class="btn btn-ghost btn-sm">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" />
+            </svg>
+            Back to Collections
+        </a>
+    </div>
+
+    <!-- Header -->
+    <div class="flex flex-wrap items-start justify-between gap-4 mb-6">
+        <div>
+            <div class="flex items-center gap-2">
+                <h1 class="text-2xl font-bold">@Model.Name</h1>
+                @if (Model.IsDefault)
+                {
+                    <span class="badge badge-primary">Default</span>
+                }
+            </div>
+            @if (!string.IsNullOrEmpty(Model.Description))
+            {
+                <p class="text-base-content/60 mt-1">@Model.Description</p>
+            }
+            <p class="text-sm text-base-content/50 mt-2">
+                Created @Model.CreatedAt.ToString("MMM d, yyyy") | Updated @Model.UpdatedAt.ToString("MMM d, yyyy")
+            </p>
+        </div>
+        <div class="flex gap-2">
+            <a href="@Url.Action("EditCollection", new { id = Model.Id })" class="btn btn-ghost btn-sm">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                </svg>
+                Edit
+            </a>
+            <a href="@Url.Action("DeleteCollection", new { id = Model.Id })" class="btn btn-ghost btn-sm text-error">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                </svg>
+                Delete
+            </a>
+        </div>
+    </div>
+
+    <!-- Stats -->
+    <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+        <div class="stat bg-base-100 rounded-lg shadow p-4">
+            <div class="stat-title text-sm">Documents</div>
+            <div class="stat-value text-lg">@Model.Documents.Count</div>
+        </div>
+        <div class="stat bg-base-100 rounded-lg shadow p-4">
+            <div class="stat-title text-sm">Completed</div>
+            <div class="stat-value text-lg text-success">@Model.Documents.Count(d => d.Status == DocumentStatus.Completed)</div>
+        </div>
+        <div class="stat bg-base-100 rounded-lg shadow p-4">
+            <div class="stat-title text-sm">Processing</div>
+            <div class="stat-value text-lg text-warning">@Model.Documents.Count(d => d.Status == DocumentStatus.Processing)</div>
+        </div>
+        <div class="stat bg-base-100 rounded-lg shadow p-4">
+            <div class="stat-title text-sm">Failed</div>
+            <div class="stat-value text-lg text-error">@Model.Documents.Count(d => d.Status == DocumentStatus.Failed)</div>
+        </div>
+    </div>
+
+    <!-- Documents Table -->
+    <div class="card bg-base-100 shadow">
+        <div class="card-body">
+            <h2 class="card-title">Documents</h2>
+
+            @if (Model.Documents.Count == 0)
+            {
+                <div class="text-center py-8">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-12 w-12 mx-auto text-base-content/30 mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                    </svg>
+                    <p class="text-base-content/60">No documents in this collection</p>
+                    <a href="/admin" class="btn btn-primary btn-sm mt-4">Upload Documents</a>
+                </div>
+            }
+            else
+            {
+                <div class="overflow-x-auto">
+                    <table class="table">
+                        <thead>
+                            <tr>
+                                <th>Name</th>
+                                <th>Status</th>
+                                <th>Segments</th>
+                                <th>Entities</th>
+                                <th>Created</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var doc in Model.Documents)
+                            {
+                                <tr class="hover">
+                                    <td class="font-medium">@doc.Name</td>
+                                    <td>
+                                        @switch (doc.Status)
+                                        {
+                                            case DocumentStatus.Completed:
+                                                <span class="badge badge-success badge-sm">Completed</span>
+                                                break;
+                                            case DocumentStatus.Processing:
+                                                <span class="badge badge-warning badge-sm">
+                                                    <span class="loading loading-spinner loading-xs mr-1"></span>
+                                                    Processing
+                                                </span>
+                                                break;
+                                            case DocumentStatus.Pending:
+                                                <span class="badge badge-ghost badge-sm">Pending</span>
+                                                break;
+                                            case DocumentStatus.Failed:
+                                                <span class="badge badge-error badge-sm">Failed</span>
+                                                break;
+                                        }
+                                    </td>
+                                    <td>@doc.SegmentCount</td>
+                                    <td>@doc.EntityCount</td>
+                                    <td class="text-sm text-base-content/60">@doc.CreatedAt.ToString("MMM d, yyyy")</td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            }
+        </div>
+    </div>
+</div>

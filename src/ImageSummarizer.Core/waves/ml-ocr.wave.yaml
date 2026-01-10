@@ -1,0 +1,92 @@
+# MlOcrWave - OpenCV + Florence-2 OCR extraction
+name: MlOcrWave
+priority: 65
+enabled: true
+
+scope:
+  sink: docsummarizer.images
+  coordinator: analysis
+  atom: MlOcr
+
+triggers:
+  requires:
+    - signal: identity.width
+      condition: "> 0"
+  skip_when:
+    - wave.skipped.MlOcrWave
+    - route.skip.MlOcrWave
+
+emits:
+  on_start:
+    - ocr.ml.started
+
+  on_complete:
+    - key: ocr.ml.fused_text
+      type: string
+      description: Fused OCR text from OpenCV+Florence2 per-frame analysis
+      confidence_range: [0.7, 0.95]
+
+    - key: ocr.ml.text
+      type: string
+      description: Raw concatenated OCR text
+
+    - key: ocr.ml.frames_with_text
+      type: int
+      description: Number of frames containing detected text
+
+    - key: ocr.ml.has_text
+      type: bool
+      description: Whether any text was detected
+
+    - key: ocr.opencv.has_text
+      type: bool
+      description: OpenCV MSER detection result
+
+    - key: ocr.ml.skipped
+      type: bool
+      description: Wave was skipped (Florence-2 unavailable)
+
+  on_failure:
+    - ocr.ml.failed
+
+listens:
+  required:
+    - identity.is_animated
+    - identity.frame_count
+    - identity.width
+    - identity.height
+
+  optional:
+    - ocr.opencv.text_regions    # Cached from AutoRoutingWave
+    - route.quality_tier
+
+cache:
+  emits:
+    - key: ocr.frames
+      type: List<Image<Rgba32>>
+      description: Extracted key frames for downstream VisionLLM
+
+    - key: ocr.opencv.per_frame_regions
+      type: Dictionary<int, List<BoundingBox>>
+      description: Per-frame text bounding boxes
+
+  uses:
+    - ocr.opencv.text_regions
+
+config:
+  bindings:
+    - config_key: EnableOcr
+      skip_if_false: true
+    - config_key: EnableFlorence2
+      skip_if_false: true
+
+lane:
+  name: ocr
+  max_concurrency: 2
+
+tags:
+  - ocr
+  - ml
+  - florence2
+  - opencv
+  - animation

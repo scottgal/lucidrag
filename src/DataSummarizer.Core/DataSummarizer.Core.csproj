@@ -1,0 +1,50 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <LangVersion>latest</LangVersion>
+
+    <!-- Namespace for now, can change later -->
+    <RootNamespace>Mostlylucid.DocSummarizer.Data</RootNamespace>
+    <AssemblyName>DataSummarizer.Core</AssemblyName>
+
+    <!-- Package metadata -->
+    <PackageId>DataSummarizer.Core</PackageId>
+    <Description>Core data file processing pipeline for CSV, JSON, Excel, and structured data ingestion</Description>
+    <Authors>Scott Galloway</Authors>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <PackageProjectUrl>https://github.com/scottgal/lucidrag</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/scottgal/lucidrag</RepositoryUrl>
+    <PackageTags>data;csv;json;excel;parquet;ingestion;etl</PackageTags>
+  </PropertyGroup>
+
+  <!-- Release configuration: no PDB files -->
+  <PropertyGroup Condition="'$(Configuration)' == 'Release'">
+    <DebugSymbols>false</DebugSymbols>
+    <DebugType>none</DebugType>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Core dependencies -->
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.1" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="10.0.1" />
+    <PackageReference Include="Microsoft.Extensions.Options" Version="10.0.1" />
+
+    <!-- CSV parsing -->
+    <PackageReference Include="CsvHelper" Version="33.1.0" />
+
+    <!-- Excel support -->
+    <PackageReference Include="ClosedXML" Version="0.104.2" />
+
+    <!-- Parquet support -->
+    <PackageReference Include="Parquet.Net" Version="5.1.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Common pipeline abstractions -->
+    <ProjectReference Include="..\Mostlylucid.Summarizer.Core\Mostlylucid.Summarizer.Core.csproj" />
+  </ItemGroup>
+
+</Project>

@@ -1,0 +1,148 @@
+# Florence2Wave - Fast local ONNX captioning and OCR
+name: Florence2Wave
+priority: 55  # After color, before Vision LLM
+enabled: true
+
+scope:
+  sink: docsummarizer.images
+  coordinator: analysis
+  atom: Florence2
+
+triggers:
+  requires:
+    - signal: identity.width
+      condition: "> 0"
+  skip_when:
+    - wave.skipped.Florence2Wave
+    - route.skip.Florence2Wave
+    - ocr.ml.defer_to_visionllm  # MlOcrWave filmstrip mode active
+
+emits:
+  on_start:
+    - florence2.started
+
+  on_complete:
+    - key: florence2.available
+      type: bool
+      description: Whether Florence-2 ONNX models are loaded
+
+    - key: florence2.caption
+      type: string
+      description: Florence-2 generated image caption
+      confidence_range: [0.6, 0.95]
+
+    - key: florence2.ocr_text
+      type: string
+      description: OCR text extracted by Florence-2
+      confidence_range: [0.7, 0.85]
+
+    - key: content.extracted_text
+      type: string
+      description: Fallback extracted text signal
+
+    - key: florence2.duration_ms
+      type: int
+      description: Processing time in milliseconds
+
+    - key: florence2.should_escalate
+      type: bool
+      description: Whether to escalate to Vision LLM
+      confidence_range: [0.8, 0.95]
+
+    - key: florence2.error
+      type: string
+      description: Error message if processing failed
+
+  on_failure:
+    - florence2.failed
+
+listens:
+  required:
+    - identity.width
+    - identity.height
+    - identity.is_animated
+    - identity.frame_count
+
+  optional:
+    - color.dominant_colors  # For caption enhancement
+    - content.text_likeliness
+    - motion.has_motion
+    - motion.type
+    - content.type
+    - quality.edge_density
+
+# Escalation rules - when Florence-2 should defer to VisionLLM
+escalation:
+  vision_llm:
+    when:
+      - signal: florence2.caption
+        condition: "IsNullOrWhiteSpace"
+      - signal: florence2.caption
+        condition: "Length < 20"
+      - signal: identity.frame_count
+        condition: "> 1"
+      - signal: content.text_likeliness
+        condition: "> 0.6"
+        and_signal: florence2.ocr_text
+        and_condition: "IsNullOrWhiteSpace"
+      - signal: motion.has_motion
+        value: true
+      - signal: content.type
+        condition: "In:Diagram,Chart,ScannedDocument"
+      - signal: quality.edge_density
+        condition: "> Florence2ComplexityThreshold"
+
+config:
+  bindings:
+    - config_key: EnableFlorence2
+      skip_if_false: true
+
+lane:
+  name: gpu
+  max_concurrency: 1  # ONNX inference is GPU-bound
+
+tags:
+  - vision
+  - caption
+  - ocr
+  - florence2
+  - onnx
+  - local
+
+# ============================================
+# DEFAULT CONFIGURATION - NO MAGIC NUMBERS
+# Override via appsettings.json: DocSummarizer:Images:Waves:Florence2Wave:*
+# ============================================
+defaults:
+  weights:
+    base: 1.0
+    high_confidence: 2.0
+    low_confidence: 0.5
+    verified: 3.0
+
+  confidence:
+    neutral: 0.5
+    high: 0.9
+    medium: 0.75
+    low: 0.6
+    high_threshold: 0.85  # Above this = confident, can early exit
+    escalation_threshold: 0.6  # Below this = escalate to VisionLLM
+
+  timing:
+    timeout_ms: 30000  # 30 seconds - ONNX inference can be slow
+    cache_ttl_sec: 3600
+
+  features:
+    detailed_logging: false
+    enable_cache: true
+    can_early_exit: true   # Florence-2 CAN trigger early exit
+    can_escalate: true     # Can escalate to VisionLLM
+
+  # Wave-specific parameters
+  parameters:
+    min_caption_length: 20           # Minimum caption length to be confident
+    min_ocr_confidence: 0.75         # Minimum OCR confidence for early exit
+    early_exit_caption_length: 50    # If caption > this, trigger early exit
+    early_exit_ocr_word_count: 10    # If OCR has > this words, can early exit
+    escalate_on_animated: true       # Always escalate animated to VisionLLM
+    complexity_threshold: 0.7        # Edge density above this = complex, escalate

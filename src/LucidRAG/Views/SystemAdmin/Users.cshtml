@@ -1,0 +1,144 @@
+@model List<LucidRAG.Controllers.UI.UserListItemViewModel>
+@{
+    ViewData["Title"] = "Users";
+}
+
+<div class="p-6">
+    <div class="mb-6">
+        <a href="@Url.Action("Index")" class="btn btn-ghost btn-sm">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" />
+            </svg>
+            Back to System Admin
+        </a>
+    </div>
+
+    <div class="flex flex-wrap items-center justify-between gap-4 mb-6">
+        <div>
+            <h1 class="text-2xl font-bold">Users</h1>
+            <p class="text-base-content/60">@Model.Count user(s) total</p>
+        </div>
+    </div>
+
+    @if (TempData["Success"] is string success)
+    {
+        <div class="alert alert-success mb-6">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+            <span>@success</span>
+        </div>
+    }
+
+    <div class="card bg-base-100 shadow">
+        <div class="card-body">
+            @if (Model.Count == 0)
+            {
+                <div class="text-center py-8">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-12 w-12 mx-auto text-base-content/30 mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
+                    </svg>
+                    <p class="text-base-content/60">No users found</p>
+                </div>
+            }
+            else
+            {
+                <div class="overflow-x-auto">
+                    <table class="table">
+                        <thead>
+                            <tr>
+                                <th>User</th>
+                                <th>Tenant</th>
+                                <th>Roles</th>
+                                <th>Status</th>
+                                <th>Created</th>
+                                <th></th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var user in Model)
+                            {
+                                <tr class="hover" id="user-@user.Id">
+                                    <td>
+                                        <div class="flex items-center gap-3">
+                                            <div class="avatar placeholder">
+                                                <div class="bg-primary text-primary-content rounded-full w-10">
+                                                    <span>@(user.DisplayName?.FirstOrDefault() ?? user.Email.FirstOrDefault())</span>
+                                                </div>
+                                            </div>
+                                            <div>
+                                                <div class="font-medium">@(user.DisplayName ?? user.Email)</div>
+                                                <div class="text-sm text-base-content/50">@user.Email</div>
+                                            </div>
+                                        </div>
+                                    </td>
+                                    <td>
+                                        @if (string.IsNullOrEmpty(user.TenantId))
+                                        {
+                                            <span class="text-base-content/50">-</span>
+                                        }
+                                        else
+                                        {
+                                            <a href="@Url.Action("TenantDetails", new { tenantId = user.TenantId })" class="link link-hover">
+                                                @user.TenantId
+                                            </a>
+                                        }
+                                    </td>
+                                    <td>
+                                        <div class="flex flex-wrap gap-1">
+                                            @foreach (var role in user.Roles)
+                                            {
+                                                @if (role == "SystemAdmin")
+                                                {
+                                                    <span class="badge badge-error badge-sm">@role</span>
+                                                }
+                                                else if (role == "TenantAdmin")
+                                                {
+                                                    <span class="badge badge-warning badge-sm">@role</span>
+                                                }
+                                                else
+                                                {
+                                                    <span class="badge badge-ghost badge-sm">@role</span>
+                                                }
+                                            }
+                                            @if (user.Roles.Count == 0)
+                                            {
+                                                <span class="text-base-content/50 text-sm">No roles</span>
+                                            }
+                                        </div>
+                                    </td>
+                                    <td>
+                                        @if (user.LockoutEnd.HasValue && user.LockoutEnd > DateTimeOffset.UtcNow)
+                                        {
+                                            <span class="badge badge-error">Locked</span>
+                                        }
+                                        else if (!user.EmailConfirmed)
+                                        {
+                                            <span class="badge badge-warning">Unconfirmed</span>
+                                        }
+                                        else
+                                        {
+                                            <span class="badge badge-success">Active</span>
+                                        }
+                                    </td>
+                                    <td class="text-sm text-base-content/60">
+                                        @user.CreatedAt.ToString("MMM d, yyyy")
+                                        @if (user.LastLoginAt.HasValue)
+                                        {
+                                            <div class="text-xs">Last login: @user.LastLoginAt.Value.ToString("MMM d")</div>
+                                        }
+                                    </td>
+                                    <td>
+                                        <a href="@Url.Action("UserDetails", new { id = user.Id })" class="btn btn-ghost btn-sm">
+                                            Manage
+                                        </a>
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            }
+        </div>
+    </div>
+</div>

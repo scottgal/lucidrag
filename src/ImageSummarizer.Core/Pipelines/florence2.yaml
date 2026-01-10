@@ -1,0 +1,20 @@
+# Florence-2 Pipeline
+# Fast local captioning using ONNX model
+# Best for: Quick analysis, offline use, batch processing
+
+name: florence2
+description: Fast local captioning with Florence-2 ONNX (no external API)
+version: 1
+
+signals:
+  - identity.*
+  - color.dominant*
+  - florence2.*
+
+output:
+  format: caption
+  include_metadata: true
+  include_confidence: true
+
+llm:
+  enabled: false  # Uses Florence-2 only, no external LLM

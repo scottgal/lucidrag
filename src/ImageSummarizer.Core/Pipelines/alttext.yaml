@@ -1,0 +1,34 @@
+# Alt Text Pipeline
+# WCAG-compliant accessible alt text generation
+# Best for: Web accessibility, social media, screen readers
+
+name: alttext
+description: Generate WCAG-compliant accessible alt text
+version: 1
+
+signals:
+  - identity.format
+  - identity.is_animated
+  - color.dominant*
+  - motion.type
+  - motion.summary
+  - ocr.*                    # OCR text extraction
+  - content.extracted_text   # Extracted text signal
+  - vision.llm.caption
+  - vision.llm.text          # Vision LLM can also read text
+
+output:
+  format: alttext
+  include_metadata: false
+  include_confidence: false
+
+llm:
+  enabled: true
+  model: minicpm-v:8b
+  fast_mode: false
+  context: true
+
+escalation:
+  gif_to_llm: true
+  on_no_caption: true
+  min_caption_length: 20

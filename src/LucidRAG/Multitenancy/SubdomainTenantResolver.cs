@@ -5,6 +5,19 @@ using LucidRAG.Data;
 namespace LucidRAG.Multitenancy;
 
 /// <summary>
+/// Resolves the current tenant from the HTTP request.
+/// This interface is ASP.NET-specific (uses HttpContext).
+/// </summary>
+public interface ITenantResolver
+{
+    /// <summary>
+    /// Resolve the tenant context from the current HTTP request.
+    /// Returns null if no tenant can be resolved.
+    /// </summary>
+    Task<TenantContext?> ResolveAsync(HttpContext context, CancellationToken ct = default);
+}
+
+/// <summary>
 /// Resolves tenant from subdomain, header, or query parameter.
 /// Priority: Header > Query > Subdomain > Default
 /// </summary>

@@ -1,0 +1,115 @@
+@model List<LucidRAG.Controllers.UI.TenantListItemViewModel>
+@{
+    ViewData["Title"] = "Tenants";
+}
+
+<div class="p-6">
+    <div class="mb-6">
+        <a href="@Url.Action("Index")" class="btn btn-ghost btn-sm">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" />
+            </svg>
+            Back to System Admin
+        </a>
+    </div>
+
+    <div class="flex flex-wrap items-center justify-between gap-4 mb-6">
+        <div>
+            <h1 class="text-2xl font-bold">Tenants</h1>
+            <p class="text-base-content/60">@Model.Count tenant(s) total</p>
+        </div>
+        <a href="@Url.Action("CreateTenant")" class="btn btn-primary">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
+            </svg>
+            Create Tenant
+        </a>
+    </div>
+
+    @if (TempData["Success"] is string success)
+    {
+        <div class="alert alert-success mb-6">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+            <span>@success</span>
+        </div>
+    }
+
+    @if (TempData["Error"] is string error)
+    {
+        <div class="alert alert-error mb-6">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+            <span>@error</span>
+        </div>
+    }
+
+    <div class="card bg-base-100 shadow">
+        <div class="card-body">
+            @if (Model.Count == 0)
+            {
+                <div class="text-center py-8">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-12 w-12 mx-auto text-base-content/30 mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
+                    </svg>
+                    <p class="text-base-content/60">No tenants yet</p>
+                    <a href="@Url.Action("CreateTenant")" class="btn btn-primary btn-sm mt-4">Create First Tenant</a>
+                </div>
+            }
+            else
+            {
+                <div class="overflow-x-auto">
+                    <table class="table">
+                        <thead>
+                            <tr>
+                                <th>Tenant</th>
+                                <th>Contact</th>
+                                <th>Plan</th>
+                                <th>Status</th>
+                                <th>Created</th>
+                                <th></th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var tenant in Model)
+                            {
+                                <tr class="hover">
+                                    <td>
+                                        <div class="font-medium">@(tenant.DisplayName ?? tenant.TenantId)</div>
+                                        <div class="text-sm text-base-content/50">@tenant.TenantId</div>
+                                    </td>
+                                    <td class="text-sm">@(tenant.ContactEmail ?? "-")</td>
+                                    <td>
+                                        <span class="badge badge-ghost">@(tenant.Plan ?? "Free")</span>
+                                    </td>
+                                    <td>
+                                        @if (tenant.IsActive && tenant.IsProvisioned)
+                                        {
+                                            <span class="badge badge-success">Active</span>
+                                        }
+                                        else if (tenant.IsProvisioned)
+                                        {
+                                            <span class="badge badge-warning">Inactive</span>
+                                        }
+                                        else
+                                        {
+                                            <span class="badge badge-ghost">Pending</span>
+                                        }
+                                    </td>
+                                    <td class="text-sm text-base-content/60">@tenant.CreatedAt.ToString("MMM d, yyyy")</td>
+                                    <td>
+                                        <a href="@Url.Action("TenantDetails", new { tenantId = tenant.TenantId })" class="btn btn-ghost btn-sm">
+                                            View
+                                        </a>
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            }
+        </div>
+    </div>
+</div>

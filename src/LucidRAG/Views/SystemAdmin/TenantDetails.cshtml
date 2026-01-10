@@ -1,0 +1,194 @@
+@model LucidRAG.Controllers.UI.TenantDetailsViewModel
+@{
+    ViewData["Title"] = Model.DisplayName ?? Model.TenantId;
+}
+
+<div class="p-6">
+    <div class="mb-6">
+        <a href="@Url.Action("Tenants")" class="btn btn-ghost btn-sm">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" />
+            </svg>
+            Back to Tenants
+        </a>
+    </div>
+
+    @if (TempData["Success"] is string success)
+    {
+        <div class="alert alert-success mb-6">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+            <span>@success</span>
+        </div>
+    }
+
+    @if (TempData["Error"] is string error)
+    {
+        <div class="alert alert-error mb-6">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+            <span>@error</span>
+        </div>
+    }
+
+    <!-- Header -->
+    <div class="flex flex-wrap items-start justify-between gap-4 mb-6">
+        <div>
+            <div class="flex items-center gap-2">
+                <h1 class="text-2xl font-bold">@(Model.DisplayName ?? Model.TenantId)</h1>
+                @if (Model.IsActive && Model.IsProvisioned)
+                {
+                    <span class="badge badge-success">Active</span>
+                }
+                else if (Model.IsProvisioned)
+                {
+                    <span class="badge badge-warning">Inactive</span>
+                }
+                else
+                {
+                    <span class="badge badge-ghost">Pending</span>
+                }
+            </div>
+            <p class="text-base-content/60 mt-1">@Model.TenantId</p>
+        </div>
+        <div class="flex gap-2">
+            <form method="post" asp-action="ToggleTenantStatus" asp-route-tenantId="@Model.TenantId" class="inline">
+                @Html.AntiForgeryToken()
+                @if (Model.IsActive)
+                {
+                    <button type="submit" class="btn btn-warning btn-sm">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636" />
+                        </svg>
+                        Deactivate
+                    </button>
+                }
+                else
+                {
+                    <button type="submit" class="btn btn-success btn-sm">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                        Activate
+                    </button>
+                }
+            </form>
+            <a href="@Url.Action("DeleteTenant", new { tenantId = Model.TenantId })" class="btn btn-error btn-sm">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                </svg>
+                Delete
+            </a>
+        </div>
+    </div>
+
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <!-- Basic Info -->
+        <div class="card bg-base-100 shadow">
+            <div class="card-body">
+                <h2 class="card-title">Basic Information</h2>
+
+                <div class="divide-y">
+                    <div class="py-3 flex justify-between">
+                        <span class="text-base-content/60">Tenant ID</span>
+                        <span class="font-mono">@Model.TenantId</span>
+                    </div>
+                    <div class="py-3 flex justify-between">
+                        <span class="text-base-content/60">Display Name</span>
+                        <span>@(Model.DisplayName ?? "-")</span>
+                    </div>
+                    <div class="py-3 flex justify-between">
+                        <span class="text-base-content/60">Contact Email</span>
+                        <span>@(Model.ContactEmail ?? "-")</span>
+                    </div>
+                    <div class="py-3 flex justify-between">
+                        <span class="text-base-content/60">Plan</span>
+                        <span class="badge badge-ghost">@(Model.Plan ?? "Free")</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Technical Details -->
+        <div class="card bg-base-100 shadow">
+            <div class="card-body">
+                <h2 class="card-title">Technical Details</h2>
+
+                <div class="divide-y">
+                    <div class="py-3 flex justify-between">
+                        <span class="text-base-content/60">Database Schema</span>
+                        <span class="font-mono text-sm">@Model.SchemaName</span>
+                    </div>
+                    <div class="py-3 flex justify-between">
+                        <span class="text-base-content/60">Qdrant Collection</span>
+                        <span class="font-mono text-sm">@Model.QdrantCollection</span>
+                    </div>
+                    <div class="py-3 flex justify-between">
+                        <span class="text-base-content/60">Provisioned</span>
+                        <span>
+                            @if (Model.IsProvisioned)
+                            {
+                                <span class="text-success">Yes</span>
+                            }
+                            else
+                            {
+                                <span class="text-warning">No</span>
+                            }
+                        </span>
+                    </div>
+                    <div class="py-3 flex justify-between">
+                        <span class="text-base-content/60">Internal ID</span>
+                        <span class="font-mono text-xs">@Model.Id</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Timestamps -->
+        <div class="card bg-base-100 shadow">
+            <div class="card-body">
+                <h2 class="card-title">Activity</h2>
+
+                <div class="divide-y">
+                    <div class="py-3 flex justify-between">
+                        <span class="text-base-content/60">Created</span>
+                        <span>@Model.CreatedAt.ToString("MMM d, yyyy 'at' h:mm tt")</span>
+                    </div>
+                    <div class="py-3 flex justify-between">
+                        <span class="text-base-content/60">Provisioned</span>
+                        <span>@(Model.ProvisionedAt?.ToString("MMM d, yyyy 'at' h:mm tt") ?? "-")</span>
+                    </div>
+                    <div class="py-3 flex justify-between">
+                        <span class="text-base-content/60">Last Accessed</span>
+                        <span>@(Model.LastAccessedAt?.ToString("MMM d, yyyy 'at' h:mm tt") ?? "Never")</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Quick Actions -->
+        <div class="card bg-base-100 shadow">
+            <div class="card-body">
+                <h2 class="card-title">Quick Actions</h2>
+
+                <div class="space-y-3 mt-2">
+                    <a href="https://@(Model.TenantId).lucidrag.com" target="_blank" class="btn btn-outline btn-block justify-start">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                        </svg>
+                        Visit Tenant Portal
+                    </a>
+
+                    <a href="@Url.Action("Users")#tenant-@Model.TenantId" class="btn btn-outline btn-block justify-start">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
+                        </svg>
+                        View Tenant Users
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>

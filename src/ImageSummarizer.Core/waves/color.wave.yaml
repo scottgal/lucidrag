@@ -1,0 +1,137 @@
+# ColorWave - Color analysis and palette extraction
+name: ColorWave
+priority: 100  # High priority - many waves depend on color info
+enabled: true
+
+scope:
+  sink: docsummarizer.images
+  coordinator: analysis
+  atom: Color
+
+triggers:
+  requires:
+    - signal: identity.width
+      condition: "> 0"
+  skip_when:
+    - wave.skipped.ColorWave
+
+emits:
+  on_complete:
+    - key: color.dominant_colors
+      type: List<DominantColor>
+      description: List of dominant colors with names, hex values, and percentages
+
+    - key: color.dominant_1
+      type: string
+      description: Primary dominant color hex
+      confidence_range: [0.8, 1.0]
+
+    - key: color.dominant_2
+      type: string
+      description: Secondary dominant color hex
+
+    - key: color.dominant_3
+      type: string
+      description: Tertiary dominant color hex
+
+    - key: color.grid
+      type: ColorGrid
+      description: Color grid for spatial analysis
+
+    - key: color.grid.cell.*
+      type: ColorGridCell
+      description: Per-cell color information
+
+    - key: color.mean_saturation
+      type: double
+      description: Average saturation across image (0-1)
+
+    - key: color.is_grayscale
+      type: bool
+      description: Whether image is mostly grayscale
+
+    - key: color.tint_type
+      type: string
+      description: Color tint type (sepia, blue, warm, cool, etc.)
+
+    - key: color.palette
+      type: List<string>
+      description: Hex color palette
+
+    - key: color.unique_count
+      type: int
+      description: Estimated unique color count
+
+    - key: color.vibrant
+      type: string
+      description: Most vibrant/saturated color hex
+
+    - key: color.muted
+      type: string
+      description: Most muted color hex
+
+  on_failure:
+    - color.error
+
+listens:
+  required:
+    - identity.width
+    - identity.height
+
+  optional: []
+
+cache:
+  emits:
+    - key: image
+      type: Image<Rgba32>
+      description: Loaded image for downstream waves
+
+config:
+  bindings: []  # Always runs
+
+lane:
+  name: metadata
+  max_concurrency: 8  # Fast, can parallelize
+
+tags:
+  - color
+  - visual
+  - palette
+  - foundation
+
+# ============================================
+# DEFAULT CONFIGURATION - NO MAGIC NUMBERS
+# Override via appsettings.json: DocSummarizer:Images:Waves:ColorWave:*
+# ============================================
+defaults:
+  weights:
+    base: 1.0
+    high_confidence: 1.5
+    low_confidence: 0.5
+    verified: 2.0
+
+  confidence:
+    neutral: 0.5
+    high: 0.95
+    medium: 0.8
+    low: 0.6
+    high_threshold: 0.9
+    escalation_threshold: 0.5
+
+  timing:
+    timeout_ms: 5000  # 5 seconds - color analysis is fast
+    cache_ttl_sec: 3600
+
+  features:
+    detailed_logging: false
+    enable_cache: true
+    can_early_exit: false
+    can_escalate: false
+
+  # Wave-specific parameters
+  parameters:
+    dominant_color_count: 5          # Number of dominant colors to extract
+    grayscale_saturation_threshold: 0.02  # Below this = grayscale
+    min_color_percentage: 1.0        # Minimum percentage for a color to be reported
+    color_grid_rows: 3               # Grid rows for spatial color analysis
+    color_grid_cols: 3               # Grid columns for spatial color analysis

@@ -1,0 +1,31 @@
+# Caption Pipeline (Default)
+# Full analysis with Vision LLM captioning
+# Best for: General image understanding, rich descriptions
+
+name: caption
+description: Full analysis with Vision LLM captioning (default)
+version: 1
+
+signals:
+  - identity.*
+  - color.*
+  - motion.*
+  - ocr.*
+  - vision.llm.*
+
+output:
+  format: caption
+  include_metadata: true
+  include_confidence: true
+
+llm:
+  enabled: true
+  model: minicpm-v:8b
+  fast_mode: false
+  context: true
+
+escalation:
+  gif_to_llm: true
+  complexity_threshold: 0.4
+  on_no_caption: true
+  min_caption_length: 20

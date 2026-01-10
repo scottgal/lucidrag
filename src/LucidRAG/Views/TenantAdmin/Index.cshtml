@@ -1,0 +1,108 @@
+@model LucidRAG.Controllers.UI.TenantDashboardViewModel
+@{
+    ViewData["Title"] = "Tenant Dashboard";
+}
+
+<div class="p-6">
+    <div class="flex items-center justify-between mb-6">
+        <h1 class="text-2xl font-bold">Tenant Dashboard</h1>
+    </div>
+
+    <!-- Stats Grid -->
+    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+        <div class="stat bg-base-100 rounded-lg shadow">
+            <div class="stat-figure text-primary">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-8 w-8" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
+                </svg>
+            </div>
+            <div class="stat-title">Collections</div>
+            <div class="stat-value text-primary">@Model.TotalCollections</div>
+            <div class="stat-desc">
+                <a href="@Url.Action("Collections")" class="link link-hover">Manage collections</a>
+            </div>
+        </div>
+
+        <div class="stat bg-base-100 rounded-lg shadow">
+            <div class="stat-figure text-secondary">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-8 w-8" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                </svg>
+            </div>
+            <div class="stat-title">Documents</div>
+            <div class="stat-value text-secondary">@Model.TotalDocuments</div>
+            <div class="stat-desc">@Model.CompletedDocuments completed</div>
+        </div>
+
+        <div class="stat bg-base-100 rounded-lg shadow">
+            <div class="stat-figure text-accent">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-8 w-8" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
+                </svg>
+            </div>
+            <div class="stat-title">Entities</div>
+            <div class="stat-value text-accent">@Model.TotalEntities</div>
+            <div class="stat-desc">@Model.TotalRelationships relationships</div>
+        </div>
+
+        <div class="stat bg-base-100 rounded-lg shadow">
+            <div class="stat-figure">
+                @if (Model.ProcessingDocuments > 0)
+                {
+                    <span class="loading loading-spinner loading-md text-warning"></span>
+                }
+                else if (Model.FailedDocuments > 0)
+                {
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-8 w-8 text-error" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                    </svg>
+                }
+                else
+                {
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-8 w-8 text-success" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                }
+            </div>
+            <div class="stat-title">Processing</div>
+            <div class="stat-value">@Model.ProcessingDocuments</div>
+            <div class="stat-desc">
+                @if (Model.FailedDocuments > 0)
+                {
+                    <span class="text-error">@Model.FailedDocuments failed</span>
+                }
+                else
+                {
+                    <span class="text-success">All healthy</span>
+                }
+            </div>
+        </div>
+    </div>
+
+    <!-- Quick Actions -->
+    <div class="card bg-base-100 shadow">
+        <div class="card-body">
+            <h2 class="card-title">Quick Actions</h2>
+            <div class="flex flex-wrap gap-2">
+                <a href="@Url.Action("CreateCollection")" class="btn btn-primary">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
+                    </svg>
+                    New Collection
+                </a>
+                <a href="/admin" class="btn btn-ghost">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
+                    </svg>
+                    Upload Documents
+                </a>
+                <a href="@Url.Action("Collections")" class="btn btn-ghost">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 10h16M4 14h16M4 18h16" />
+                    </svg>
+                    View All Collections
+                </a>
+            </div>
+        </div>
+    </div>
+</div>

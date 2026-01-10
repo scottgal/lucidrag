@@ -1,0 +1,71 @@
+# ClipEmbeddingWave - CLIP visual embeddings for semantic search
+name: ClipEmbeddingWave
+priority: 45  # After VisionLLM, provides embeddings for RAG
+enabled: true
+
+scope:
+  sink: docsummarizer.images
+  coordinator: background-learning  # Runs in background learning coordinator
+  atom: ClipEmbedding
+
+triggers:
+  requires:
+    - signal: identity.width
+      condition: "> 0"
+  skip_when:
+    - wave.skipped.ClipEmbeddingWave
+    - route.skip.ClipEmbeddingWave
+    - vision.clip.disabled
+
+emits:
+  on_complete:
+    - key: vision.clip.embedding
+      type: float[]
+      description: 512-dimensional CLIP visual embedding vector (L2 normalized)
+      confidence_range: [0.95, 1.0]
+
+    - key: vision.clip.embedding_hash
+      type: string
+      description: SHA256 hash of embedding for deduplication
+      confidence_range: [1.0, 1.0]
+
+    - key: vision.clip.disabled
+      type: bool
+      description: CLIP embedding disabled in config
+
+    - key: vision.clip.model_unavailable
+      type: bool
+      description: CLIP ONNX model not available
+
+    - key: vision.clip.error
+      type: string
+      description: Error during embedding generation
+
+  on_failure:
+    - vision.clip.failed
+
+listens:
+  required:
+    - identity.width
+    - identity.height
+
+  optional:
+    - route.selected  # Respects auto-routing
+
+config:
+  bindings:
+    - config_key: EnableClipEmbedding
+      skip_if_false: true
+
+lane:
+  name: embedding
+  max_concurrency: 2  # ONNX inference
+
+tags:
+  - embedding
+  - clip
+  - ml
+  - onnx
+  - vector
+  - rag
+  - similarity

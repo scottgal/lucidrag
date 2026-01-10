@@ -1,0 +1,248 @@
+@model LucidRAG.Controllers.UI.UserDetailsViewModel
+@{
+    ViewData["Title"] = Model.DisplayName ?? Model.Email;
+    var isLocked = Model.LockoutEnd.HasValue && Model.LockoutEnd > DateTimeOffset.UtcNow;
+}
+
+<div class="p-6">
+    <div class="mb-6">
+        <a href="@Url.Action("Users")" class="btn btn-ghost btn-sm">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" />
+            </svg>
+            Back to Users
+        </a>
+    </div>
+
+    @if (TempData["Success"] is string success)
+    {
+        <div class="alert alert-success mb-6">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+            <span>@success</span>
+        </div>
+    }
+
+    <!-- Header -->
+    <div class="flex flex-wrap items-start justify-between gap-4 mb-6">
+        <div class="flex items-center gap-4">
+            <div class="avatar placeholder">
+                <div class="bg-primary text-primary-content rounded-full w-16">
+                    <span class="text-2xl">@(Model.DisplayName?.FirstOrDefault() ?? Model.Email.FirstOrDefault())</span>
+                </div>
+            </div>
+            <div>
+                <h1 class="text-2xl font-bold">@(Model.DisplayName ?? Model.Email)</h1>
+                <p class="text-base-content/60">@Model.Email</p>
+                <div class="flex gap-2 mt-2">
+                    @if (isLocked)
+                    {
+                        <span class="badge badge-error">Locked</span>
+                    }
+                    else if (!Model.EmailConfirmed)
+                    {
+                        <span class="badge badge-warning">Email Unconfirmed</span>
+                    }
+                    else
+                    {
+                        <span class="badge badge-success">Active</span>
+                    }
+                    @foreach (var role in Model.Roles)
+                    {
+                        @if (role == "SystemAdmin")
+                        {
+                            <span class="badge badge-error">@role</span>
+                        }
+                        else if (role == "TenantAdmin")
+                        {
+                            <span class="badge badge-warning">@role</span>
+                        }
+                        else
+                        {
+                            <span class="badge badge-ghost">@role</span>
+                        }
+                    }
+                </div>
+            </div>
+        </div>
+        <div>
+            <form method="post" asp-action="ToggleUserLockout" asp-route-id="@Model.Id" class="inline">
+                @Html.AntiForgeryToken()
+                @if (isLocked)
+                {
+                    <button type="submit" class="btn btn-success btn-sm">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 11V7a4 4 0 118 0m-4 8v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2z" />
+                        </svg>
+                        Unlock User
+                    </button>
+                }
+                else
+                {
+                    <button type="submit" class="btn btn-warning btn-sm">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                        </svg>
+                        Lock User
+                    </button>
+                }
+            </form>
+        </div>
+    </div>
+
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <!-- User Info -->
+        <div class="card bg-base-100 shadow">
+            <div class="card-body">
+                <h2 class="card-title">User Information</h2>
+
+                <div class="divide-y">
+                    <div class="py-3 flex justify-between">
+                        <span class="text-base-content/60">Email</span>
+                        <span>@Model.Email</span>
+                    </div>
+                    <div class="py-3 flex justify-between">
+                        <span class="text-base-content/60">Display Name</span>
+                        <span>@(Model.DisplayName ?? "-")</span>
+                    </div>
+                    <div class="py-3 flex justify-between">
+                        <span class="text-base-content/60">Tenant</span>
+                        @if (string.IsNullOrEmpty(Model.TenantId))
+                        {
+                            <span class="text-base-content/50">No tenant assigned</span>
+                        }
+                        else
+                        {
+                            <a href="@Url.Action("TenantDetails", new { tenantId = Model.TenantId })" class="link link-primary">
+                                @Model.TenantId
+                            </a>
+                        }
+                    </div>
+                    <div class="py-3 flex justify-between">
+                        <span class="text-base-content/60">Email Confirmed</span>
+                        <span>
+                            @if (Model.EmailConfirmed)
+                            {
+                                <span class="text-success">Yes</span>
+                            }
+                            else
+                            {
+                                <span class="text-warning">No</span>
+                            }
+                        </span>
+                    </div>
+                    <div class="py-3 flex justify-between">
+                        <span class="text-base-content/60">User ID</span>
+                        <span class="font-mono text-xs">@Model.Id</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Role Management -->
+        <div class="card bg-base-100 shadow">
+            <div class="card-body">
+                <h2 class="card-title">Role Management</h2>
+
+                <form method="post" asp-action="UpdateUserRoles" asp-route-id="@Model.Id">
+                    @Html.AntiForgeryToken()
+
+                    <div class="space-y-3 my-4">
+                        @foreach (var role in Model.AllRoles)
+                        {
+                            var isChecked = Model.Roles.Contains(role);
+                            var badgeClass = role switch
+                            {
+                                "SystemAdmin" => "badge-error",
+                                "TenantAdmin" => "badge-warning",
+                                _ => "badge-ghost"
+                            };
+                            var description = role switch
+                            {
+                                "SystemAdmin" => "Full system access - can manage tenants and all users",
+                                "TenantAdmin" => "Can manage collections and documents within their tenant",
+                                "User" => "Basic access - can view and chat within assigned tenant",
+                                _ => ""
+                            };
+
+                            <label class="flex items-start gap-3 p-3 bg-base-200 rounded-lg cursor-pointer hover:bg-base-300 transition-colors">
+                                <input type="checkbox"
+                                       name="roles"
+                                       value="@role"
+                                       checked="@isChecked"
+                                       class="checkbox checkbox-primary mt-1" />
+                                <div class="flex-1">
+                                    <div class="flex items-center gap-2">
+                                        <span class="font-medium">@role</span>
+                                        <span class="badge @badgeClass badge-sm">@role</span>
+                                    </div>
+                                    <p class="text-sm text-base-content/60 mt-1">@description</p>
+                                </div>
+                            </label>
+                        }
+                    </div>
+
+                    <button type="submit" class="btn btn-primary">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+                        </svg>
+                        Update Roles
+                    </button>
+                </form>
+            </div>
+        </div>
+
+        <!-- Activity -->
+        <div class="card bg-base-100 shadow">
+            <div class="card-body">
+                <h2 class="card-title">Activity</h2>
+
+                <div class="divide-y">
+                    <div class="py-3 flex justify-between">
+                        <span class="text-base-content/60">Created</span>
+                        <span>@Model.CreatedAt.ToString("MMM d, yyyy 'at' h:mm tt")</span>
+                    </div>
+                    <div class="py-3 flex justify-between">
+                        <span class="text-base-content/60">Last Login</span>
+                        <span>@(Model.LastLoginAt?.ToString("MMM d, yyyy 'at' h:mm tt") ?? "Never")</span>
+                    </div>
+                    @if (isLocked)
+                    {
+                        <div class="py-3 flex justify-between">
+                            <span class="text-base-content/60">Locked Until</span>
+                            <span class="text-error">@Model.LockoutEnd?.ToString("MMM d, yyyy 'at' h:mm tt")</span>
+                        </div>
+                    }
+                </div>
+            </div>
+        </div>
+
+        <!-- Danger Zone -->
+        <div class="card bg-base-100 shadow border border-error/20">
+            <div class="card-body">
+                <h2 class="card-title text-error">Danger Zone</h2>
+
+                <div class="space-y-4 mt-2">
+                    <div class="flex items-center justify-between p-3 bg-base-200 rounded-lg">
+                        <div>
+                            <p class="font-medium">Lock Account</p>
+                            <p class="text-sm text-base-content/60">Prevent this user from logging in</p>
+                        </div>
+                        <form method="post" asp-action="ToggleUserLockout" asp-route-id="@Model.Id">
+                            @Html.AntiForgeryToken()
+                            @if (isLocked)
+                            {
+                                <button type="submit" class="btn btn-success btn-sm">Unlock</button>
+                            }
+                            else
+                            {
+                                <button type="submit" class="btn btn-warning btn-sm">Lock</button>
+                            }
+                        </form>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>

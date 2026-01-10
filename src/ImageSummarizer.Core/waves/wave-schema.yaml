@@ -1,0 +1,286 @@
+# Wave Manifest Schema
+# Each wave declares its signal contracts for dynamic LLM-composable composition.
+# YAML is the source of truth - C# reads from these manifests.
+
+# ============================================================================
+# WAVE MANIFEST STRUCTURE
+# ============================================================================
+
+name: string                    # Wave identifier (must match C# class name)
+priority: int                   # Execution order (higher = earlier, default: 50)
+enabled: bool                   # Can be disabled without removing (default: true)
+
+# Signal scope context (three-level hierarchy from ephemeral patterns)
+scope:
+  sink: "docsummarizer.images"  # Top-level boundary
+  coordinator: "analysis"        # Processing unit context
+  atom: string                   # This wave's atom name
+
+# Trigger conditions - when should this wave run?
+triggers:
+  signals:                       # Run when ANY of these signals exist
+    - "identity.is_animated"
+    - "identity.format"
+  requires:                      # Run only when ALL of these are satisfied
+    - signal: "identity.width"
+      condition: "> 0"           # Conditions: "> 0", "HasValue", "IsNullOrWhiteSpace"
+    - signal: "identity.is_animated"
+      value: true                # Exact value match
+  skip_when:                     # Skip if ANY of these signals exist
+    - signal: "wave.skipped.{name}"
+    - signal: "route.skip.{name}"
+
+# Signal emissions - what signals does this wave produce?
+emits:
+  on_start:                      # Emitted when wave begins
+    - "ocr.ml.started"
+
+  on_complete:                   # Emitted when wave succeeds
+    - key: "ocr.ml.fused_text"
+      type: string               # C# type: string, int, bool, double, List<T>, float[]
+      description: "Fused OCR text from OpenCV+Florence2"
+      confidence_range: [0.5, 1.0]  # [min, max] confidence
+
+  on_failure:                    # Emitted when wave fails
+    - "ocr.ml.failed"
+
+  conditional:                   # Emitted based on runtime conditions
+    - key: "ocr.ml.defer_to_visionllm"
+      type: bool
+      when: "hasSubtitles && config.EnableVisionLlm"
+
+# Dependencies - signals this wave reads from other waves
+listens:
+  required:                      # Must exist before wave can run
+    - "identity.is_animated"
+  optional:                      # May use if available (enhances output)
+    - "ocr.opencv.text_regions"
+
+# Escalation rules - when to defer to more powerful processing
+escalation:
+  text_extraction:
+    when:                        # Escalate when ANY condition matches
+      - signal: "ocr.quality.is_garbled"
+        value: true
+      - signal: "ocr.ml.fused_text"
+        condition: "IsNullOrWhiteSpace"
+    skip_when:                   # Don't escalate when ANY condition matches
+      - signal: "ocr.ml.fused_text"
+        condition: "HasValue && !IsGarbled"
+
+# Concurrency configuration
+lane:
+  name: "ocr"                    # Lane grouping for semaphore pools
+  max_concurrency: 2             # Max parallel executions in this lane
+  priority: 1                    # Priority within lane
+
+# Caching configuration
+cache:
+  emits:                         # Data cached for downstream waves
+    - key: "ocr.frames"
+      type: "List<Image<Rgba32>>"
+      description: "Extracted frames for downstream processing"
+  uses:                          # Cached data this wave consumes
+    - "ocr.opencv.text_regions"
+
+# Configuration bindings
+config:
+  bindings:
+    - config_key: "EnableOcr"
+      skip_if_false: true        # Skip wave if config value is false
+
+# Tags for filtering/grouping
+tags:
+  - "ocr"
+  - "ml"
+
+# ============================================================================
+# COORDINATOR PROFILES
+# ============================================================================
+# Profiles define execution contexts with lane configs and enabled waves.
+# See: CoordinatorProfiles.cs
+
+profiles:
+  single-request:
+    description: "Synchronous single image analysis (API/UI)"
+    timeout: 30s
+    lanes:
+      metadata: { max_concurrency: 4 }
+      ocr: { max_concurrency: 1 }
+      llm: { max_concurrency: 1 }
+      gpu: { max_concurrency: 1 }
+    enabled_waves:
+      - IdentityWave
+      - ColorWave
+      - AutoRoutingWave
+      - MlOcrWave
+      - Florence2Wave
+      - VisionLlmWave
+      - MotionWave
+
+  background-learning:
+    description: "Async model improvement, embeddings, indexing"
+    timeout: 5m
+    run_in_background: true
+    lanes:
+      embedding: { max_concurrency: 2 }
+      indexing: { max_concurrency: 4 }
+      learning: { max_concurrency: 1 }
+    enabled_waves:
+      - ClipEmbeddingWave
+      - EntityExtractionWave
+      - SimilarityIndexWave
+      - QualityLearningWave
+
+  batch:
+    description: "High-throughput bulk processing"
+    timeout: 2m
+    max_parallel_images: ProcessorCount
+    lanes:
+      metadata: { max_concurrency: 8 }
+      ocr: { max_concurrency: 4 }
+      llm: { max_concurrency: 2 }
+      io: { max_concurrency: 8 }
+    enabled_waves:
+      - IdentityWave
+      - ColorWave
+      - AutoRoutingWave
+      - MlOcrWave
+      - Florence2Wave
+      - VisionLlmWave
+      - MotionWave
+      - ClipEmbeddingWave
+
+  streaming:
+    description: "Low-latency streaming analysis (500ms budget)"
+    timeout: 500ms
+    skip_caching: true
+    low_latency_mode: true
+    lanes:
+      fast: { max_concurrency: 4 }
+      motion: { max_concurrency: 2 }
+    enabled_waves:
+      - IdentityWave
+      - ColorWave
+      - MotionWave
+
+  quality:
+    description: "Comprehensive quality analysis (all waves)"
+    timeout: 2m
+    enabled_waves: null  # null = all waves enabled
+    lanes:
+      metadata: { max_concurrency: 2 }
+      ocr: { max_concurrency: 1 }
+      llm: { max_concurrency: 1 }
+      gpu: { max_concurrency: 1 }
+      verification: { max_concurrency: 1 }
+
+# ============================================================================
+# PRIORITY GUIDELINES
+# ============================================================================
+# Higher priority = runs earlier in the pipeline
+
+priority_tiers:
+  100: "Foundation - IdentityWave, ColorWave (no dependencies)"
+  90:  "Routing - AutoRoutingWave (sets route for downstream)"
+  65:  "Fast ML - MlOcrWave (OpenCV + Florence-2 OCR)"
+  55:  "Local Models - Florence2Wave, MotionWave"
+  50:  "LLM - VisionLlmWave (expensive, runs later)"
+  45:  "Embeddings - ClipEmbeddingWave (post-processing)"
+
+# ============================================================================
+# SIGNAL NAMING CONVENTIONS
+# ============================================================================
+
+signal_namespaces:
+  identity:  "Basic metadata (width, height, format, is_animated, frame_count)"
+  color:     "Color analysis (dominant_colors, palette, grid, saturation)"
+  ocr:       "Text extraction (raw, fused, corrected, quality)"
+  vision:    "Vision model outputs (caption, entities, scene)"
+  florence2: "Florence-2 specific (caption, ocr_text, should_escalate)"
+  motion:    "Animation analysis (type, direction, magnitude, moving_objects)"
+  route:     "Routing decisions (quality_tier, selected, skip signals)"
+  wave:      "Wave lifecycle (started, skipped, failed, timeout)"
+  config:    "Configuration values from ImageConfig"
+  content:   "Content classification (type, text_likeliness)"
+  quality:   "Quality metrics (edge_density, blur, noise)"
+  faces:     "Face detection (detected, count, regions)"
+
+# Example signal keys:
+# - identity.is_animated
+# - ocr.ml.fused_text
+# - vision.llm.caption
+# - motion.moving_objects
+# - route.quality_tier
+# - wave.skipped.MlOcrWave
+
+# ============================================================================
+# CONFIDENCE GUIDELINES
+# ============================================================================
+
+confidence_levels:
+  1.0:       "Deterministic (identity signals, hash values)"
+  0.9-0.95:  "High confidence (color analysis, motion type)"
+  0.7-0.9:   "Medium confidence (OCR text, LLM captions)"
+  0.5-0.7:   "Low confidence (inferred values, noisy OCR)"
+  "<0.5":    "Uncertain (should trigger escalation to better method)"
+
+# ============================================================================
+# LANE CONFIGURATION
+# ============================================================================
+
+standard_lanes:
+  metadata:   "Fast operations, high concurrency (8)"
+  routing:    "Route selection, high concurrency (8)"
+  ocr:        "OCR processing, medium concurrency (2-4)"
+  llm:        "LLM calls, low concurrency (1-2, expensive)"
+  gpu:        "GPU-bound ONNX, single concurrency (1)"
+  embedding:  "Embedding generation (2)"
+  motion:     "OpenCV optical flow (2)"
+  io:         "File I/O operations, high concurrency (8)"
+  verification: "Quality verification, single (1)"
+
+# ============================================================================
+# AVAILABLE WAVES (as of current implementation)
+# ============================================================================
+
+available_waves:
+  - name: IdentityWave
+    priority: 100
+    emits: [identity.*, sha256]
+    file: waves/identity.wave.yaml
+
+  - name: ColorWave
+    priority: 100
+    emits: [color.*]
+    file: waves/color.wave.yaml
+
+  - name: AutoRoutingWave
+    priority: 90
+    emits: [route.*]
+    file: waves/auto-routing.wave.yaml
+
+  - name: MlOcrWave
+    priority: 65
+    emits: [ocr.ml.*, ocr.opencv.*]
+    file: waves/ml-ocr.wave.yaml
+
+  - name: MotionWave
+    priority: 55
+    emits: [motion.*]
+    file: waves/motion.wave.yaml
+
+  - name: Florence2Wave
+    priority: 55
+    emits: [florence2.*]
+    file: waves/florence2.wave.yaml
+
+  - name: VisionLlmWave
+    priority: 50
+    emits: [vision.llm.*]
+    file: waves/vision-llm.wave.yaml
+
+  - name: ClipEmbeddingWave
+    priority: 45
+    emits: [vision.clip.*]
+    file: waves/clip-embedding.wave.yaml
