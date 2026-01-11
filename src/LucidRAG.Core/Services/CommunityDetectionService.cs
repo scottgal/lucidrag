@@ -16,14 +16,14 @@ namespace LucidRAG.Services;
 public interface ICommunityDetectionService
 {
     /// <summary>
-    /// Detect communities in the current entity graph
+    /// Detect communities in the entity graph for a specific collection
     /// </summary>
-    Task<CommunityDetectionResult> DetectCommunitiesAsync(CancellationToken ct = default);
+    Task<CommunityDetectionResult> DetectCommunitiesAsync(Guid collectionId, CancellationToken ct = default);
 
     /// <summary>
-    /// Get all detected communities
+    /// Get all detected communities for a collection
     /// </summary>
-    Task<IReadOnlyList<CommunityEntity>> GetCommunitiesAsync(CancellationToken ct = default);
+    Task<IReadOnlyList<CommunityEntity>> GetCommunitiesAsync(Guid? collectionId = null, CancellationToken ct = default);
 
     /// <summary>
     /// Get community by ID with members
@@ -33,12 +33,13 @@ public interface ICommunityDetectionService
     /// <summary>
     /// Find communities relevant to a query
     /// </summary>
-    Task<IReadOnlyList<CommunityEntity>> SearchCommunitiesAsync(string query, int limit = 5, CancellationToken ct = default);
+    Task<IReadOnlyList<CommunityEntity>> SearchCommunitiesAsync(string query, Guid? collectionId = null, int limit = 5, CancellationToken ct = default);
 
     /// <summary>
-    /// Generate/regenerate summaries for communities using LLM
+    /// Generate/regenerate summaries for communities using LLM (3-word titles, paragraph descriptions)
+    /// Ensures unique names per tenant
     /// </summary>
-    Task GenerateCommunitySummariesAsync(CancellationToken ct = default);
+    Task GenerateCommunitySummariesAsync(Guid? collectionId = null, CancellationToken ct = default);
 }
 
 public record CommunityDetectionResult(
@@ -75,13 +76,13 @@ public class CommunityDetectionService : ICommunityDetectionService
         _logger = logger;
     }
 
-    public async Task<CommunityDetectionResult> DetectCommunitiesAsync(CancellationToken ct = default)
+    public async Task<CommunityDetectionResult> DetectCommunitiesAsync(Guid collectionId, CancellationToken ct = default)
     {
         var sw = System.Diagnostics.Stopwatch.StartNew();
-        _logger.LogInformation("Starting community detection...");
+        _logger.LogInformation("Starting community detection for collection {CollectionId}...", collectionId);
 
-        // Get graph data
-        var graphData = await _graphService.GetGraphDataAsync(null, ct);
+        // Get graph data filtered by collection
+        var graphData = await _graphService.GetGraphDataAsync(collectionId, ct);
         if (graphData.Nodes.Count == 0)
         {
             _logger.LogWarning("No entities in graph, skipping community detection");
@@ -118,9 +119,18 @@ public class CommunityDetectionService : ICommunityDetectionService
         _logger.LogInformation("Leiden found {CommunityCount} communities with modularity {Modularity:F3}",
             communities.Values.Distinct().Count(), modularity);
 
-        // Clear existing communities
-        _db.CommunityMemberships.RemoveRange(_db.CommunityMemberships);
-        _db.Communities.RemoveRange(_db.Communities);
+        // Clear existing communities for this collection
+        var existingCommunities = await _db.Communities
+            .Where(c => c.CollectionId == collectionId)
+            .ToListAsync(ct);
+
+        var existingCommunityIds = existingCommunities.Select(c => c.Id).ToList();
+        var existingMemberships = await _db.CommunityMemberships
+            .Where(m => existingCommunityIds.Contains(m.CommunityId))
+            .ToListAsync(ct);
+
+        _db.CommunityMemberships.RemoveRange(existingMemberships);
+        _db.Communities.RemoveRange(existingCommunities);
         await _db.SaveChangesAsync(ct);
 
         // Group nodes by community
@@ -177,7 +187,8 @@ public class CommunityDetectionService : ICommunityDetectionService
             var community = new CommunityEntity
             {
                 Id = Guid.NewGuid(),
-                Name = $"Community {idx + 1}: {string.Join(", ", topEntities)}",
+                CollectionId = collectionId,
+                Name = $"Community {idx + 1}: {string.Join(", ", topEntities)}", // Temporary name, will be replaced by LLM
                 Algorithm = "leiden",
                 Level = 0,
                 EntityCount = memberEntities.Count,
@@ -571,10 +582,18 @@ public class CommunityDetectionService : ICommunityDetectionService
         };
     }
 
-    public async Task<IReadOnlyList<CommunityEntity>> GetCommunitiesAsync(CancellationToken ct = default)
+    public async Task<IReadOnlyList<CommunityEntity>> GetCommunitiesAsync(Guid? collectionId = null, CancellationToken ct = default)
     {
-        return await _db.Communities
+        var query = _db.Communities
             .Include(c => c.Members)
+            .AsQueryable();
+
+        if (collectionId.HasValue)
+        {
+            query = query.Where(c => c.CollectionId == collectionId.Value);
+        }
+
+        return await query
             .OrderByDescending(c => c.EntityCount)
             .ToListAsync(ct);
     }
@@ -588,14 +607,19 @@ public class CommunityDetectionService : ICommunityDetectionService
     }
 
     public async Task<IReadOnlyList<CommunityEntity>> SearchCommunitiesAsync(
-        string query, int limit = 5, CancellationToken ct = default)
+        string query, Guid? collectionId = null, int limit = 5, CancellationToken ct = default)
     {
         // Embed query and find communities with similar embeddings
         var queryEmbedding = await _embeddingService.EmbedAsync(query, ct);
 
-        var communities = await _db.Communities
-            .Where(c => c.Embedding != null)
-            .ToListAsync(ct);
+        var queryable = _db.Communities.Where(c => c.Embedding != null);
+
+        if (collectionId.HasValue)
+        {
+            queryable = queryable.Where(c => c.CollectionId == collectionId.Value);
+        }
+
+        var communities = await queryable.ToListAsync(ct);
 
         // Calculate cosine similarity
         var scored = communities
@@ -608,12 +632,19 @@ public class CommunityDetectionService : ICommunityDetectionService
         return scored;
     }
 
-    public async Task GenerateCommunitySummariesAsync(CancellationToken ct = default)
+    public async Task GenerateCommunitySummariesAsync(Guid? collectionId = null, CancellationToken ct = default)
     {
-        var communities = await _db.Communities
+        var query = _db.Communities
             .Include(c => c.Members)
                 .ThenInclude(m => m.Entity)
-            .ToListAsync(ct);
+            .AsQueryable();
+
+        if (collectionId.HasValue)
+        {
+            query = query.Where(c => c.CollectionId == collectionId.Value);
+        }
+
+        var communities = await query.ToListAsync(ct);
 
         _logger.LogInformation("Generating summaries for {Count} communities", communities.Count);
 
@@ -640,12 +671,12 @@ Entity types present: {(features != null ? string.Join(", ", features.DominantTy
 Key terms: {(features != null ? string.Join(", ", features.KeyTerms) : "various")}
 
 Based on these entities and their characteristics, provide:
-1. A concise name for this community (3-5 words, like ""Image Processing Techniques"" or ""Database Query Optimization"")
-2. A one-sentence summary of what this community represents
+1. A descriptive title (MAXIMUM 3 words, like ""Image Processing"" or ""Database Optimization"")
+2. A paragraph description (maximum 5 sentences) explaining what this community represents, what topics it covers, and its key themes
 
 Format your response as:
-NAME: [community name]
-SUMMARY: [one sentence description]";
+NAME: [maximum 3 word title]
+SUMMARY: [descriptive paragraph, max 5 sentences]";
 
                 var response = await _llmService.GenerateAsync(prompt, new LlmOptions { Temperature = 0.3 }, ct);
 

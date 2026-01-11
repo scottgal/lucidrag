@@ -21,6 +21,7 @@ public class PublicController(
     RagDocumentsDbContext db,
     IAgenticSearchService searchService,
     ISalientTermsService? salientTermsService,
+    ICommunityDetectionService communityService,
     ILogger<PublicController> logger) : ControllerBase
 {
     /// <summary>
@@ -248,6 +249,28 @@ public class PublicController(
             return TypedResults.BadRequest(new ApiError("Autocomplete service error", "AUTOCOMPLETE_ERROR"));
         }
     }
+
+    /// <summary>
+    /// Get detected communities for a collection.
+    /// Communities are clusters of related entities discovered through graph analysis.
+    /// </summary>
+    [HttpGet("communities")]
+    public async Task<Ok<List<PublicCommunityItem>>> GetCommunities(
+        [FromQuery] Guid? collectionId = null,
+        CancellationToken ct = default)
+    {
+        var communities = await communityService.GetCommunitiesAsync(collectionId, ct);
+
+        var result = communities.Select(c => new PublicCommunityItem(
+            c.Id,
+            c.Name,
+            c.Summary,
+            c.EntityCount,
+            c.Cohesion
+        )).ToList();
+
+        return TypedResults.Ok(result);
+    }
 }
 
 // DTOs for public API
@@ -293,4 +316,12 @@ public record AutocompleteSuggestion(
     string Term,
     double Score,
     string Source
+);
+
+public record PublicCommunityItem(
+    Guid Id,
+    string Name,
+    string? Summary,
+    int EntityCount,
+    float Cohesion
 );

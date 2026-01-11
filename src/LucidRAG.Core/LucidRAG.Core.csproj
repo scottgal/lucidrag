@@ -36,6 +36,11 @@
         <PackageReference Include="Microsoft.Extensions.Hosting.Abstractions" Version="10.0.1" />
     </ItemGroup>
 
+    <!-- Liquid templates for lens system -->
+    <ItemGroup>
+        <PackageReference Include="DotLiquid" Version="2.2.692" />
+    </ItemGroup>
+
     <!-- Project references -->
     <ItemGroup>
         <ProjectReference Include="..\Mostlylucid.DocSummarizer.Core\Mostlylucid.DocSummarizer.Core.csproj" />

@@ -57,7 +57,9 @@ public record ChatRequest(
     Guid? CollectionId = null,
     Guid[]? DocumentIds = null,
     string? SystemPrompt = null,
-    SearchMode SearchMode = SearchMode.Hybrid);
+    SearchMode SearchMode = SearchMode.Hybrid,
+    string? LensId = null  // Optional lens override (user selection)
+);
 
 public record ChatResponse(
     string Answer,
@@ -77,6 +79,16 @@ public record ChatResponse(
     /// Human-readable decomposition summary for UI display.
     /// </summary>
     public DecompositionInfo? Decomposition { get; init; }
+
+    /// <summary>
+    /// The ID of the lens used to format this response.
+    /// </summary>
+    public string? LensId { get; init; }
+
+    /// <summary>
+    /// CSS styles from the active lens (for injection in frontend).
+    /// </summary>
+    public string? LensStyles { get; init; }
 }
 
 /// <summary>

@@ -18,8 +18,8 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 
-    <!-- Tailwind CSS + DaisyUI -->
-    <link href="/css/dist/main.css" rel="stylesheet" type="text/css" />
+    <!-- Tailwind CSS + DaisyUI (Vite bundled) -->
+    <link href="/dist/css/styles.css" rel="stylesheet" type="text/css" />
 
     <!-- Alpine.js -->
     <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.14.1/dist/cdn.min.js"></script>
@@ -112,6 +112,41 @@
                         </li>
                     </template>
                 </ul>
+
+                <!-- Communities Section (shown when a collection is selected) -->
+                <template x-if="selectedCollection && communities.length > 0">
+                    <div class="mt-6">
+                        <div class="flex items-center justify-between mb-3">
+                            <h3 class="text-xs font-semibold text-base-content/60 uppercase tracking-wider">Communities</h3>
+                            <template x-if="selectedCommunity">
+                                <button @@click="clearCommunity()" class="text-xs text-primary hover:underline">Clear</button>
+                            </template>
+                        </div>
+
+                        <ul class="space-y-1">
+                            <template x-for="community in communities" :key="community.id">
+                                <li>
+                                    <button @@click="selectCommunity(community)"
+                                            :class="selectedCommunity?.id === community.id ? 'bg-primary/10 border-primary' : 'hover:bg-base-200 border-transparent'"
+                                            class="w-full text-left p-2 rounded-lg border transition-colors">
+                                        <div class="flex items-center gap-2">
+                                            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-primary flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
+                                            </svg>
+                                            <div class="flex-1 min-w-0">
+                                                <div class="font-medium text-xs truncate" x-text="community.name"></div>
+                                                <template x-if="community.summary">
+                                                    <div class="text-xs text-base-content/50 line-clamp-1" x-text="community.summary"></div>
+                                                </template>
+                                            </div>
+                                            <span class="badge badge-xs" x-text="community.entityCount"></span>
+                                        </div>
+                                    </button>
+                                </li>
+                            </template>
+                        </ul>
+                    </div>
+                </template>
             </div>
 
             <!-- Sidebar Footer -->
@@ -138,16 +173,32 @@
                 <!-- Selected collection indicator -->
                 <div class="flex-1 min-w-0">
                     <template x-if="selectedCollection">
-                        <div class="flex items-center gap-2">
-                            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-primary" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
-                            </svg>
-                            <span class="font-medium truncate" x-text="selectedCollection.name"></span>
-                            <button @@click="clearCollection()" class="btn btn-ghost btn-xs">
-                                <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                        <div>
+                            <div class="flex items-center gap-2">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-primary" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
                                 </svg>
-                            </button>
+                                <span class="font-medium truncate" x-text="selectedCollection.name"></span>
+                                <button @@click="clearCollection()" class="btn btn-ghost btn-xs">
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                                    </svg>
+                                </button>
+                            </div>
+                            <!-- Selected community indicator -->
+                            <template x-if="selectedCommunity">
+                                <div class="flex items-center gap-2 mt-1 text-sm">
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3 text-primary/70" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
+                                    </svg>
+                                    <span class="text-xs text-base-content/70 truncate" x-text="'in ' + selectedCommunity.name"></span>
+                                    <button @@click="clearCommunity()" class="btn btn-ghost btn-xs">
+                                        <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                                        </svg>
+                                    </button>
+                                </div>
+                            </template>
                         </div>
                     </template>
                     <template x-if="!selectedCollection">

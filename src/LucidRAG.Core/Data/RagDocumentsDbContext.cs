@@ -371,9 +371,17 @@ public class RagDocumentsDbContext(DbContextOptions<RagDocumentsDbContext> optio
             }
 
             // Indexes
+            entity.HasIndex(e => e.CollectionId);
+            entity.HasIndex(e => new { e.CollectionId, e.Name }).IsUnique(); // Unique names per collection/tenant
             entity.HasIndex(e => e.Level);
             entity.HasIndex(e => e.ParentCommunityId);
             entity.HasIndex(e => e.EntityCount);
+
+            // Relationships
+            entity.HasOne(e => e.Collection)
+                .WithMany()
+                .HasForeignKey(e => e.CollectionId)
+                .OnDelete(DeleteBehavior.Cascade);
 
             // Self-referencing hierarchy
             entity.HasOne(e => e.ParentCommunity)

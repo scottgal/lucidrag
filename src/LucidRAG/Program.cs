@@ -12,6 +12,7 @@ using LucidRAG.Config;
 using LucidRAG.Core.Services;
 using LucidRAG.Core.Services.Caching;
 using LucidRAG.Data;
+using LucidRAG.Extensions;
 using LucidRAG.Multitenancy;
 using LucidRAG.Services;
 using LucidRAG.Services.Background;
@@ -149,6 +150,9 @@ builder.Services.AddHostedService<DocumentQueueProcessor>();
 builder.Services.AddHostedService<DemoContentSeeder>();
 builder.Services.AddSingleton<IWebCrawlerService, WebCrawlerService>();
 builder.Services.AddSingleton<IIngestionService, IngestionService>();
+
+// Lens system for customizable response formatting
+builder.Services.AddLensSystem(builder.Configuration);
 
 // PostgreSQL full-text search service (10-25x faster than C# BM25)
 // Only register for PostgreSQL databases (not SQLite)

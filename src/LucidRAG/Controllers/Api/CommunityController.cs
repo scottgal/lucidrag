@@ -19,18 +19,20 @@ public class CommunityController(
     ILogger<CommunityController> logger) : ControllerBase
 {
     /// <summary>
-    /// Run community detection on the entity graph using Louvain algorithm.
+    /// Run community detection on the entity graph using Louvain algorithm for a collection.
     /// Creates/updates community structure from the entity graph.
     /// </summary>
     [HttpPost]
-    public async Task<Results<Ok<CommunityDetectionResponse>, StatusCodeHttpResult>> DetectCommunities(CancellationToken ct)
+    public async Task<Results<Ok<CommunityDetectionResponse>, StatusCodeHttpResult>> DetectCommunities(
+        [FromQuery] Guid collectionId,
+        CancellationToken ct)
     {
-        logger.LogInformation("Starting community detection");
+        logger.LogInformation("Starting community detection for collection {CollectionId}", collectionId);
         var sw = System.Diagnostics.Stopwatch.StartNew();
 
         try
         {
-            var result = await communityService.DetectCommunitiesAsync(ct);
+            var result = await communityService.DetectCommunitiesAsync(collectionId, ct);
             sw.Stop();
 
             return TypedResults.Ok(new CommunityDetectionResponse(
@@ -48,17 +50,20 @@ public class CommunityController(
     }
 
     /// <summary>
-    /// Generate or regenerate LLM summaries for all communities.
+    /// Generate or regenerate LLM summaries for communities (optionally for a specific collection).
     /// </summary>
     [HttpPost("summaries")]
-    public async Task<Results<Ok<CommunitySummaryResponse>, StatusCodeHttpResult>> GenerateSummaries(CancellationToken ct)
+    public async Task<Results<Ok<CommunitySummaryResponse>, StatusCodeHttpResult>> GenerateSummaries(
+        [FromQuery] Guid? collectionId = null,
+        CancellationToken ct = default)
     {
-        logger.LogInformation("Generating community summaries");
+        logger.LogInformation("Generating community summaries{ForCollection}",
+            collectionId.HasValue ? $" for collection {collectionId}" : "");
         var sw = System.Diagnostics.Stopwatch.StartNew();
 
         try
         {
-            await communityService.GenerateCommunitySummariesAsync(ct);
+            await communityService.GenerateCommunitySummariesAsync(collectionId, ct);
             sw.Stop();
 
             var count = await db.Communities.CountAsync(c => c.Summary != null, ct);
@@ -175,13 +180,14 @@ public class CommunityController(
     [HttpGet("search")]
     public async Task<IActionResult> Search(
         [FromQuery] string q,
+        [FromQuery] Guid? collectionId = null,
         [FromQuery] int limit = 10,
         CancellationToken ct = default)
     {
         if (string.IsNullOrWhiteSpace(q))
             return BadRequest(new { error = "Query parameter 'q' is required" });
 
-        var results = await communityService.SearchCommunitiesAsync(q, limit, ct);
+        var results = await communityService.SearchCommunitiesAsync(q, collectionId, limit, ct);
 
         return Ok(new
         {

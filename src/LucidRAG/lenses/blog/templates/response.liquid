@@ -1,0 +1,23 @@
+<div class="lens-blog-response">
+  <div class="answer-section">
+    <div class="answer-intro">Based on the available blog articles:</div>
+    <div class="answer-content">{{ answer }}</div>
+  </div>
+
+  {% if sources.size > 0 %}
+  <div class="sources-section">
+    <h3 class="sources-heading">📚 Related Articles</h3>
+    <div class="sources-grid">
+      {% for source in sources %}
+        <div class="source-card" data-source-id="{{ source.sequence_number }}">
+          {{ source | render_citation }}
+        </div>
+      {% endfor %}
+    </div>
+  </div>
+  {% endif %}
+
+  <div class="explore-more">
+    <p>💡 Want to dive deeper? Each article above offers additional insights and examples.</p>
+  </div>
+</div>

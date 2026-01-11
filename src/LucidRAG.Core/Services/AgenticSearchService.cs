@@ -13,6 +13,8 @@ using LucidRAG.Config;
 using LucidRAG.Data;
 using LucidRAG.Core.Services;
 using LucidRAG.Services.Sentinel;
+using LucidRAG.Services.Lenses;
+using LucidRAG.Lenses;
 using StyloFlow.Retrieval;
 
 namespace LucidRAG.Services;
@@ -29,6 +31,8 @@ public class AgenticSearchService(
     SynthesisCacheService synthesisCache,
     IEvidenceRepository evidenceRepository,
     PostgresBM25Service? postgresBM25, // Optional - only for PostgreSQL
+    ILensRegistry lensRegistry,
+    ILensRenderService lensRender,
     IOptions<PromptsConfig> promptsConfig,
     IOptions<DocSummarizerConfig> docSummarizerConfig,
     IOptions<RagDocumentsConfig> ragDocumentsConfig,
@@ -194,6 +198,10 @@ public class AgenticSearchService(
 
     public async Task<ChatResponse> ChatAsync(ChatRequest request, CancellationToken ct = default)
     {
+        // Resolve lens (user override > collection default > system default)
+        var lens = await ResolveLensAsync(request, ct);
+        logger.LogDebug("Using lens '{LensId}' for query: {Query}", lens.Manifest.Id, request.Query);
+
         // Get or create conversation
         var conversationId = request.ConversationId;
         if (!conversationId.HasValue)
@@ -208,9 +216,31 @@ public class AgenticSearchService(
         // Build context from conversation history
         var context = await conversationService.BuildContextAsync(conversationId.Value, ct: ct);
 
-        // Get system prompt
-        var systemPromptKey = request.SystemPrompt ?? "Default";
-        var systemPrompt = _prompts.SystemPrompts.GetValueOrDefault(systemPromptKey, _prompts.SystemPrompts["Default"]);
+        // Get collection for lens template context
+        var collection = request.CollectionId.HasValue
+            ? await db.Collections.FirstOrDefaultAsync(c => c.Id == request.CollectionId.Value, ct)
+            : null;
+
+        // Render system prompt using lens template (unless explicitly overridden)
+        string systemPrompt;
+        if (!string.IsNullOrEmpty(request.SystemPrompt))
+        {
+            // User provided explicit system prompt - use it directly
+            var systemPromptKey = request.SystemPrompt;
+            systemPrompt = _prompts.SystemPrompts.GetValueOrDefault(systemPromptKey, _prompts.SystemPrompts["Default"]);
+        }
+        else
+        {
+            // Use lens template to render system prompt
+            var promptContext = new
+            {
+                tenant_name = "LucidRAG", // TODO: Get from TenantContext when available
+                collection_description = collection?.Description ?? "",
+                collection_name = collection?.Name ?? "documents"
+            };
+
+            systemPrompt = lensRender.RenderSystemPrompt(lens, promptContext);
+        }
 
         // Search for relevant segments
         var searchResult = await SearchAsync(new SearchRequest(
@@ -336,7 +366,9 @@ public class AgenticSearchService(
         return new ChatResponse(answer, sources, conversationId.Value, Timestamp: DateTimeOffset.UtcNow)
         {
             QueryPlan = searchResult.QueryPlan,
-            Decomposition = decomposition
+            Decomposition = decomposition,
+            LensId = lens.Manifest.Id,
+            LensStyles = lens.Styles
         };
     }
 
@@ -812,5 +844,61 @@ ANSWER:";
         }
 
         return response.ToString();
+    }
+
+    /// <summary>
+    /// Resolves which lens to use for the request.
+    /// Priority: User override > Collection default > System default
+    /// </summary>
+    private async Task<LensPackage> ResolveLensAsync(ChatRequest request, CancellationToken ct)
+    {
+        // 1. User override (highest priority)
+        if (!string.IsNullOrEmpty(request.LensId))
+        {
+            var userLens = lensRegistry.GetLens(request.LensId);
+            if (userLens != null)
+            {
+                logger.LogDebug("Using user-selected lens: {LensId}", request.LensId);
+                return userLens;
+            }
+
+            logger.LogWarning("User-requested lens '{LensId}' not found, falling back to default", request.LensId);
+        }
+
+        // 2. Collection default
+        if (request.CollectionId.HasValue)
+        {
+            var collection = await db.Collections
+                .AsNoTracking()
+                .FirstOrDefaultAsync(c => c.Id == request.CollectionId.Value, ct);
+
+            if (collection?.Settings != null)
+            {
+                try
+                {
+                    var settings = JsonSerializer.Deserialize<Dictionary<string, object>>(collection.Settings);
+                    if (settings?.TryGetValue("default_lens", out var lensIdObj) == true)
+                    {
+                        var lensId = lensIdObj.ToString();
+                        var collectionLens = lensRegistry.GetLens(lensId!);
+                        if (collectionLens != null)
+                        {
+                            logger.LogDebug("Using collection default lens: {LensId} for collection {CollectionId}",
+                                lensId, request.CollectionId);
+                            return collectionLens;
+                        }
+                    }
+                }
+                catch (JsonException ex)
+                {
+                    logger.LogWarning(ex, "Failed to parse collection settings for lens default");
+                }
+            }
+        }
+
+        // 3. System default (lowest priority)
+        var defaultLens = lensRegistry.GetDefaultLens();
+        logger.LogDebug("Using system default lens: {LensId}", defaultLens.Manifest.Id);
+        return defaultLens;
     }
 }

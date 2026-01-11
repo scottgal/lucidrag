@@ -8,6 +8,8 @@ export function publicApp(tenantName) {
         loading: true,
         collections: [],
         selectedCollection: null,
+        communities: [],
+        selectedCommunity: null,
         stats: { totalDocuments: 0, totalEntities: 0 },
         theme: localStorage.getItem('lucidrag-theme') || 'light',
         conversationId: null,
@@ -43,6 +45,19 @@ export function publicApp(tenantName) {
             this.checkUrlForCollection();
 
             this.loading = false;
+        },
+
+        async loadCommunities() {
+            if (!this.selectedCollection) return;
+
+            try {
+                const response = await fetch(`/api/public/communities?collectionId=${this.selectedCollection.id}`);
+                if (response.ok) {
+                    this.communities = await response.json();
+                }
+            } catch (e) {
+                console.error('Failed to load communities:', e);
+            }
         },
 
         async loadCollections() {
@@ -84,19 +99,38 @@ export function publicApp(tenantName) {
             }
         },
 
-        selectCollection(collection) {
+        async selectCollection(collection) {
             this.selectedCollection = collection;
             this.messages = [];
             this.conversationId = null;
+            this.selectedCommunity = null;
+            this.communities = [];
             this.sidebarOpen = false;
+
+            // Load communities for this collection
+            await this.loadCommunities();
 
             // Update URL
             const slug = collection.name.toLowerCase().replace(/\s+/g, '-');
             history.pushState({}, '', `/collection/${slug}`);
         },
 
+        selectCommunity(community) {
+            this.selectedCommunity = community;
+            this.messages = [];
+            this.conversationId = null;
+        },
+
+        clearCommunity() {
+            this.selectedCommunity = null;
+            this.messages = [];
+            this.conversationId = null;
+        },
+
         clearCollection() {
             this.selectedCollection = null;
+            this.selectedCommunity = null;
+            this.communities = [];
             this.messages = [];
             this.conversationId = null;
             history.pushState({}, '', '/');
@@ -138,6 +172,7 @@ export function publicApp(tenantName) {
                         message: userMessage,
                         conversationId: this.conversationId,
                         collectionId: this.selectedCollection.id,
+                        communityId: this.selectedCommunity?.id,
                         searchMode: this.searchMode,
                         filters: this.advancedFilters
                     })

@@ -1,0 +1,26 @@
+{
+  "id": "blog",
+  "name": "Blog Articles",
+  "description": "Optimized for blog content with rich article formatting",
+  "version": "1.0.0",
+  "author": "LucidRAG",
+  "priority": 100,
+  "scoring": {
+    "denseWeight": 0.3,
+    "bm25Weight": 0.3,
+    "salienceWeight": 0.2,
+    "freshnessWeight": 0.2
+  },
+  "templates": {
+    "systemPrompt": "templates/system-prompt.liquid",
+    "citation": "templates/citation.liquid",
+    "response": "templates/response.liquid"
+  },
+  "styles": "styles.css",
+  "settings": {
+    "maxSources": 8,
+    "citationStyle": "rich",
+    "includeTimestamps": true,
+    "excerptLength": 200
+  }
+}

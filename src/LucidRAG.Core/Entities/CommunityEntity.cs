@@ -9,12 +9,19 @@ public class CommunityEntity
     public Guid Id { get; set; }
 
     /// <summary>
+    /// Collection this community belongs to
+    /// </summary>
+    public Guid CollectionId { get; set; }
+
+    /// <summary>
     /// LLM-generated name for this community (e.g., "Image Processing Techniques")
+    /// Maximum 3 words, unique per tenant
     /// </summary>
     public required string Name { get; set; }
 
     /// <summary>
     /// LLM-generated summary describing what this community represents
+    /// Maximum one paragraph
     /// </summary>
     public string? Summary { get; set; }
 
@@ -58,6 +65,7 @@ public class CommunityEntity
     public DateTimeOffset? UpdatedAt { get; set; }
 
     // Navigation
+    public CollectionEntity? Collection { get; set; }
     public CommunityEntity? ParentCommunity { get; set; }
     public ICollection<CommunityEntity> ChildCommunities { get; set; } = [];
     public ICollection<CommunityMembership> Members { get; set; } = [];

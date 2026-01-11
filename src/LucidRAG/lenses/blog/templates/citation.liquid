@@ -1,0 +1,23 @@
+<div class="blog-citation">
+  <h4 class="citation-title">
+    <a href="{{ url }}" target="_blank">{{ title }}</a>
+  </h4>
+
+  <div class="citation-meta">
+    {% if author %}
+    <span class="author">by {{ author }}</span>
+    {% endif %}
+
+    {% if publish_date %}
+    <span class="date">{{ publish_date | date: "%B %d, %Y" }}</span>
+    {% endif %}
+
+    {% if page_or_section %}
+    <span class="section">{{ page_or_section }}</span>
+    {% endif %}
+  </div>
+
+  <p class="citation-excerpt">{{ excerpt }}</p>
+
+  <a href="{{ url }}" class="read-more">Read full article →</a>
+</div>
