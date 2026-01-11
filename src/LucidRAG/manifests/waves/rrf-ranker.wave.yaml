@@ -1,0 +1,89 @@
+# RRF Ranker Wave - Reciprocal Rank Fusion
+name: rrf_ranker
+display_name: RRF Ranker
+description: Combines multiple retrieval signals using Reciprocal Rank Fusion
+version: 1.0.0
+priority: 80
+enabled: true
+
+taxonomy:
+  kind: ranker
+  determinism: deterministic
+  persistence: ephemeral
+
+input:
+  accepts:
+    - rag.search_results
+    - rag.salience_scores
+    - rag.freshness_scores
+  required_signals:
+    - retrieval.dense.completed
+    - retrieval.bm25.completed
+  optional_signals:
+    - retrieval.salience.completed
+    - retrieval.freshness.completed
+
+output:
+  produces:
+    - rag.ranked_results
+  signals:
+    - key: retrieval.rrf.final_score
+      entity_type: number
+      salience: 1.0
+    - key: retrieval.rrf.rank
+      entity_type: number
+      salience: 0.9
+
+triggers:
+  requires:
+    - signal: retrieval.dense.completed
+    - signal: retrieval.bm25.completed
+  skip_when:
+    - retrieval.early_exit
+
+emits:
+  on_complete:
+    - key: retrieval.rrf.final_score
+      type: number
+      confidence_range: [0.0, 1.0]
+    - key: retrieval.rrf.rank
+      type: number
+    - key: retrieval.rrf.completed
+      type: boolean
+
+defaults:
+  # RRF formula: score = Σ (weight_i / (k + rank_i))
+  rrf:
+    k: 60                    # Constant for rank fusion formula
+    min_final_score: 0.0
+    top_k: 10
+
+  # Signal weights (controlled by lens, these are fallback defaults)
+  weights:
+    dense: 0.3
+    bm25: 0.3
+    salience: 0.2
+    freshness: 0.2
+
+  scoring:
+    normalize_scores: true
+    use_log_ranks: false
+
+  timing:
+    timeout_ms: 100
+    cache_ttl_seconds: 0  # Don't cache - depends on lens
+
+  features:
+    enable_score_normalization: true
+    enable_diversity_boost: false
+    detailed_logging: false
+
+  parameters:
+    diversity_threshold: 0.85
+    max_results_per_document: 3
+
+tags:
+  - ranking
+  - fusion
+  - rrf
+  - stage-2

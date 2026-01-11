@@ -3,7 +3,9 @@ using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using Mostlylucid.DocSummarizer;
+using Mostlylucid.DocSummarizer.Models;
 using Mostlylucid.DocSummarizer.Services;
+using Mostlylucid.Summarizer.Core.Pipeline;
 using LucidRAG.Config;
 using LucidRAG.Data;
 using LucidRAG.Entities;
@@ -15,6 +17,7 @@ public class DocumentQueueProcessor(
     DocumentProcessingQueue queue,
     IServiceScopeFactory scopeFactory,
     IProcessingNotificationService notifications,
+    IPipelineRegistry pipelineRegistry,
     ILogger<DocumentQueueProcessor> logger) : BackgroundService
 {
     // Maximum time to process a single document before timing out
@@ -206,17 +209,76 @@ public class DocumentQueueProcessor(
             await progressChannel.Writer.WriteAsync(
                 ProgressUpdates.Stage("Processing", "Starting document processing...", 0, 0), ct);
 
-            // Process document using DocSummarizer
-            var result = await summarizer.SummarizeFileAsync(
-                job.FilePath,
-                progressChannel.Writer,
-                cancellationToken: ct);
+            // Check if file should use pipeline (images/GIFs) or document summarizer
+            var pipeline = pipelineRegistry.FindForFile(job.FilePath);
+            DocumentSummary? result = null;
 
-            // Update document with initial results
-            document.SegmentCount = result.Trace.TotalChunks;
-            document.VectorStoreDocId = result.Trace.DocumentId; // Store the stableDocId for segment retrieval
-            document.ProcessingProgress = 60;
-            await db.SaveChangesAsync(ct);
+            if (pipeline != null)
+            {
+                // Use pipeline for images/GIFs
+                logger.LogInformation("Processing {FileName} via {PipelineName}",
+                    Path.GetFileName(job.FilePath), pipeline.Name);
+
+                var pipelineProgress = new Progress<PipelineProgress>(p =>
+                {
+                    progressChannel.Writer.TryWrite(
+                        ProgressUpdates.Stage(p.Stage, p.Message, 0, 0));
+                });
+
+                var pipelineResult = await pipeline.ProcessAsync(job.FilePath, null, pipelineProgress, ct);
+
+                if (!pipelineResult.Success)
+                {
+                    throw new InvalidOperationException($"Pipeline processing failed: {pipelineResult.Error}");
+                }
+
+                // Update document with pipeline results
+                document.SegmentCount = pipelineResult.Chunks.Count;
+                document.VectorStoreDocId = Path.GetFileNameWithoutExtension(job.FilePath); // Use filename as stable ID
+                document.ProcessingProgress = 60;
+                await db.SaveChangesAsync(ct);
+
+                logger.LogInformation("Pipeline processed {FileName}: {ChunkCount} chunks in {Time}ms",
+                    Path.GetFileName(job.FilePath), pipelineResult.Chunks.Count,
+                    pipelineResult.ProcessingTime.TotalMilliseconds);
+
+                // Convert ContentChunks to Segments and index in vector store
+                var segments = await ConvertAndIndexImageChunksAsync(
+                    pipelineResult.Chunks,
+                    document.VectorStoreDocId,
+                    vectorStore,
+                    ct);
+
+                // Create a minimal DocumentSummary for compatibility with downstream code
+                result = new DocumentSummary(
+                    ExecutiveSummary: $"Image processed with {pipelineResult.Chunks.Count} chunks",
+                    TopicSummaries: new List<TopicSummary>(),
+                    OpenQuestions: new List<string>(),
+                    Trace: new SummarizationTrace(
+                        DocumentId: document.VectorStoreDocId,
+                        TotalChunks: segments.Count,
+                        ChunksProcessed: segments.Count,
+                        Topics: new List<string>(),
+                        TotalTime: pipelineResult.ProcessingTime,
+                        CoverageScore: 1.0,
+                        CitationRate: 0.0
+                    )
+                );
+            }
+            else
+            {
+                // Use document summarizer for traditional documents
+                result = await summarizer.SummarizeFileAsync(
+                    job.FilePath,
+                    progressChannel.Writer,
+                    cancellationToken: ct);
+
+                // Update document with initial results
+                document.SegmentCount = result.Trace.TotalChunks;
+                document.VectorStoreDocId = result.Trace.DocumentId; // Store the stableDocId for segment retrieval
+                document.ProcessingProgress = 60;
+                await db.SaveChangesAsync(ct);
+            }
 
             // Notify progress via SignalR
             await notifications.NotifyDocumentProgress(document.Id, document.Name, 60, "Table extraction", document.CollectionId);
@@ -358,6 +420,48 @@ public class DocumentQueueProcessor(
         {
             queue.CompleteProgressChannel(job.DocumentId);
         }
+    }
+
+    /// <summary>
+    /// Convert ContentChunks from ImagePipeline to Segments with embeddings and index in vector store.
+    /// </summary>
+    private static async Task<List<Mostlylucid.DocSummarizer.Models.Segment>> ConvertAndIndexImageChunksAsync(
+        IReadOnlyList<Mostlylucid.Summarizer.Core.Pipeline.ContentChunk> chunks,
+        string docId,
+        IVectorStore vectorStore,
+        CancellationToken ct)
+    {
+        var segments = new List<Mostlylucid.DocSummarizer.Models.Segment>();
+
+        for (int i = 0; i < chunks.Count; i++)
+        {
+            var chunk = chunks[i];
+            var contentHash = Mostlylucid.DocSummarizer.Models.HashHelper.ComputeHash(chunk.Text);
+            var segment = new Mostlylucid.DocSummarizer.Models.Segment(
+                docId,
+                chunk.Text,
+                Mostlylucid.DocSummarizer.Models.SegmentType.Caption,
+                i,
+                0,
+                chunk.Text.Length,
+                contentHash)
+            {
+                SectionTitle = chunk.ContentType.ToString(),
+                SalienceScore = 1.0, // Images are salient by default
+                PositionWeight = 1.0,
+                ChunkIndex = i
+            };
+
+            segments.Add(segment);
+        }
+
+        // Index in vector store
+        if (segments.Count > 0)
+        {
+            await vectorStore.UpsertSegmentsAsync("ragdocs", segments, ct);
+        }
+
+        return segments;
     }
 
     /// <summary>

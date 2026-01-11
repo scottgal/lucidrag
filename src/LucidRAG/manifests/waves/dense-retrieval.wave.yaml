@@ -1,0 +1,92 @@
+# Dense Retrieval Wave - Semantic embedding search
+name: dense_retrieval
+display_name: Dense Retrieval
+description: Retrieves documents using dense embedding similarity search
+version: 1.0.0
+priority: 100
+enabled: true
+
+taxonomy:
+  kind: retriever
+  determinism: deterministic
+  persistence: ephemeral
+
+# Input contract
+input:
+  accepts:
+    - rag.query
+    - text.embedding
+  required_signals:
+    - query.text
+    - query.embedding
+  optional_signals:
+    - query.collection_id
+    - query.filters
+
+# Output contract
+output:
+  produces:
+    - rag.search_results
+    - rag.ranked_segments
+  signals:
+    - key: retrieval.dense.similarity
+      entity_type: number
+      salience: 0.9
+    - key: retrieval.dense.result_count
+      entity_type: number
+      salience: 0.7
+
+# Trigger configuration
+triggers:
+  requires:
+    - signal: query.embedding
+      condition: "!= null"
+  skip_when:
+    - retrieval.early_exit
+
+# Emits configuration
+emits:
+  on_complete:
+    - key: retrieval.dense.similarity
+      type: number
+      confidence_range: [0.0, 1.0]
+    - key: retrieval.dense.result_count
+      type: number
+    - key: retrieval.dense.completed
+      type: boolean
+
+# ============================================
+# DEFAULT CONFIGURATION - NO MAGIC NUMBERS
+# Override via appsettings.json: Waves:DenseRetrieval:*
+# ============================================
+defaults:
+  retrieval:
+    top_k: 100
+    min_similarity: 0.3
+    use_cosine_similarity: true
+    normalize_vectors: true
+
+  scoring:
+    base_weight: 1.0
+    similarity_boost: 1.2
+    recency_decay: 0.95
+
+  timing:
+    timeout_ms: 1000
+    cache_ttl_seconds: 300
+
+  features:
+    enable_cache: true
+    enable_filtering: true
+    detailed_logging: false
+
+  parameters:
+    vector_dimension: 384
+    distance_metric: cosine
+    index_type: hnsw
+
+tags:
+  - retrieval
+  - embedding
+  - semantic
+  - stage-0

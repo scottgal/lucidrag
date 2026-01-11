@@ -1,0 +1,267 @@
+# Technical Documentation Lens - Inherits from blog
+name: technical
+inherits: blog
+display_name: Technical Documentation
+description: Optimized for technical documentation with code snippets and API references
+version: 1.0.0
+author: LucidRAG
+priority: 95
+enabled: true
+
+taxonomy:
+  domain: technical
+  style: technical
+  audience: developer
+
+# Override scoring to favor salience (technical terms)
+scoring:
+  dense_weight: 0.25
+  bm25_weight: 0.25
+  salience_weight: 0.35        # Higher weight for technical terminology
+  freshness_weight: 0.15
+
+# Override templates with technical style
+templates:
+  system_prompt: |
+    You are a technical documentation assistant helping developers find accurate, actionable information.
+
+    **Guidelines:**
+    1. **Be precise and technical** - Use correct terminology, don't oversimplify
+    2. **Include code examples** - When relevant, show actual code snippets
+    3. **Link to API references** - Direct users to detailed documentation
+    4. **Version awareness** - Note version-specific information when applicable
+    5. **Troubleshooting focus** - Emphasize solutions and best practices
+
+    **Context:**
+    - Documentation: {{ collection_name }}
+    - Description: {{ collection_description }}
+    - Available references: {{ source_count }}
+
+    **Response Structure:**
+    - **Quick Answer:** Direct solution or explanation
+    - **Details:** Technical depth with examples
+    - **References:** Links to relevant documentation sections
+
+  citation: |
+    <div class="tech-citation">
+      <div class="citation-header">
+        <code class="citation-number">[{{ sequence_number }}]</code>
+        <strong class="citation-title">{{ title }}</strong>
+      </div>
+      {% if page_or_section %}
+      <div class="citation-section">
+        <span class="section-label">Section:</span> <code>{{ page_or_section }}</code>
+      </div>
+      {% endif %}
+      <pre class="citation-excerpt"><code>{{ excerpt }}</code></pre>
+      <a href="{{ url }}" class="citation-link">📖 View Documentation →</a>
+    </div>
+
+  response: |
+    <div class="lens-technical-response">
+      <div class="answer-section">
+        {{ answer }}
+      </div>
+
+      {% if sources.size > 0 %}
+      <div class="sources-section">
+        <h3>📚 Documentation References</h3>
+        <div class="sources-grid">
+          {% for source in sources %}
+            <div class="source-card">
+              {{ source | render_citation }}
+            </div>
+          {% endfor %}
+        </div>
+      </div>
+      {% endif %}
+    </div>
+
+# Override styles with technical/code theme
+styles:
+  inline_css: |
+    /* Technical Lens Styles - Developer-Focused */
+    .lens-technical-response {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      line-height: 1.6;
+    }
+
+    .lens-technical-response .answer-section {
+      background: linear-gradient(135deg, #1e3a8a 0%, #3b82f6 100%);
+      color: #f0f9ff;
+      border-radius: 8px;
+      padding: 2rem;
+      margin-bottom: 2rem;
+      font-size: 1rem;
+    }
+
+    .lens-technical-response .answer-section code {
+      background: rgba(255, 255, 255, 0.1);
+      padding: 0.2rem 0.4rem;
+      border-radius: 3px;
+      font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+      font-size: 0.9em;
+    }
+
+    .lens-technical-response .answer-section pre {
+      background: rgba(0, 0, 0, 0.3);
+      padding: 1rem;
+      border-radius: 4px;
+      overflow-x: auto;
+      margin: 1rem 0;
+    }
+
+    .lens-technical-response .answer-section pre code {
+      background: transparent;
+      padding: 0;
+    }
+
+    .lens-technical-response .sources-section h3 {
+      color: #1e3a8a;
+      font-weight: 600;
+      margin-bottom: 1.5rem;
+    }
+
+    .lens-technical-response .sources-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
+      gap: 1.5rem;
+    }
+
+    .lens-technical-response .source-card {
+      background: #f8fafc;
+      border: 1px solid #e2e8f0;
+      border-radius: 6px;
+      padding: 1.5rem;
+      transition: all 0.3s ease;
+    }
+
+    .lens-technical-response .source-card:hover {
+      border-color: #3b82f6;
+      box-shadow: 0 4px 12px rgba(59, 130, 246, 0.15);
+      transform: translateY(-2px);
+    }
+
+    .lens-technical-response .tech-citation .citation-header {
+      display: flex;
+      align-items: baseline;
+      gap: 0.75rem;
+      margin-bottom: 0.75rem;
+    }
+
+    .lens-technical-response .citation-number {
+      background: #3b82f6;
+      color: white;
+      padding: 0.2rem 0.5rem;
+      border-radius: 3px;
+      font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+      font-size: 0.85rem;
+      font-weight: normal;
+    }
+
+    .lens-technical-response .citation-title {
+      color: #1e3a8a;
+      font-size: 1rem;
+    }
+
+    .lens-technical-response .citation-section {
+      margin-bottom: 0.75rem;
+      font-size: 0.9rem;
+    }
+
+    .lens-technical-response .section-label {
+      color: #64748b;
+      font-weight: 500;
+    }
+
+    .lens-technical-response .citation-section code {
+      background: #e0e7ff;
+      color: #3730a3;
+      padding: 0.1rem 0.4rem;
+      border-radius: 3px;
+      font-size: 0.85rem;
+    }
+
+    .lens-technical-response .citation-excerpt {
+      background: #1e293b;
+      color: #e2e8f0;
+      padding: 1rem;
+      border-radius: 4px;
+      margin: 0.75rem 0;
+      overflow-x: auto;
+      font-size: 0.85rem;
+    }
+
+    .lens-technical-response .citation-excerpt code {
+      font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+      background: transparent;
+      color: inherit;
+    }
+
+    .lens-technical-response .citation-link {
+      color: #3b82f6;
+      text-decoration: none;
+      font-weight: 500;
+      font-size: 0.9rem;
+      display: inline-flex;
+      align-items: center;
+      gap: 0.25rem;
+    }
+
+    .lens-technical-response .citation-link:hover {
+      text-decoration: underline;
+    }
+
+    /* Dark mode */
+    [data-theme="dark"] .lens-technical-response .source-card {
+      background: #1e293b;
+      border-color: #334155;
+    }
+
+    [data-theme="dark"] .lens-technical-response .citation-title {
+      color: #93c5fd;
+    }
+
+    [data-theme="dark"] .lens-technical-response .citation-section code {
+      background: #1e3a8a;
+      color: #bfdbfe;
+    }
+
+# Technical-focused defaults
+defaults:
+  retrieval:
+    top_k: 12
+    min_similarity: 0.35
+    use_reranking: false
+
+  presentation:
+    show_excerpts: true
+    excerpt_length: 300        # Longer excerpts for code context
+    show_publish_dates: false
+    show_authors: false
+    enable_related_articles: true
+
+  citation:
+    style: technical
+    show_page_numbers: false
+    show_confidence: false
+    max_citations: 12
+
+  response:
+    intro_enabled: true
+    summary_enabled: true
+    conclusion_enabled: false
+    max_length: 2500
+    use_markdown: true
+
+  features:
+    enable_query_expansion: true
+    enable_entity_boost: true  # Boost API names, class names
+    enable_freshness_boost: false  # Stable docs preferred
+    detailed_logging: false
+
+tags:
+  - technical
+  - documentation
+  - api
+  - code

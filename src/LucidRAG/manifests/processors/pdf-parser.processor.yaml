@@ -1,0 +1,98 @@
+# PDF Parser Processor - Extracts text from PDF documents
+name: pdf_parser
+display_name: PDF Parser
+description: Extracts text, metadata, and structure from PDF documents
+version: 1.0.0
+priority: 100
+enabled: true
+
+taxonomy:
+  kind: parser
+  stage: preprocessing
+  determinism: deterministic
+  persistence: direct_write
+
+input:
+  mime_types:
+    - application/pdf
+  file_extensions:
+    - .pdf
+  accepts:
+    - document.binary
+    - document.pdf
+  max_file_size: 104857600  # 100 MB
+
+output:
+  produces:
+    - document.text
+    - document.metadata
+    - document.structure
+  metadata:
+    - title
+    - author
+    - creation_date
+    - page_count
+    - language
+  signals:
+    - key: processor.pdf.pages_extracted
+      entity_type: number
+      salience: 0.8
+    - key: processor.pdf.ocr_used
+      entity_type: boolean
+      salience: 0.6
+
+capabilities:
+  batch_processing: true
+  streaming: false
+  ocr: true
+  table_extraction: true
+  image_extraction: true
+  metadata_extraction: true
+
+defaults:
+  # Parsing parameters
+  parsing:
+    extract_text: true
+    extract_images: false
+    extract_tables: true
+    preserve_layout: false
+    use_ocr_fallback: true
+
+  # OCR configuration
+  ocr:
+    enabled: true
+    language: eng
+    confidence_threshold: 0.7
+    dpi: 300
+
+  # Quality parameters
+  quality:
+    min_text_length: 10
+    skip_blank_pages: true
+    remove_headers_footers: false
+
+  # Chunking configuration (for downstream)
+  chunking:
+    enabled: false  # Handled by separate chunker
+    chunk_size: 1000
+    chunk_overlap: 200
+
+  timing:
+    timeout_ms: 60000  # 1 minute per PDF
+    cache_ttl_seconds: 86400  # Cache for 24h
+
+  features:
+    enable_cache: true
+    parallel_page_processing: true
+    detailed_logging: false
+
+  parameters:
+    max_pages: 1000
+    extract_bookmarks: true
+    extract_annotations: false
+
+tags:
+  - parser
+  - pdf
+  - document-processing
+  - preprocessing

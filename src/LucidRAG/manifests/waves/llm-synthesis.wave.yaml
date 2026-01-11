@@ -1,0 +1,131 @@
+# LLM Synthesis Wave - Answer generation
+name: llm_synthesis
+display_name: LLM Synthesis
+description: Generates final answer using LLM with retrieved context
+version: 1.0.0
+priority: 50
+enabled: true
+
+taxonomy:
+  kind: synthesizer
+  determinism: probabilistic
+  persistence: direct_write
+
+input:
+  accepts:
+    - rag.query
+    - rag.ranked_results
+    - rag.context
+  required_signals:
+    - query.text
+    - retrieval.rrf.completed
+    - context.formatted
+  optional_signals:
+    - lens.system_prompt
+    - query.clarified
+    - query.decomposed
+
+output:
+  produces:
+    - rag.answer
+    - rag.citations
+  signals:
+    - key: synthesis.llm.answer
+      entity_type: string
+      salience: 1.0
+    - key: synthesis.llm.confidence
+      entity_type: number
+      salience: 0.9
+    - key: synthesis.llm.tokens_used
+      entity_type: number
+      salience: 0.5
+
+triggers:
+  requires:
+    - signal: retrieval.rrf.completed
+    - signal: context.formatted
+  skip_when:
+    - synthesis.cache_hit
+
+emits:
+  on_start:
+    - wave.llm_synthesis.started
+
+  on_complete:
+    - key: synthesis.llm.answer
+      type: string
+    - key: synthesis.llm.confidence
+      type: number
+      confidence_range: [0.0, 1.0]
+    - key: synthesis.llm.tokens_used
+      type: number
+    - key: synthesis.llm.completed
+      type: boolean
+
+  on_failure:
+    - wave.llm_synthesis.failed
+
+budget:
+  max_duration: "00:00:30.000"  # 30 second max
+  max_tokens: 4000
+  max_cost: 0.05  # 5 cents per request max
+
+defaults:
+  # LLM configuration
+  llm:
+    model: phi4                   # Default model (overridden by config)
+    temperature: 0.1              # Low for consistency
+    max_output_tokens: 2000
+    top_p: 0.95
+    frequency_penalty: 0.0
+    presence_penalty: 0.0
+
+  # AUTO CONTEXT SIZE MANAGEMENT - ALL CONFIGURABLE
+  context:
+    auto_detect_size: true        # Detect model context window from Ollama API
+    fallback_context_size: 4096
+    reserve_output_tokens: 2000
+    avg_tokens_per_source: 300    # Adjust based on actual token counts
+    # Formula: max_sources = (context_size - reserve_output_tokens) / avg_tokens_per_source
+    # Values calculated at runtime, not hardcoded
+
+  # Prompt engineering
+  prompt:
+    use_lens_template: true
+    include_source_count: true
+    include_collection_info: true
+    max_context_length: 8000
+
+  # Response formatting
+  response:
+    max_length: 2000
+    include_citations: true
+    citation_style: numbered
+    use_markdown: true
+
+  # Caching
+  caching:
+    enable_cache: true
+    cache_ttl_seconds: 3600
+    cache_by_query_hash: true
+
+  timing:
+    timeout_ms: 30000
+    streaming_enabled: false
+
+  features:
+    enable_query_expansion: true
+    enable_self_correction: false
+    enable_source_verification: true
+    detailed_logging: true
+
+  parameters:
+    max_retries: 2
+    retry_delay_ms: 1000
+    fallback_to_cached: true
+
+tags:
+  - synthesis
+  - llm
+  - expensive
+  - stage-3

@@ -1,0 +1,237 @@
+# Legal Lens - Inherits from blog but with formal tone and stricter policies
+name: legal
+inherits: blog  # Inherit all settings from blog lens
+display_name: Legal Documents
+description: Formal presentation for legal documents with strict citation requirements
+version: 1.0.0
+author: LucidRAG
+priority: 90
+enabled: true
+
+taxonomy:
+  domain: legal
+  style: formal
+  audience: expert
+
+# Override scoring to favor exact matches and recent documents
+scoring:
+  dense_weight: 0.25
+  bm25_weight: 0.40        # Higher BM25 for exact legal terminology
+  salience_weight: 0.15
+  freshness_weight: 0.20   # Recent case law matters
+
+# Override templates with formal legal style
+templates:
+  system_prompt: |
+    You are a legal research assistant providing formal, precise answers based on legal documents.
+
+    **Critical Requirements:**
+    1. **Cite ALL claims** - Every factual statement MUST have a citation
+    2. **Use precise legal terminology** - Be exact and unambiguous
+    3. **Acknowledge limitations** - If information is incomplete, state clearly
+    4. **No legal advice** - Provide information only, not recommendations
+    5. **Format citations properly** - Use standard legal citation format
+
+    **Context:**
+    - Collection: {{ collection_name }}
+    - Description: {{ collection_description }}
+    - Available sources: {{ source_count }}
+
+    **Response Format:**
+    - Opening: Directly answer the question
+    - Body: Present relevant legal information with citations
+    - Closing: Note any limitations or gaps in coverage
+
+  citation: |
+    <div class="legal-citation">
+      <div class="citation-header">
+        <span class="citation-number">[{{ sequence_number }}]</span>
+        <strong class="citation-title">{{ title }}</strong>
+      </div>
+      <div class="citation-meta">
+        {% if author %}<span class="citation-author">{{ author }}</span>{% endif %}
+        {% if publish_date %}<span class="citation-date">({{ publish_date | date: "%Y" }})</span>{% endif %}
+        {% if page_or_section %}<span class="citation-page">at {{ page_or_section }}</span>{% endif %}
+      </div>
+      <p class="citation-excerpt">{{ excerpt }}</p>
+      <a href="{{ url }}" class="citation-link">View Document →</a>
+    </div>
+
+  response: |
+    <div class="lens-legal-response">
+      <div class="answer-section">
+        {{ answer }}
+      </div>
+
+      {% if sources.size > 0 %}
+      <div class="sources-section">
+        <h3>⚖️ Legal Sources</h3>
+        <div class="sources-list">
+          {% for source in sources %}
+            {{ source | render_citation }}
+          {% endfor %}
+        </div>
+      </div>
+      {% endif %}
+
+      <div class="disclaimer">
+        <strong>Disclaimer:</strong> This is informational content only and does not constitute legal advice.
+        Consult a qualified attorney for specific legal guidance.
+      </div>
+    </div>
+
+# Override styles with formal legal theme
+styles:
+  inline_css: |
+    /* Legal Lens Styles - Formal and Professional */
+    .lens-legal-response {
+      font-family: 'Georgia', 'Times New Roman', serif;
+      line-height: 1.8;
+      color: #1a1a1a;
+    }
+
+    .lens-legal-response .answer-section {
+      background: linear-gradient(135deg, #2c3e50 0%, #34495e 100%);
+      color: #ecf0f1;
+      border-left: 4px solid #c0a062;
+      padding: 2rem;
+      margin-bottom: 2rem;
+      font-size: 1.05rem;
+    }
+
+    .lens-legal-response .sources-section h3 {
+      color: #2c3e50;
+      border-bottom: 2px solid #c0a062;
+      padding-bottom: 0.5rem;
+      margin-bottom: 1.5rem;
+      font-weight: 600;
+    }
+
+    .lens-legal-response .sources-list {
+      display: flex;
+      flex-direction: column;
+      gap: 1.5rem;
+    }
+
+    .lens-legal-response .legal-citation {
+      background: #f8f9fa;
+      border: 1px solid #dee2e6;
+      border-left: 3px solid #c0a062;
+      padding: 1.5rem;
+      border-radius: 4px;
+    }
+
+    .lens-legal-response .citation-header {
+      display: flex;
+      align-items: baseline;
+      gap: 0.75rem;
+      margin-bottom: 0.5rem;
+    }
+
+    .lens-legal-response .citation-number {
+      color: #c0a062;
+      font-weight: bold;
+      font-size: 0.95rem;
+    }
+
+    .lens-legal-response .citation-title {
+      color: #2c3e50;
+      font-size: 1.05rem;
+    }
+
+    .lens-legal-response .citation-meta {
+      display: flex;
+      gap: 1rem;
+      margin-bottom: 0.75rem;
+      font-size: 0.9rem;
+      color: #6c757d;
+      font-style: italic;
+    }
+
+    .lens-legal-response .citation-excerpt {
+      color: #495057;
+      margin: 1rem 0;
+      padding-left: 1rem;
+      border-left: 2px solid #dee2e6;
+      line-height: 1.7;
+    }
+
+    .lens-legal-response .citation-link {
+      color: #2c3e50;
+      text-decoration: none;
+      font-weight: 500;
+      font-size: 0.9rem;
+    }
+
+    .lens-legal-response .citation-link:hover {
+      color: #c0a062;
+      text-decoration: underline;
+    }
+
+    .lens-legal-response .disclaimer {
+      background: #fff3cd;
+      border: 1px solid #ffc107;
+      border-radius: 4px;
+      padding: 1rem;
+      margin-top: 2rem;
+      font-size: 0.9rem;
+      color: #856404;
+    }
+
+    /* Dark mode */
+    [data-theme="dark"] .lens-legal-response {
+      color: #e0e0e0;
+    }
+
+    [data-theme="dark"] .lens-legal-response .legal-citation {
+      background: #2d3748;
+      border-color: #4a5568;
+    }
+
+    [data-theme="dark"] .lens-legal-response .citation-title {
+      color: #e2e8f0;
+    }
+
+# Stricter policies for legal content
+policies:
+  no_pii: true
+  require_citations_for_claims: true
+  max_response_length: 3000
+  custom_rules:
+    - "Every factual claim must be supported by a citation"
+    - "Use precise legal terminology without simplification"
+    - "Acknowledge when information is incomplete or ambiguous"
+    - "Never provide legal advice or recommendations"
+    - "Always include the standard legal disclaimer"
+
+# Override defaults for legal context
+defaults:
+  retrieval:
+    top_k: 15                    # More sources for comprehensive coverage
+    min_similarity: 0.4          # Higher threshold for relevance
+    use_reranking: true          # Rerank for best matches
+
+  citation:
+    style: legal
+    show_page_numbers: true      # Critical for legal citations
+    show_confidence: false
+    max_citations: 15
+
+  response:
+    intro_enabled: false         # Direct answers only
+    summary_enabled: true
+    conclusion_enabled: true
+    max_length: 3000
+    use_markdown: true
+
+  features:
+    enable_query_expansion: false  # Precise queries only
+    enable_entity_boost: false
+    enable_freshness_boost: true
+    detailed_logging: true
+
+tags:
+  - legal
+  - formal
+  - case-law
+  - regulatory

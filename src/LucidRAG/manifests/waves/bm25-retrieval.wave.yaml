@@ -1,0 +1,88 @@
+# BM25 Retrieval Wave - Keyword-based search
+name: bm25_retrieval
+display_name: BM25 Keyword Search
+description: Retrieves documents using BM25 keyword matching algorithm
+version: 1.0.0
+priority: 100
+enabled: true
+
+taxonomy:
+  kind: retriever
+  determinism: deterministic
+  persistence: ephemeral
+
+input:
+  accepts:
+    - rag.query
+    - text.analyzed
+  required_signals:
+    - query.text
+    - query.tokens
+  optional_signals:
+    - query.collection_id
+    - query.filters
+
+output:
+  produces:
+    - rag.search_results
+    - rag.ranked_segments
+  signals:
+    - key: retrieval.bm25.score
+      entity_type: number
+      salience: 0.85
+    - key: retrieval.bm25.result_count
+      entity_type: number
+      salience: 0.7
+
+triggers:
+  requires:
+    - signal: query.tokens
+      condition: "!= null"
+  skip_when:
+    - retrieval.early_exit
+
+emits:
+  on_complete:
+    - key: retrieval.bm25.score
+      type: number
+    - key: retrieval.bm25.result_count
+      type: number
+    - key: retrieval.bm25.completed
+      type: boolean
+
+defaults:
+  retrieval:
+    top_k: 100
+    min_score: 0.0
+
+  # BM25 parameters
+  bm25:
+    k1: 1.5              # Term frequency saturation parameter
+    b: 0.75              # Length normalization parameter
+    delta: 0.0           # Lower bounding term (BM25+)
+
+  scoring:
+    base_weight: 1.0
+    exact_match_boost: 1.5
+    proximity_boost: 1.2
+
+  timing:
+    timeout_ms: 500
+    cache_ttl_seconds: 600
+
+  features:
+    enable_cache: true
+    enable_stemming: true
+    enable_stopwords: true
+    detailed_logging: false
+
+  parameters:
+    tokenizer: standard
+    case_sensitive: false
+    remove_stopwords: true
+
+tags:
+  - retrieval
+  - keyword
+  - bm25
+  - stage-0

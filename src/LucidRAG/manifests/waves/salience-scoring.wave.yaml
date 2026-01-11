@@ -1,0 +1,81 @@
+# Salience Scoring Wave - Salient term matching
+name: salience_scoring
+display_name: Salience Scoring
+description: Scores documents based on salient term matching
+version: 1.0.0
+priority: 90
+enabled: true
+
+taxonomy:
+  kind: ranker
+  determinism: deterministic
+  persistence: cached
+
+input:
+  accepts:
+    - rag.query
+    - rag.search_results
+  required_signals:
+    - query.salient_terms
+    - retrieval.dense.completed
+  optional_signals:
+    - retrieval.bm25.completed
+
+output:
+  produces:
+    - rag.salience_scores
+  signals:
+    - key: retrieval.salience.score
+      entity_type: number
+      salience: 0.8
+    - key: retrieval.salience.term_matches
+      entity_type: number
+      salience: 0.6
+
+triggers:
+  requires:
+    - signal: query.salient_terms
+      condition: "!= null"
+  skip_when:
+    - retrieval.early_exit
+
+emits:
+  on_complete:
+    - key: retrieval.salience.score
+      type: number
+      confidence_range: [0.0, 1.0]
+    - key: retrieval.salience.term_matches
+      type: number
+    - key: retrieval.salience.completed
+      type: boolean
+
+defaults:
+  retrieval:
+    top_k: 100
+    min_term_matches: 1
+
+  scoring:
+    base_weight: 1.0
+    per_term_boost: 0.1
+    max_boost: 2.0
+    idf_weight: 0.5
+
+  timing:
+    timeout_ms: 200
+    cache_ttl_seconds: 1800
+
+  features:
+    enable_cache: true
+    use_idf_weighting: true
+    detailed_logging: false
+
+  parameters:
+    min_salient_term_score: 0.3
+    max_salient_terms: 20
+    term_position_weight: 0.1
+
+tags:
+  - retrieval
+  - salience
+  - ranking
+  - stage-1

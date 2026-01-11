@@ -8,6 +8,7 @@ using Mostlylucid.DocSummarizer.Images.Extensions;
 using Mostlylucid.DocSummarizer.Anthropic.Extensions;
 using Mostlylucid.DocSummarizer.OpenAI.Extensions;
 using Mostlylucid.DocSummarizer.Config;
+using Mostlylucid.Summarizer.Core.Extensions;
 using LucidRAG.Config;
 using LucidRAG.Core.Services;
 using LucidRAG.Core.Services.Caching;
@@ -121,6 +122,9 @@ builder.Services.AddDocSummarizer(builder.Configuration.GetSection("DocSummarize
 // DocSummarizer.Images - always add for image handling
 builder.Services.AddDocSummarizerImages(builder.Configuration.GetSection("Images"));
 
+// Pipeline registry for unified content processing (routes .gif, .png, etc. to ImagePipeline)
+builder.Services.AddPipelineRegistry();
+
 // LLM Backend selection based on configuration
 var llmBackend = builder.Configuration.GetValue<string>("DocSummarizer:LlmBackend") ?? "Ollama";
 switch (llmBackend.ToLowerInvariant())
@@ -151,8 +155,8 @@ builder.Services.AddHostedService<DemoContentSeeder>();
 builder.Services.AddSingleton<IWebCrawlerService, WebCrawlerService>();
 builder.Services.AddSingleton<IIngestionService, IngestionService>();
 
-// Lens system for customizable response formatting
-builder.Services.AddLensSystem(builder.Configuration);
+// YAML manifest-based lens system for customizable response formatting
+builder.Services.AddYamlLenses(builder.Configuration, useEmbedded: false);
 
 // PostgreSQL full-text search service (10-25x faster than C# BM25)
 // Only register for PostgreSQL databases (not SQLite)

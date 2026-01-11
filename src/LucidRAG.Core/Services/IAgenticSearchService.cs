@@ -104,10 +104,38 @@ public record SubQueryInfo(
     string Purpose,
     int Priority);
 
+/// <summary>
+/// Source citation with full signal transparency.
+/// Exposes all retrieval signals so lenses can present WHY each source was selected.
+/// CRITICAL: Uses segments/summaries intelligently - NEVER truncates long OCR text!
+/// </summary>
 public record SourceCitation(
     int Number,
     Guid DocumentId,
     string DocumentName,
     string SegmentId,
     string Text,
-    string? PageOrSection = null);
+    string? PageOrSection = null,
+    // Signal scores
+    double RrfScore = 0.0,
+    double DenseScore = 0.0,
+    double Bm25Score = 0.0,
+    double SalienceScore = 0.0,
+    double FreshnessScore = 0.0,
+    // Matching information
+    List<string>? MatchedSalientTerms = null,
+    List<string>? MatchedEntities = null,
+    List<string>? SignalExplanations = null,
+    // Metadata
+    string? Author = null,
+    string? PublishDate = null,
+    string? DocumentType = null,
+    Dictionary<string, object>? Metadata = null,
+    // SUMMARY/SEGMENT HANDLING - Prevent OCR text overload
+    string? ExtractiveSummary = null,      // BERT extractive summary
+    string? LlmSummary = null,             // LLM-generated summary
+    string TextType = "segment",           // segment | summary_extractive | summary_llm | full_text
+    int OriginalLength = 0,                // Original text length before summarization
+    bool IsOcrSource = false,              // True if from OCR (likely needs summarization)
+    int CharacterCount = 0                 // Actual character count of Text field
+);

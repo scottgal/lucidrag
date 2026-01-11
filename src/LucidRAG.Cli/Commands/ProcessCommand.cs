@@ -2,6 +2,7 @@ using System.CommandLine;
 using System.CommandLine.Parsing;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Mostlylucid.DocSummarizer.Services;
 using Mostlylucid.Summarizer.Core.Pipeline;
 using Spectre.Console;
 using LucidRAG.Cli.Services;
@@ -110,18 +111,21 @@ public static class ProcessCommand
             }
 
             // Expand file patterns and categorize by pipeline
-            var filesByPipeline = CategorizeFilesByPipeline(files, registry, forcePipeline);
+            var (filesByPipeline, unknownFiles) = CategorizeFilesByPipeline(files, registry, forcePipeline);
 
             // Show summary
-            ShowSummary(filesByPipeline);
+            ShowSummary(filesByPipeline, unknownFiles);
 
             if (dryRun)
             {
                 AnsiConsole.MarkupLine("\n[cyan]Dry run - no files will be processed[/]");
                 foreach (var (pipeline, pipelineFiles) in filesByPipeline.Where(kv => kv.Value.Count > 0))
                 {
-                    ShowFileList(pipeline?.Name ?? "Unknown", pipelineFiles,
-                        pipeline != null ? GetPipelineColor(pipeline.PipelineId) : Color.Red);
+                    ShowFileList(pipeline.Name, pipelineFiles, GetPipelineColor(pipeline.PipelineId));
+                }
+                if (unknownFiles.Count > 0)
+                {
+                    ShowFileList("Unknown", unknownFiles, Color.Red);
                 }
                 return;
             }
@@ -137,10 +141,11 @@ public static class ProcessCommand
             var totalFiles = 0;
             var totalFailed = 0;
 
-            foreach (var (pipeline, pipelineFiles) in filesByPipeline.Where(kv => kv.Key != null && kv.Value.Count > 0))
+            foreach (var (pipeline, pipelineFiles) in filesByPipeline.Where(kv => kv.Value.Count > 0))
             {
                 var (processed, chunks, failed) = await ProcessPipelineAsync(
-                    pipeline!,
+                    scope.ServiceProvider,
+                    pipeline,
                     pipelineFiles,
                     collectionId,
                     verbose,
@@ -152,7 +157,6 @@ public static class ProcessCommand
             }
 
             // Handle unknown files
-            var unknownFiles = filesByPipeline.FirstOrDefault(kv => kv.Key == null).Value ?? [];
             if (unknownFiles.Count > 0)
             {
                 AnsiConsole.MarkupLine($"\n[yellow]⚠ Skipped {unknownFiles.Count} files with no matching pipeline[/]");
@@ -195,12 +199,13 @@ public static class ProcessCommand
         AnsiConsole.Write(table);
     }
 
-    private static Dictionary<IPipeline?, List<string>> CategorizeFilesByPipeline(
+    private static (Dictionary<IPipeline, List<string>> ByPipeline, List<string> Unknown) CategorizeFilesByPipeline(
         string[] files,
         IPipelineRegistry registry,
         string? forcePipelineId)
     {
-        var result = new Dictionary<IPipeline?, List<string>>();
+        var result = new Dictionary<IPipeline, List<string>>();
+        var unknown = new List<string>();
         IPipeline? forcedPipeline = null;
 
         if (!string.IsNullOrEmpty(forcePipelineId) && forcePipelineId != "auto")
@@ -220,29 +225,31 @@ public static class ProcessCommand
             {
                 if (!File.Exists(file))
                 {
-                    AddToDict(result, null, file);
+                    unknown.Add(file);
                     continue;
                 }
 
                 var pipeline = forcedPipeline ?? registry.FindForFile(file);
-                AddToDict(result, pipeline, file);
+                if (pipeline == null)
+                {
+                    unknown.Add(file);
+                }
+                else
+                {
+                    if (!result.TryGetValue(pipeline, out var list))
+                    {
+                        list = [];
+                        result[pipeline] = list;
+                    }
+                    list.Add(file);
+                }
             }
         }
 
-        return result;
+        return (result, unknown);
     }
 
-    private static void AddToDict(Dictionary<IPipeline?, List<string>> dict, IPipeline? key, string value)
-    {
-        if (!dict.TryGetValue(key, out var list))
-        {
-            list = [];
-            dict[key] = list;
-        }
-        list.Add(value);
-    }
-
-    private static void ShowSummary(Dictionary<IPipeline?, List<string>> filesByPipeline)
+    private static void ShowSummary(Dictionary<IPipeline, List<string>> filesByPipeline, List<string> unknownFiles)
     {
         var table = new Table()
             .Border(TableBorder.Rounded)
@@ -250,14 +257,18 @@ public static class ProcessCommand
             .AddColumn("[bold]Pipeline[/]")
             .AddColumn("[bold]Files[/]");
 
-        foreach (var (pipeline, files) in filesByPipeline.OrderBy(kv => kv.Key?.Name ?? "zzz"))
+        foreach (var (pipeline, files) in filesByPipeline.OrderBy(kv => kv.Key.Name))
         {
             if (files.Count > 0)
             {
-                var name = pipeline?.Name ?? "[red]Unknown[/]";
-                var color = pipeline != null ? GetPipelineColor(pipeline.PipelineId) : Color.Red;
-                table.AddRow($"[{color}]{name}[/]", files.Count.ToString());
+                var color = GetPipelineColor(pipeline.PipelineId);
+                table.AddRow($"[{color}]{pipeline.Name}[/]", files.Count.ToString());
             }
+        }
+
+        if (unknownFiles.Count > 0)
+        {
+            table.AddRow("[red]Unknown[/]", unknownFiles.Count.ToString());
         }
 
         AnsiConsole.Write(table);
@@ -299,6 +310,7 @@ public static class ProcessCommand
     }
 
     private static async Task<(int processed, int chunks, int failed)> ProcessPipelineAsync(
+        IServiceProvider services,
         IPipeline pipeline,
         List<string> files,
         Guid? collectionId,
@@ -347,6 +359,15 @@ public static class ProcessCommand
                             if (verbose)
                             {
                                 AnsiConsole.MarkupLine($"  [green]✓[/] {Path.GetFileName(file)} - {result.Chunks.Count} chunks ({result.ProcessingTime.TotalMilliseconds:F0}ms)");
+
+                                // Show chunk content for images
+                                if (pipeline.PipelineId == "image")
+                                {
+                                    foreach (var chunk in result.Chunks.Take(3))
+                                    {
+                                        AnsiConsole.MarkupLine($"    [dim]{chunk.ContentType}: {chunk.Text.Substring(0, Math.Min(100, chunk.Text.Length))}...[/]");
+                                    }
+                                }
                             }
                         }
                         else

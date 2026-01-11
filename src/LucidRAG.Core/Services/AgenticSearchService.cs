@@ -12,6 +12,7 @@ using Mostlylucid.DocSummarizer.Services;
 using LucidRAG.Config;
 using LucidRAG.Data;
 using LucidRAG.Core.Services;
+using LucidRAG.Entities;
 using LucidRAG.Services.Sentinel;
 using LucidRAG.Services.Lenses;
 using LucidRAG.Lenses;

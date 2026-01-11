@@ -1,0 +1,123 @@
+# Document Summarizer Processor - BERT extractive + LLM abstractive summaries
+name: document_summarizer
+display_name: Document Summarizer
+description: Generates extractive (BERT) and abstractive (LLM) summaries for documents and segments
+version: 1.0.0
+priority: 70
+enabled: true
+
+taxonomy:
+  kind: enricher
+  stage: postprocessing
+  determinism: probabilistic  # LLM summaries are probabilistic
+  persistence: direct_write
+
+input:
+  mime_types:
+    - text/plain
+  file_extensions:
+    - .txt
+  accepts:
+    - document.text
+    - document.segments
+    - document.chunks
+
+output:
+  produces:
+    - document.summary_extractive
+    - document.summary_llm
+    - document.enriched
+  metadata:
+    - summary_type
+    - original_length
+    - summary_length
+    - compression_ratio
+  signals:
+    - key: processor.summarizer.summary_created
+      entity_type: boolean
+      salience: 0.7
+
+capabilities:
+  batch_processing: true
+  streaming: false
+  ocr: false
+  table_extraction: false
+  image_extraction: false
+  metadata_extraction: true
+
+# ============================================
+# DEFAULT CONFIGURATION - NO MAGIC NUMBERS
+# Override via appsettings.json: Processors:DocumentSummarizer:*
+# ============================================
+defaults:
+  # When to summarize
+  summarization:
+    min_length_for_summary: 500      # Only summarize if text > this length
+    max_length_without_summary: 2000 # Always summarize if text > this length
+    apply_to_ocr: true               # Always summarize OCR text
+    apply_to_segments: true          # Summarize individual segments
+    apply_to_documents: true         # Summarize full documents
+
+  # BERT Extractive Summarization
+  extractive:
+    enabled: true
+    model: "bert-extractive-summarizer"
+    num_sentences: 5                 # Target number of sentences
+    min_sentence_length: 10          # Minimum chars per sentence
+    max_sentences: 10                # Maximum sentences
+    compression_ratio: 0.3           # Target 30% of original length
+
+  # LLM Abstractive Summarization
+  llm:
+    enabled: true
+    model: phi4                      # Model for summarization
+    temperature: 0.3                 # Slightly higher for natural language
+    max_output_tokens: 500           # Summary length limit
+    prompt_template: |
+      Summarize the following text concisely, preserving key information:
+
+      {{ text }}
+
+      Provide a {{ target_length }}-word summary that captures the main points.
+
+  # Summary quality
+  quality:
+    min_summary_length: 50           # Reject summaries shorter than this
+    max_summary_length: 1000         # Cap summary length
+    preserve_entities: true          # Ensure entities are in summary
+    preserve_key_terms: true         # Ensure salient terms are in summary
+    validate_coherence: false        # LLM coherence check (expensive)
+
+  # Caching
+  caching:
+    cache_extractive_summaries: true
+    cache_llm_summaries: true
+    cache_ttl_seconds: 2592000       # 30 days
+
+  # Timing
+  timing:
+    timeout_extractive_ms: 5000
+    timeout_llm_ms: 15000
+    batch_size: 10
+    max_concurrent: 4
+
+  # Features
+  features:
+    enable_cache: true
+    parallel_processing: true
+    detailed_logging: false
+    emit_metrics: true
+
+  # Cost controls for LLM summaries
+  budget:
+    max_cost_per_summary: 0.005      # 0.5 cents per summary
+    daily_budget_dollars: 5.00
+    prefer_extractive_when_possible: true
+
+tags:
+  - summarizer
+  - enricher
+  - bert
+  - llm
+  - ocr-optimization
+  - postprocessing

@@ -1,0 +1,101 @@
+# Markdown Chunker Processor - Splits markdown into semantic chunks
+name: markdown_chunker
+display_name: Markdown Chunker
+description: Intelligently chunks markdown documents preserving semantic structure
+version: 1.0.0
+priority: 90
+enabled: true
+
+taxonomy:
+  kind: chunker
+  stage: processing
+  determinism: deterministic
+  persistence: direct_write
+
+input:
+  mime_types:
+    - text/markdown
+    - text/x-markdown
+  file_extensions:
+    - .md
+    - .markdown
+  accepts:
+    - document.text
+    - document.markdown
+  max_file_size: 10485760  # 10 MB
+
+output:
+  produces:
+    - document.chunks
+    - document.segments
+  metadata:
+    - chunk_count
+    - avg_chunk_size
+    - heading_structure
+  signals:
+    - key: processor.chunker.chunks_created
+      entity_type: number
+      salience: 0.8
+
+capabilities:
+  batch_processing: true
+  streaming: false
+  ocr: false
+  table_extraction: false
+  image_extraction: false
+  metadata_extraction: true
+
+# ============================================
+# DEFAULT CONFIGURATION - NO MAGIC NUMBERS
+# Override via appsettings.json: Processors:MarkdownChunker:*
+# ============================================
+defaults:
+  # Chunking strategy
+  chunking:
+    strategy: semantic          # semantic | fixed_size | heading_based
+    target_chunk_size: 1000     # Target characters per chunk
+    min_chunk_size: 100         # Minimum chunk size
+    max_chunk_size: 2000        # Maximum chunk size
+    chunk_overlap: 200          # Characters of overlap between chunks
+
+  # Semantic chunking parameters
+  semantic:
+    respect_headings: true      # Don't split across headings
+    respect_code_blocks: true   # Keep code blocks intact
+    respect_lists: true         # Keep lists together
+    respect_tables: true        # Keep tables together
+    heading_levels: [1, 2, 3]   # Which heading levels to respect
+
+  # Quality parameters
+  quality:
+    min_text_length: 50
+    skip_empty_chunks: true
+    remove_excessive_whitespace: true
+    preserve_formatting: true
+
+  # Metadata extraction
+  metadata:
+    extract_headings: true
+    extract_code_language: true
+    extract_links: true
+    extract_frontmatter: true
+
+  timing:
+    timeout_ms: 10000
+    cache_ttl_seconds: 3600
+
+  features:
+    enable_cache: true
+    parallel_processing: false
+    detailed_logging: false
+
+  parameters:
+    preserve_markdown_formatting: true
+    extract_heading_hierarchy: true
+    code_block_min_lines: 3     # Minimum lines to keep code blocks intact
+
+tags:
+  - chunker
+  - markdown
+  - semantic
+  - processing

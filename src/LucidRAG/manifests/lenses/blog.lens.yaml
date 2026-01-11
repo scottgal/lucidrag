@@ -1,0 +1,305 @@
+# Blog Lens - Optimized for blog content presentation
+name: blog
+display_name: Blog Articles
+description: Optimized for blog content with rich article formatting and conversational tone
+version: 1.0.0
+author: lucidRAG
+priority: 100
+enabled: true
+
+taxonomy:
+  domain: blog
+  style: conversational
+  audience: general
+
+# RRF scoring weights (must sum to 1.0)
+scoring:
+  dense_weight: 0.3
+  bm25_weight: 0.3
+  salience_weight: 0.2
+  freshness_weight: 0.2
+  rrf_k: 60
+  max_results: 10
+  min_score: null
+
+  # Fine-grained signal weighting for precise tuning
+  signal_weights:
+    # Boost recent blog posts
+    "retrieval.freshness.*":
+      weight: 1.0
+      boost: 1.5
+      decay: exponential
+
+    # Prioritize title matches
+    "retrieval.title_match":
+      weight: 1.0
+      boost: 2.0
+      min_threshold: 0.7
+
+    # Entity mentions (for blog topics)
+    "entity.technology.*":
+      weight: 1.0
+      boost: 1.3
+    "entity.person.*":
+      weight: 1.0
+      boost: 1.2
+
+    # Engagement signals (future)
+    "engagement.views":
+      weight: 0.5
+      normalize: true
+    "engagement.comments":
+      weight: 0.3
+
+  # Boost specific entity types
+  entity_boosts:
+    technology: 1.3
+    framework: 1.4
+    tutorial: 1.5
+    howto: 1.4
+    comparison: 1.2
+
+  # Document type preferences
+  document_type_weights:
+    markdown: 1.2
+    html: 1.0
+    pdf: 0.8
+
+# Templates - inline Liquid templates (highly configurable!)
+templates:
+  # System prompt - CONCISE, TOKEN-EFFICIENT, USES SUMMARIES FOR LONG SOURCES
+  system_prompt: |
+    Q: {{ query }}
+    {% if salient_terms %}Terms: {{ salient_terms | join: ", " }}{% endif %}
+    {% if entities %}Entities: {{ entities | join: ", " }}{% endif %}
+
+    SOURCES ({{ source_count }}):
+    {% for source in sources %}
+    [{{ source.number }}] {{ source.title }}{% if source.is_ocr_source %} [OCR]{% endif %}
+    RRF={{ source.rrf_score | round: 2 }} Dense={{ source.dense_score | round: 2 }} BM25={{ source.bm25_score | round: 2 }} Sal={{ source.salience_score | round: 2 }}
+    {% if source.matched_salient_terms %}Match: {{ source.matched_salient_terms | join: "," }}{% endif %}
+    {% if source.text_type == "summary_llm" %}[LLM Summary of {{ source.original_length }} chars]{% elsif source.text_type == "summary_extractive" %}[BERT Summary of {{ source.original_length }} chars]{% endif %}
+    {{ source.smart_text }}
+    ---
+    {% endfor %}
+
+    Answer conversationally using sources. Cite as [1],[2]. Be engaging.
+
+  # Citation format template
+  citation: |
+    <div class="blog-citation">
+      <h4 class="citation-title">
+        <a href="{{ url }}" target="_blank">{{ title }}</a>
+      </h4>
+      <div class="citation-meta">
+        {% if author %}<span class="author">by {{ author }}</span>{% endif %}
+        {% if publish_date %}<span class="date">{{ publish_date | date: "%B %d, %Y" }}</span>{% endif %}
+      </div>
+      <p class="citation-excerpt">{{ excerpt }}</p>
+      <a href="{{ url }}" class="read-more">Read full article →</a>
+    </div>
+
+  # Response wrapper template
+  response: |
+    <div class="lens-blog-response">
+      <div class="answer-section">
+        {{ answer }}
+      </div>
+
+      {% if sources.size > 0 %}
+      <div class="sources-section">
+        <h3>📚 Related Articles</h3>
+        <div class="sources-grid">
+          {% for source in sources %}
+            <div class="source-card">
+              {{ source | render_citation }}
+            </div>
+          {% endfor %}
+        </div>
+      </div>
+      {% endif %}
+    </div>
+
+  # Optional user message rewrite template
+  user_prompt: null
+
+# Styles configuration - inline CSS (highly configurable!)
+styles:
+  css_file: null
+  inline_css: |
+    /* Blog Lens Styles */
+    .lens-blog-response {
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      line-height: 1.7;
+    }
+
+    .lens-blog-response .answer-section {
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+      border-radius: 12px;
+      padding: 2rem;
+      margin-bottom: 2rem;
+      box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    }
+
+    .lens-blog-response .sources-section {
+      margin-top: 2rem;
+    }
+
+    .lens-blog-response .sources-section h3 {
+      font-size: 1.5rem;
+      font-weight: 700;
+      margin-bottom: 1.5rem;
+      color: #1f2937;
+    }
+
+    .lens-blog-response .sources-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+      gap: 1.5rem;
+    }
+
+    .lens-blog-response .source-card {
+      background: white;
+      border: 1px solid #e5e7eb;
+      border-radius: 8px;
+      padding: 1.5rem;
+      transition: transform 0.3s ease, box-shadow 0.3s ease;
+    }
+
+    .lens-blog-response .source-card:hover {
+      transform: translateY(-4px);
+      box-shadow: 0 8px 16px rgba(0, 0, 0, 0.15);
+    }
+
+    .lens-blog-response .blog-citation h4 {
+      margin: 0 0 0.5rem 0;
+      font-size: 1.1rem;
+    }
+
+    .lens-blog-response .blog-citation a {
+      color: #667eea;
+      text-decoration: none;
+      font-weight: 600;
+    }
+
+    .lens-blog-response .blog-citation a:hover {
+      text-decoration: underline;
+    }
+
+    .lens-blog-response .citation-meta {
+      display: flex;
+      gap: 1rem;
+      margin-bottom: 0.75rem;
+      font-size: 0.875rem;
+      color: #6b7280;
+    }
+
+    .lens-blog-response .citation-excerpt {
+      color: #4b5563;
+      margin-bottom: 1rem;
+      line-height: 1.6;
+    }
+
+    .lens-blog-response .read-more {
+      color: #667eea;
+      font-weight: 500;
+      text-decoration: none;
+      font-size: 0.9rem;
+    }
+
+    .lens-blog-response .read-more:hover {
+      text-decoration: underline;
+    }
+
+    /* Dark mode support */
+    [data-theme="dark"] .lens-blog-response .sources-section h3 {
+      color: #f3f4f6;
+    }
+
+    [data-theme="dark"] .lens-blog-response .source-card {
+      background: #1f2937;
+      border-color: #374151;
+    }
+
+    [data-theme="dark"] .lens-blog-response .citation-meta {
+      color: #9ca3af;
+    }
+
+    [data-theme="dark"] .lens-blog-response .citation-excerpt {
+      color: #d1d5db;
+    }
+  theme: auto
+
+# Policies/guardrails
+policies:
+  no_pii: false
+  no_refunds: false
+  require_citations_for_claims: false
+  family_friendly: false
+  max_response_length: null
+  custom_rules: []
+
+# ============================================
+# DEFAULT CONFIGURATION - NO MAGIC NUMBERS
+# Override via appsettings.json: Lenses:Blog:*
+# ============================================
+defaults:
+  # Retrieval parameters
+  retrieval:
+    top_k: 10
+    min_similarity: 0.3
+    diversity_threshold: 0.85
+    use_reranking: false
+
+  # SOURCE TEXT HANDLING - Prevent OCR text overload!
+  source_text:
+    max_chars_per_source: 1000        # Max characters before using summary
+    prefer_summary_when_available: true
+    prefer_llm_over_extractive: true
+    use_segments_not_full_docs: true  # ALWAYS use segments, never full documents
+    min_chars_for_summary: 500        # Require summary if source > this length
+
+  # Presentation parameters
+  presentation:
+    show_excerpts: true
+    excerpt_length: 200
+    show_publish_dates: true
+    show_authors: true
+    show_read_time: true
+    enable_related_articles: true
+
+  # Citation formatting
+  citation:
+    style: numbered
+    show_page_numbers: false
+    show_confidence: false
+    max_citations: 10
+    group_by_document: false
+
+  # Response formatting
+  response:
+    intro_enabled: true
+    summary_enabled: true
+    conclusion_enabled: false
+    max_length: 2000
+    use_markdown: true
+
+  # Timing configuration
+  timing:
+    max_synthesis_ms: 30000
+    max_retrieval_ms: 5000
+    cache_ttl_seconds: 3600
+
+  # Feature flags
+  features:
+    enable_query_expansion: true
+    enable_entity_boost: true
+    enable_freshness_boost: true
+    enable_community_summaries: false
+    detailed_logging: false
+
+tags:
+  - blog
+  - conversational
+  - article-formatting

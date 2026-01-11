@@ -1,4 +1,5 @@
 using Microsoft.Extensions.Logging;
+using OpenCvSharp;
 using SixLabors.ImageSharp;
 using SixLabors.ImageSharp.PixelFormats;
 
@@ -185,9 +186,176 @@ public class SceneDetectionService
     }
 
     /// <summary>
+    /// Detect UNIQUE text frames using ML-detected bounding boxes and OpenCV histogram comparison.
+    /// Only processes frames with actually different text content.
+    /// Uses OpenCV's Cv2.CompareHist for industry-standard perceptual similarity.
+    /// </summary>
+    /// <param name="image">The animated image</param>
+    /// <param name="textBoundingBoxes">ML-detected text bounding boxes from AutoRoutingWave</param>
+    /// <param name="maxFrames">Maximum unique frames to return</param>
+    /// <param name="similarityThreshold">Histogram correlation threshold (0.85 = 85% similar)</param>
+    /// <returns>Frame indices with unique text content</returns>
+    public List<int> DetectUniqueTextFrames(
+        Image<Rgba32> image,
+        List<OpenCvSharp.Rect> textBoundingBoxes,
+        int maxFrames = 4,
+        double similarityThreshold = 0.85)
+    {
+        var frameCount = image.Frames.Count;
+        if (frameCount <= 1 || textBoundingBoxes.Count == 0)
+            return new List<int> { 0 };
+
+        var uniqueFrames = new List<int> { 0 }; // Always include first frame
+        List<Mat>? prevHistograms = null;
+
+        for (int i = 0; i < frameCount && uniqueFrames.Count < maxFrames; i++)
+        {
+            using var frame = image.Frames.CloneFrame(i);
+
+            // Compute OpenCV histograms for text regions
+            var currentHistograms = ComputeTextRegionHistograms(frame, textBoundingBoxes);
+
+            if (prevHistograms != null)
+            {
+                // Compare histograms using OpenCV correlation
+                var similarity = CompareOpenCvHistograms(prevHistograms, currentHistograms);
+
+                if (similarity < similarityThreshold) // Different text content
+                {
+                    uniqueFrames.Add(i);
+                    _logger?.LogDebug("Unique text frame {Frame} (correlation={Sim:F3})", i, similarity);
+
+                    // Dispose previous histograms and store current
+                    foreach (var hist in prevHistograms) hist.Dispose();
+                    prevHistograms = currentHistograms;
+                }
+                else
+                {
+                    // Frames are similar, dispose current histograms
+                    foreach (var hist in currentHistograms) hist.Dispose();
+                }
+            }
+            else
+            {
+                prevHistograms = currentHistograms;
+            }
+        }
+
+        // Clean up final histograms
+        if (prevHistograms != null)
+        {
+            foreach (var hist in prevHistograms) hist.Dispose();
+        }
+
+        // Always include last frame if not already included
+        if (!uniqueFrames.Contains(frameCount - 1) && uniqueFrames.Count < maxFrames)
+            uniqueFrames.Add(frameCount - 1);
+
+        return uniqueFrames;
+    }
+
+    /// <summary>
+    /// Compute OpenCV grayscale histograms for text regions.
+    /// One histogram per text bounding box for precise comparison.
+    /// Uses 256 bins (0-255 luminance range) with normalization.
+    /// </summary>
+    private List<Mat> ComputeTextRegionHistograms(
+        Image<Rgba32> frame,
+        List<OpenCvSharp.Rect> textBoxes)
+    {
+        var histograms = new List<Mat>();
+
+        foreach (var box in textBoxes)
+        {
+            // Convert ImageSharp text region to OpenCV Mat
+            using var mat = ConvertTextRegionToGrayscaleMat(frame, box);
+
+            // Compute grayscale histogram (256 bins, 0-255 range)
+            var hist = new Mat();
+            Cv2.CalcHist(
+                images: new[] { mat },
+                channels: new[] { 0 },
+                mask: null,
+                hist: hist,
+                dims: 1,
+                histSize: new[] { 256 },
+                ranges: new[] { new Rangef(0, 256) });
+
+            // Normalize histogram for consistent comparison (0-1 range)
+            Cv2.Normalize(hist, hist, 0, 1, NormTypes.MinMax);
+
+            histograms.Add(hist);
+        }
+
+        return histograms;
+    }
+
+    /// <summary>
+    /// Convert ImageSharp text region to OpenCV Mat (grayscale).
+    /// Clamps box to frame bounds to avoid out-of-range errors.
+    /// </summary>
+    private Mat ConvertTextRegionToGrayscaleMat(Image<Rgba32> frame, OpenCvSharp.Rect box)
+    {
+        // Clamp box to frame bounds
+        var x = Math.Max(0, box.X);
+        var y = Math.Max(0, box.Y);
+        var width = Math.Min(box.Width, frame.Width - x);
+        var height = Math.Min(box.Height, frame.Height - y);
+
+        if (width <= 0 || height <= 0)
+        {
+            // Invalid box - return 1x1 black mat
+            return new Mat(1, 1, MatType.CV_8UC1, Scalar.All(0));
+        }
+
+        // Extract region as grayscale
+        var mat = new Mat(height, width, MatType.CV_8UC1);
+
+        frame.ProcessPixelRows(accessor =>
+        {
+            for (int dy = 0; dy < height; dy++)
+            {
+                var rowSpan = accessor.GetRowSpan(y + dy);
+                for (int dx = 0; dx < width; dx++)
+                {
+                    var pixel = rowSpan[x + dx];
+                    // Convert to grayscale using ITU-R BT.601 formula
+                    var luminance = (byte)(0.299 * pixel.R + 0.587 * pixel.G + 0.114 * pixel.B);
+                    mat.Set(dy, dx, luminance);
+                }
+            }
+        });
+
+        return mat;
+    }
+
+    /// <summary>
+    /// Compare two sets of OpenCV histograms using correlation method.
+    /// Returns average correlation: 1.0 = identical, 0.0 = completely different.
+    /// Uses Cv2.CompareHist with CORREL method (industry standard).
+    /// </summary>
+    private double CompareOpenCvHistograms(List<Mat> histograms1, List<Mat> histograms2)
+    {
+        if (histograms1.Count != histograms2.Count || histograms1.Count == 0)
+            return 0.0;
+
+        var totalCorrelation = 0.0;
+        for (int i = 0; i < histograms1.Count; i++)
+        {
+            // Correlation method returns -1 to 1, where 1 = identical
+            var correlation = Cv2.CompareHist(histograms1[i], histograms2[i], HistCompMethods.Correl);
+            totalCorrelation += Math.Max(0, correlation); // Clamp negative correlations to 0
+        }
+
+        return totalCorrelation / histograms1.Count;
+    }
+
+    /// <summary>
     /// Detect frames where text changes (even if overall scene doesn't).
     /// Useful for detecting subtitle changes, book pages, etc.
     /// Focuses on the bottom 25% of the image where subtitles typically appear.
+    ///
+    /// LEGACY METHOD: Use DetectUniqueTextFrames with ML bounding boxes for better performance.
     /// </summary>
     /// <param name="image">The animated image</param>
     /// <param name="maxTextFrames">Maximum frames to return</param>

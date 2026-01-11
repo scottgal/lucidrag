@@ -1,0 +1,147 @@
+# Entity Extractor Processor - Extracts entities and relationships using GraphRAG
+name: entity_extractor
+display_name: Entity Extractor
+description: Extracts entities and relationships from document chunks using LLM-based extraction
+version: 1.0.0
+priority: 80
+enabled: true
+
+taxonomy:
+  kind: extractor
+  stage: postprocessing
+  determinism: probabilistic  # LLM-based extraction
+  persistence: direct_write
+
+input:
+  mime_types:
+    - text/plain
+  file_extensions:
+    - .txt
+  accepts:
+    - document.chunks
+    - document.segments
+    - text.analyzed
+
+output:
+  produces:
+    - graph.entities
+    - graph.relationships
+    - graph.communities
+  metadata:
+    - entity_count
+    - relationship_count
+    - extraction_confidence
+  signals:
+    - key: processor.extractor.entities_extracted
+      entity_type: number
+      salience: 0.9
+    - key: processor.extractor.relationships_extracted
+      entity_type: number
+      salience: 0.85
+
+capabilities:
+  batch_processing: true
+  streaming: false
+  ocr: false
+  table_extraction: false
+  image_extraction: false
+  metadata_extraction: true
+
+# ============================================
+# DEFAULT CONFIGURATION - NO MAGIC NUMBERS
+# Override via appsettings.json: Processors:EntityExtractor:*
+# ============================================
+defaults:
+  # Extraction parameters
+  extraction:
+    max_entities_per_chunk: 20
+    min_confidence: 0.5
+    extract_relationships: true
+    extract_properties: true
+    deduplicate_entities: true
+
+  # Entity types to extract
+  entity_types:
+    enabled:
+      - person
+      - organization
+      - location
+      - concept
+      - technology
+      - product
+      - event
+      - date
+    custom: []  # Additional custom entity types
+
+  # Relationship extraction
+  relationships:
+    max_relationships_per_chunk: 30
+    min_confidence: 0.4
+    relationship_types:
+      - related_to
+      - part_of
+      - used_by
+      - created_by
+      - located_in
+      - works_for
+      - mentions
+
+  # LLM configuration
+  llm:
+    model: phi4
+    temperature: 0.1
+    max_tokens: 2000
+    extraction_prompt: |
+      Extract entities and relationships from the following text.
+
+      Entity types: person, organization, location, concept, technology, product, event
+
+      For each entity, provide:
+      - name: entity name
+      - type: entity type
+      - description: brief description (1 sentence)
+
+      For relationships, provide:
+      - source: source entity name
+      - target: target entity name
+      - type: relationship type (related_to, part_of, used_by, etc.)
+      - description: brief description
+
+      Return valid JSON only.
+
+  # Quality parameters
+  quality:
+    min_entity_name_length: 2
+    max_entity_name_length: 100
+    filter_stopwords: true
+    normalize_entities: true
+
+  # Community detection
+  communities:
+    enabled: true
+    algorithm: leiden          # leiden | louvain
+    min_community_size: 3
+    resolution: 1.0
+
+  timing:
+    timeout_ms: 30000          # 30 seconds per chunk
+    batch_size: 10
+    max_concurrent: 4
+
+  features:
+    enable_cache: true
+    enable_coreference_resolution: false
+    enable_entity_linking: false
+    detailed_logging: true
+
+  # Cost controls
+  budget:
+    max_cost_per_chunk: 0.01
+    daily_budget_dollars: 10.00
+
+tags:
+  - extractor
+  - entities
+  - graphrag
+  - llm
+  - postprocessing

@@ -93,6 +93,7 @@ public class LensRenderService : ILensRenderService
 /// <summary>
 /// Liquid drop for SourceCitation - makes citation properties accessible in templates.
 /// Maps C# naming (PascalCase) to liquid naming (snake_case).
+/// EXPOSES ALL SIGNALS AND SCORES FOR TRANSPARENT RETRIEVAL.
 /// </summary>
 public class SourceCitationDrop : Drop
 {
@@ -111,15 +112,54 @@ public class SourceCitationDrop : Drop
     public string text => _source.Text;
     public string? page_or_section => _source.PageOrSection;
 
-    // Convenient aliases for blog lens templates
+    // Convenient aliases for templates
     public string url => $"/documents/{_source.DocumentId}";
     public string title => _source.DocumentName;
     public string excerpt => TruncateText(_source.Text, 200);
     public int sequence_number => _source.Number;
 
-    // Metadata (future enhancement - could extract from document metadata)
-    public string? author => null;
-    public string? publish_date => null;
+    // SIGNAL SCORES - All retrieval signals exposed!
+    public double rrf_score => _source.RrfScore;
+    public double dense_score => _source.DenseScore;
+    public double bm25_score => _source.Bm25Score;
+    public double salience_score => _source.SalienceScore;
+    public double freshness_score => _source.FreshnessScore;
+
+    // MATCHING INFORMATION - Why this source was selected
+    public List<string> matched_salient_terms => _source.MatchedSalientTerms ?? new();
+    public List<string> matched_entities => _source.MatchedEntities ?? new();
+    public List<string> signal_explanations => _source.SignalExplanations ?? new();
+
+    // METADATA - Document-level information
+    public string? author => _source.Author;
+    public string? publish_date => _source.PublishDate;
+    public string? document_type => _source.DocumentType;
+    public Dictionary<string, object>? metadata => _source.Metadata;
+
+    // SUMMARY/SEGMENT HANDLING - Intelligent text selection
+    public string? extractive_summary => _source.ExtractiveSummary;
+    public string? llm_summary => _source.LlmSummary;
+    public string text_type => _source.TextType;
+    public int original_length => _source.OriginalLength;
+    public bool is_ocr_source => _source.IsOcrSource;
+    public int character_count => _source.CharacterCount;
+
+    // Smart text selection - use summary if available and source is long
+    public string smart_text => GetSmartText();
+
+    private string GetSmartText()
+    {
+        // If we have an LLM summary and source is long, use it
+        if (!string.IsNullOrEmpty(_source.LlmSummary) && _source.CharacterCount > 1000)
+            return _source.LlmSummary;
+
+        // If we have extractive summary and source is long, use it
+        if (!string.IsNullOrEmpty(_source.ExtractiveSummary) && _source.CharacterCount > 1000)
+            return _source.ExtractiveSummary;
+
+        // Otherwise use the segment text as-is
+        return _source.Text;
+    }
 
     private static string TruncateText(string text, int maxLength)
     {

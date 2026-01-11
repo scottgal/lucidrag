@@ -39,6 +39,7 @@
     <!-- Liquid templates for lens system -->
     <ItemGroup>
         <PackageReference Include="DotLiquid" Version="2.2.692" />
+        <PackageReference Include="YamlDotNet" Version="16.3.0" />
     </ItemGroup>
 
     <!-- Project references -->

@@ -1,0 +1,266 @@
+# Research Lens - Advanced signal weighting for academic/research content
+name: research
+inherits: technical  # Inherit from technical lens
+display_name: Research & Academic
+description: Optimized for academic papers with advanced signal weighting and citation tracking
+version: 1.0.0
+author: LucidRAG
+priority: 85
+enabled: true
+
+taxonomy:
+  domain: research
+  style: academic
+  audience: researcher
+
+# Advanced scoring with fine-grained signal control
+scoring:
+  # Base RRF weights
+  dense_weight: 0.35       # Higher for semantic understanding
+  bm25_weight: 0.25
+  salience_weight: 0.25    # Important for technical terms
+  freshness_weight: 0.15   # Less important for research
+  rrf_k: 60
+  max_results: 15
+  min_score: 0.3
+
+  # FINE-GRAINED SIGNAL WEIGHTING - Real power of the lens system!
+  signal_weights:
+    # Dense retrieval signals
+    "retrieval.dense.similarity":
+      weight: 1.0
+      min_threshold: 0.5     # Only high-quality matches
+
+    "retrieval.dense.abstract_match":  # If we embed abstracts separately
+      weight: 1.0
+      boost: 2.5             # Abstract matches are VERY relevant
+      min_threshold: 0.7
+
+    # BM25 signals
+    "retrieval.bm25.exact_match":
+      weight: 1.0
+      boost: 2.0             # Exact terminology matches
+
+    "retrieval.bm25.title_match":
+      weight: 1.0
+      boost: 3.0             # Title matches are critical
+      min_threshold: 0.8
+
+    # Citation-based signals (future GraphRAG enhancement)
+    "graph.citation_count":
+      weight: 1.0
+      boost: 1.8
+      normalize: true
+      decay: logarithmic     # Diminishing returns for very high citation counts
+
+    "graph.co_citation":     # Papers cited together with query papers
+      weight: 1.0
+      boost: 2.2
+
+    "graph.author_authority":  # H-index, citation metrics
+      weight: 1.0
+      boost: 1.5
+      normalize: true
+
+    # Entity-based signals
+    "entity.author.*":
+      weight: 1.0
+      boost: 1.6             # Author mentions are important
+
+    "entity.methodology.*":
+      weight: 1.0
+      boost: 1.8             # Methodologies are key differentiators
+
+    "entity.dataset.*":
+      weight: 1.0
+      boost: 1.4
+
+    "entity.metric.*":       # Performance metrics, benchmarks
+      weight: 1.0
+      boost: 1.3
+
+    # Temporal signals
+    "temporal.publication_year":
+      weight: 0.8
+      decay: linear          # Slight preference for recent work
+      min_threshold: 0.0
+
+    "temporal.venue_prestige":  # Conference/journal ranking
+      weight: 1.0
+      boost: 1.7
+      normalize: true
+
+    # Content structure signals
+    "structure.has_methodology":
+      weight: 1.0
+      boost: 1.5
+
+    "structure.has_results":
+      weight: 1.0
+      boost: 1.4
+
+    "structure.has_code":     # Papers with code implementations
+      weight: 1.0
+      boost: 1.6
+
+    "structure.has_dataset":
+      weight: 1.0
+      boost: 1.3
+
+    # Quality signals
+    "quality.peer_reviewed":
+      weight: 1.0
+      boost: 2.0             # Peer-reviewed papers get strong boost
+
+    "quality.reproducibility_score":  # If available
+      weight: 1.0
+      boost: 1.4
+      normalize: true
+
+  # Entity type boosts for research context
+  entity_boosts:
+    # Methods and techniques
+    algorithm: 2.0
+    methodology: 1.9
+    framework: 1.7
+    model: 1.8
+    technique: 1.6
+
+    # Research artifacts
+    dataset: 1.7
+    benchmark: 1.8
+    metric: 1.5
+    evaluation: 1.4
+
+    # Domain concepts
+    theory: 1.6
+    hypothesis: 1.5
+    experiment: 1.4
+    analysis: 1.3
+
+    # People and institutions
+    author: 1.6
+    researcher: 1.5
+    institution: 1.3
+    lab: 1.2
+
+  # Document type preferences for research
+  document_type_weights:
+    pdf: 1.5               # PDFs are standard for papers
+    arxiv: 1.8             # ArXiv papers
+    acl_anthology: 1.7
+    ieee_xplore: 1.7
+    pubmed: 1.6
+    markdown: 0.9
+    html: 0.8
+
+# Override templates for academic style
+templates:
+  system_prompt: |
+    You are a research assistant helping academics find relevant scientific literature.
+
+    **Critical Guidelines:**
+    1. **Prioritize peer-reviewed sources** - Note publication venue and year
+    2. **Cite methodology and results** - Be specific about experimental setups
+    3. **Compare approaches** - When multiple papers address similar topics
+    4. **Note limitations** - Acknowledge gaps or caveats in the literature
+    5. **Academic precision** - Use exact terminology from papers
+
+    **Context:**
+    - Research area: {{ collection_name }}
+    - Description: {{ collection_description }}
+    - Available papers: {{ source_count }}
+
+    **Response Format:**
+    - **Summary:** Direct answer with key findings
+    - **Relevant Work:** List papers with methodology and results
+    - **Methodology:** Highlight experimental approaches
+    - **Future Directions:** Note open questions or gaps
+
+  citation: |
+    <div class="research-citation">
+      <div class="citation-header">
+        <span class="citation-num">[{{ sequence_number }}]</span>
+        <strong class="paper-title">{{ title }}</strong>
+      </div>
+      <div class="citation-meta">
+        {% if author %}<span class="authors">{{ author }}</span>{% endif %}
+        {% if publish_date %}<span class="year">({{ publish_date | date: "%Y" }})</span>{% endif %}
+      </div>
+      {% if page_or_section %}
+      <div class="venue">{{ page_or_section }}</div>
+      {% endif %}
+      <blockquote class="abstract-excerpt">
+        {{ excerpt }}
+      </blockquote>
+      <div class="citation-footer">
+        <a href="{{ url }}" class="pdf-link">📄 PDF</a>
+        <span class="citations-count">🔗 Citations: N/A</span>
+      </div>
+    </div>
+
+  response: |
+    <div class="lens-research-response">
+      <div class="answer-section">
+        <h2>Research Summary</h2>
+        {{ answer }}
+      </div>
+
+      {% if sources.size > 0 %}
+      <div class="sources-section">
+        <h3>📚 Relevant Literature</h3>
+        <div class="papers-list">
+          {% for source in sources %}
+            {{ source | render_citation }}
+          {% endfor %}
+        </div>
+      </div>
+      {% endif %}
+    </div>
+
+# Stricter policies for research integrity
+policies:
+  no_pii: false
+  require_citations_for_claims: true
+  max_response_length: 4000
+  custom_rules:
+    - "Always cite paper titles, authors, and publication years"
+    - "Distinguish between peer-reviewed and preprint papers"
+    - "Note methodology and experimental setup when discussing results"
+    - "Acknowledge limitations and potential biases"
+    - "Provide full bibliographic information for citations"
+
+# Research-focused defaults
+defaults:
+  retrieval:
+    top_k: 20                  # More papers for comprehensive coverage
+    min_similarity: 0.45       # Higher threshold for quality
+    diversity_threshold: 0.75  # Some redundancy OK for research
+    use_reranking: true
+
+  citation:
+    style: academic
+    show_page_numbers: true
+    show_confidence: false
+    max_citations: 20
+
+  response:
+    intro_enabled: true
+    summary_enabled: true
+    conclusion_enabled: true
+    max_length: 4000
+    use_markdown: true
+
+  features:
+    enable_query_expansion: true    # Expand with related terminology
+    enable_entity_boost: true       # Boost papers by key entities
+    enable_freshness_boost: false   # Seminal papers may be old
+    enable_community_summaries: true  # Use graph communities
+    detailed_logging: true
+
+tags:
+  - research
+  - academic
+  - papers
+  - citations
+  - advanced-weighting

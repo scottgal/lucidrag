@@ -1,0 +1,150 @@
+# RAG Search Pipeline - Main retrieval-augmented generation pipeline
+name: rag_search
+display_name: RAG Search Pipeline
+description: Orchestrates document retrieval, ranking, and synthesis for question answering
+priority: 100
+enabled: true
+version: 1.0.0
+
+# Execution stages - defines the wave structure
+stages:
+  # Stage 0: Parallel retrieval (no dependencies)
+  - name: stage-0-retrieval
+    description: Parallel retrieval using multiple strategies
+    waves:
+      - dense_retrieval       # Embedding-based search
+      - bm25_retrieval        # Keyword-based search
+    timeout: "00:00:02.000"   # 2 seconds max
+    parallel: true
+    early_exit: false
+
+  # Stage 1: Scoring (depends on stage-0)
+  - name: stage-1-scoring
+    description: Additional scoring signals
+    waves:
+      - salience_scoring      # Salient term matching
+    timeout: "00:00:00.500"   # 500ms max
+    parallel: true
+    depends_on:
+      - stage-0-retrieval
+
+  # Stage 2: Ranking (depends on all retrieval/scoring)
+  - name: stage-2-ranking
+    description: Fusion and ranking
+    waves:
+      - rrf_ranker            # Reciprocal Rank Fusion
+    timeout: "00:00:00.200"   # 200ms max
+    parallel: false
+    depends_on:
+      - stage-0-retrieval
+      - stage-1-scoring
+
+  # Stage 3: Synthesis (depends on ranked results)
+  - name: stage-3-synthesis
+    description: LLM answer generation
+    waves:
+      - llm_synthesis         # Generate final answer
+    timeout: "00:00:30.000"   # 30 seconds max
+    parallel: false
+    depends_on:
+      - stage-2-ranking
+
+# Lane configurations - concurrency pools
+lanes:
+  fast:
+    max_concurrency: 16
+    priority: 200
+    description: Fast operations (cache lookups, simple scoring)
+
+  normal:
+    max_concurrency: 8
+    priority: 100
+    description: Standard retrieval operations
+
+  ml:
+    max_concurrency: 4
+    priority: 60
+    description: ML/embedding operations
+
+  llm:
+    max_concurrency: 2
+    priority: 50
+    description: LLM operations (expensive, rate-limited)
+
+# Pipeline-level configuration
+config:
+  # Total pipeline budget
+  total_timeout: "00:00:35.000"  # 35 seconds max total
+
+  # Early exit conditions
+  early_exit_signals:
+    cache_hit:
+      - synthesis.cache_hit
+    no_results:
+      - retrieval.no_results_found
+
+  # Failure handling
+  failure_handling:
+    retry_on_timeout: false
+    fallback_to_cache: true
+    partial_results_allowed: true
+
+# ============================================
+# DEFAULT CONFIGURATION - NO MAGIC NUMBERS
+# Override via appsettings.json: Pipelines:RagSearch:*
+# ============================================
+defaults:
+  # Timeout configuration
+  timing:
+    stage_0_timeout_ms: 2000
+    stage_1_timeout_ms: 500
+    stage_2_timeout_ms: 200
+    stage_3_timeout_ms: 30000
+    total_timeout_ms: 35000
+
+  # Quality thresholds
+  quality:
+    min_result_count: 1
+    min_rrf_score: 0.0
+    min_confidence: 0.3
+
+  # Retrieval parameters
+  retrieval:
+    top_k_per_wave: 100      # How many results each wave returns
+    final_top_k: 10          # Final results after RRF
+    enable_diversity: true
+    diversity_threshold: 0.85
+
+  # Circuit breaker
+  circuit_breaker:
+    enabled: true
+    failure_threshold: 5
+    success_threshold: 3
+    timeout_seconds: 60
+
+  # Caching
+  caching:
+    enable_query_cache: true
+    cache_ttl_seconds: 3600
+    cache_by_query_hash: true
+    cache_by_collection: true
+
+  # Feature flags
+  features:
+    enable_parallel_retrieval: true
+    enable_salience_scoring: true
+    enable_query_expansion: true
+    enable_streaming: false
+    detailed_logging: false
+    emit_metrics: true
+
+  # Cost controls
+  budget:
+    max_total_cost_cents: 10
+    llm_budget_percent: 80
+    daily_llm_budget_dollars: 5.00
+
+tags:
+  - main-pipeline
+  - rag
+  - search
