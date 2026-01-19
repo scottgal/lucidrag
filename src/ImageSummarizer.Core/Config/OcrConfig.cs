@@ -385,6 +385,59 @@ public class OcrConfig
     /// </summary>
     public bool DeepseekOcrPreferMarkdown { get; set; } = true;
 
+    // ============ LightOnOCR (Ollama VLM) ============
+    // State-of-the-art 1B-parameter OCR model from LightOn AI.
+    // 3.3× faster than competitors, handles tables, math, multi-column layouts.
+    // Pull with: ollama pull aipib/LightOnOCR-1B-1025
+
+    /// <summary>
+    /// Enable LightOnOCR for OCR extraction.
+    /// Requires Ollama running with aipib/LightOnOCR-1B-1025 model.
+    /// </summary>
+    public bool EnableLightOnOcr { get; set; } = false;
+
+    /// <summary>
+    /// Base URL for the Ollama API serving LightOnOCR.
+    /// Default: http://localhost:11434 (standard Ollama port)
+    /// </summary>
+    public string LightOnOcrBaseUrl { get; set; } = "http://localhost:11434";
+
+    /// <summary>
+    /// Model name for LightOnOCR.
+    /// Available models:
+    /// - aipib/LightOnOCR-1B-1025 (recommended, 1B params)
+    /// - aipib/LightOnOCR-2-1B (newer version if available)
+    /// </summary>
+    public string LightOnOcrModelName { get; set; } = "aipib/LightOnOCR-1B-1025";
+
+    /// <summary>
+    /// API key for LightOnOCR (if required by the endpoint).
+    /// Leave empty for local Ollama endpoints.
+    /// </summary>
+    public string? LightOnOcrApiKey { get; set; }
+
+    /// <summary>
+    /// Timeout in seconds for LightOnOCR requests.
+    /// </summary>
+    public int LightOnOcrTimeoutSeconds { get; set; } = 120;
+
+    /// <summary>
+    /// Maximum tokens for LightOnOCR generation.
+    /// </summary>
+    public int LightOnOcrMaxTokens { get; set; } = 4096;
+
+    /// <summary>
+    /// Request Markdown output from LightOnOCR.
+    /// When true, preserves table structure, headings, and formatting.
+    /// </summary>
+    public bool LightOnOcrPreferMarkdown { get; set; } = true;
+
+    /// <summary>
+    /// Use LightOnOCR as the primary OCR engine (highest priority).
+    /// When true, LightOnOCR runs before other OCR waves.
+    /// </summary>
+    public bool LightOnOcrAsPrimary { get; set; } = false;
+
     // ============ OCR Benchmarking ============
     // Compares multiple OCR systems and generates comparison reports
     // Useful for training data collection and system evaluation

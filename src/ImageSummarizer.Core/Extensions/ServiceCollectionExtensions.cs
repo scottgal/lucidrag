@@ -305,6 +305,16 @@ public static class ServiceCollectionExtensions
             return new DeepseekOcrWave(imageConfig, logger);
         });
 
+        // LightOnOcrWave - State-of-the-art 1B OCR model from LightOn AI
+        // Priority 52 (or 65 when AsPrimary): Fast, accurate OCR for tables, receipts, forms
+        // Runs after DeepseekOcr (53), before OlmOcr2 (51)
+        services.AddSingleton<IAnalysisWave>(sp =>
+        {
+            var imageConfig = sp.GetRequiredService<IOptions<ImageConfig>>();
+            var logger = sp.GetService<Microsoft.Extensions.Logging.ILogger<LightOnOcrWave>>();
+            return new LightOnOcrWave(imageConfig, logger);
+        });
+
         // OcrBenchmarkWave - Compares multiple OCR systems and generates comparison reports
         // Priority 45: Runs after all OCR waves (50-65) to collect and compare results
         services.AddSingleton<IAnalysisWave>(sp =>
