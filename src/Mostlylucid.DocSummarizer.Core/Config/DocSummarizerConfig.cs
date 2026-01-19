@@ -342,10 +342,18 @@ public class SynthesisProfile
 }
 
 /// <summary>
-///     Docling service configuration
+///     Docling service configuration.
+///     Docling provides unified document conversion with advanced layout analysis,
+///     OCR, table extraction, and audio transcription capabilities.
 /// </summary>
 public class DoclingConfig
 {
+    /// <summary>
+    ///     Master enable/disable for Docling integration.
+    ///     When false, all Docling handlers are disabled and native handlers are used.
+    /// </summary>
+    public bool Enabled { get; set; } = false;
+
     /// <summary>
     ///     Docling service base URL
     /// </summary>
@@ -409,6 +417,109 @@ public class DoclingConfig
     ///     Default: true.
     /// </summary>
     public bool AutoDetectGpu { get; set; } = true;
+
+    /// <summary>
+    ///     Document extraction settings (PDF, DOCX, PPTX, XLSX, HTML).
+    /// </summary>
+    public DoclingDocumentConfig Documents { get; set; } = new();
+
+    /// <summary>
+    ///     Image extraction settings (PNG, JPEG, TIFF, WebP, BMP).
+    /// </summary>
+    public DoclingImageConfig Images { get; set; } = new();
+
+    /// <summary>
+    ///     Audio transcription settings (WAV, MP3).
+    /// </summary>
+    public DoclingAudioConfig Audio { get; set; } = new();
+
+    /// <summary>
+    ///     Check if Docling should handle a specific file extension.
+    /// </summary>
+    public bool ShouldHandle(string extension)
+    {
+        if (!Enabled) return false;
+
+        var ext = extension.StartsWith('.') ? extension.ToLowerInvariant() : $".{extension.ToLowerInvariant()}";
+
+        if (Documents.Enabled && Documents.Extensions.Contains(ext, StringComparer.OrdinalIgnoreCase))
+            return true;
+        if (Images.Enabled && Images.Extensions.Contains(ext, StringComparer.OrdinalIgnoreCase))
+            return true;
+        if (Audio.Enabled && Audio.Extensions.Contains(ext, StringComparer.OrdinalIgnoreCase))
+            return true;
+
+        return false;
+    }
+}
+
+/// <summary>
+///     Docling document extraction configuration (PDF, DOCX, PPTX, XLSX, HTML).
+/// </summary>
+public class DoclingDocumentConfig
+{
+    /// <summary>
+    ///     Enable Docling for document extraction.
+    ///     When enabled, Docling handler has higher priority than native handlers.
+    /// </summary>
+    public bool Enabled { get; set; } = true;
+
+    /// <summary>
+    ///     File extensions to process with Docling.
+    /// </summary>
+    public List<string> Extensions { get; set; } = [".pdf", ".docx", ".pptx", ".xlsx", ".html"];
+
+    /// <summary>
+    ///     Handler priority. Higher values win over lower priority handlers.
+    ///     Default: 20 (higher than EnhancedPdf=10 and Native=0).
+    /// </summary>
+    public int Priority { get; set; } = 20;
+}
+
+/// <summary>
+///     Docling image extraction configuration (PNG, JPEG, TIFF, WebP, BMP).
+/// </summary>
+public class DoclingImageConfig
+{
+    /// <summary>
+    ///     Enable Docling for image OCR extraction.
+    ///     When enabled, adds a Docling wave to the image processing pipeline.
+    /// </summary>
+    public bool Enabled { get; set; } = true;
+
+    /// <summary>
+    ///     File extensions to process with Docling.
+    /// </summary>
+    public List<string> Extensions { get; set; } = [".png", ".jpg", ".jpeg", ".tiff", ".tif", ".webp", ".bmp"];
+
+    /// <summary>
+    ///     Use Docling OCR as primary OCR source instead of Tesseract/Florence2.
+    ///     When true, Docling OCR runs first and other OCR waves may be skipped.
+    /// </summary>
+    public bool UseAsPrimaryOcr { get; set; } = false;
+}
+
+/// <summary>
+///     Docling audio transcription configuration (WAV, MP3).
+/// </summary>
+public class DoclingAudioConfig
+{
+    /// <summary>
+    ///     Enable Docling for audio transcription.
+    ///     When enabled, adds a Docling wave to the audio processing pipeline.
+    /// </summary>
+    public bool Enabled { get; set; } = true;
+
+    /// <summary>
+    ///     File extensions to process with Docling.
+    /// </summary>
+    public List<string> Extensions { get; set; } = [".wav", ".mp3", ".m4a", ".flac", ".ogg"];
+
+    /// <summary>
+    ///     Use Docling ASR as primary transcription source instead of WhisperX.
+    ///     When true, Docling transcription runs first and other transcription waves may be skipped.
+    /// </summary>
+    public bool UseAsPrimaryTranscription { get; set; } = false;
 }
 
 /// <summary>

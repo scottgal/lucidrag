@@ -3,6 +3,7 @@ using Microsoft.Extensions.Configuration.Memory;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Options;
+using Mostlylucid.DocSummarizer.Config;
 using Mostlylucid.DocSummarizer.Images.Config;
 using Mostlylucid.DocSummarizer.Images.Coordination;
 using Mostlylucid.DocSummarizer.Images.Services;
@@ -234,6 +235,15 @@ public static class ServiceCollectionExtensions
             var imageConfig = sp.GetRequiredService<IOptions<ImageConfig>>();
             var logger = sp.GetService<Microsoft.Extensions.Logging.ILogger<MlOcrWave>>();
             return new MlOcrWave(florence2, imageConfig, logger);
+        });
+
+        // DoclingOcrWave - OCR via Docling service (priority 58)
+        // When enabled, provides advanced layout-aware OCR for documents/images
+        services.AddSingleton<IAnalysisWave>(sp =>
+        {
+            var docConfig = sp.GetRequiredService<IOptions<DocSummarizerConfig>>();
+            var logger = sp.GetService<Microsoft.Extensions.Logging.ILogger<DoclingOcrWave>>();
+            return new DoclingOcrWave(docConfig, logger);
         });
 
         // OcrWave - configured with threshold from OcrConfig, uses auto-download

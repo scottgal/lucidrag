@@ -157,15 +157,19 @@ public static class ServiceCollectionExtensions
         });
 
         // Register document handler registry with enhanced handlers for PDF/image OCR
+        // Docling handler is registered last with highest priority when enabled
         services.TryAddSingleton<IDocumentHandlerRegistry>(sp =>
         {
+            var config = sp.GetRequiredService<IOptions<DocSummarizerConfig>>();
             var markdownService = sp.GetRequiredService<DocumentToMarkdownService>();
             var pdfLogger = sp.GetService<ILogger<EnhancedPdfDocumentHandler>>();
             var imageLogger = sp.GetService<ILogger<VlmImageOcrHandler>>();
+            var doclingLogger = sp.GetService<ILogger<DoclingDocumentHandler>>();
 
             var registry = new DocumentHandlerRegistry();
             registry.RegisterDefaultHandlers();
             registry.RegisterEnhancedHandlers(markdownService, pdfLogger, imageLogger);
+            registry.RegisterDoclingHandlers(config, doclingLogger); // Highest priority when enabled
             return registry;
         });
 
@@ -279,15 +283,19 @@ public static class ServiceCollectionExtensions
         });
 
         // Register document handler registry with enhanced handlers for PDF/image OCR
+        // Docling handler is registered last with highest priority when enabled
         services.TryAddSingleton<IDocumentHandlerRegistry>(sp =>
         {
+            var config = sp.GetRequiredService<IOptions<DocSummarizerConfig>>();
             var markdownService = sp.GetRequiredService<DocumentToMarkdownService>();
             var pdfLogger = sp.GetService<ILogger<EnhancedPdfDocumentHandler>>();
             var imageLogger = sp.GetService<ILogger<VlmImageOcrHandler>>();
+            var doclingLogger = sp.GetService<ILogger<DoclingDocumentHandler>>();
 
             var registry = new DocumentHandlerRegistry();
             registry.RegisterDefaultHandlers();
             registry.RegisterEnhancedHandlers(markdownService, pdfLogger, imageLogger);
+            registry.RegisterDoclingHandlers(config, doclingLogger); // Highest priority when enabled
             return registry;
         });
 

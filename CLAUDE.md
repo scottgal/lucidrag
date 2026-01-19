@@ -159,6 +159,70 @@ Fully configurable via `DocSummarizer:Deduplication` section in `appsettings.jso
 
 **Documentation**: See `docs/DEDUPLICATION_STRATEGY.md`
 
+### Docling Integration (Optional External Service)
+
+LucidRAG supports [Docling](https://github.com/docling-project/docling) as an optional extraction backend.
+Docling provides advanced document understanding with layout analysis, table extraction, OCR, and audio transcription.
+
+**When Disabled (Default)**:
+- Native .NET handlers process documents (PdfPig, OpenXml, Tesseract)
+- ImagePipeline uses Florence-2, Tesseract, and vision LLMs for OCR
+- AudioPipeline uses WhisperX for transcription
+
+**When Enabled**:
+- Docling handlers have higher priority and are tried first
+- Falls back gracefully to native handlers if Docling service is unavailable
+- Supports: PDF, DOCX, PPTX, XLSX, HTML (documents), PNG/JPG/TIFF (images), WAV/MP3 (audio)
+
+**Configuration**:
+```json
+{
+  "DocSummarizer": {
+    "Docling": {
+      "Enabled": true,
+      "BaseUrl": "http://localhost:5001",
+      "TimeoutSeconds": 300,
+      "Documents": {
+        "Enabled": true,
+        "Extensions": [".pdf", ".docx", ".pptx", ".xlsx", ".html"],
+        "Priority": 20
+      },
+      "Images": {
+        "Enabled": true,
+        "Extensions": [".png", ".jpg", ".jpeg", ".tiff", ".webp", ".bmp"],
+        "UseAsPrimaryOcr": false
+      },
+      "Audio": {
+        "Enabled": true,
+        "Extensions": [".wav", ".mp3", ".m4a", ".flac", ".ogg"],
+        "UseAsPrimaryTranscription": false
+      }
+    }
+  }
+}
+```
+
+**Key Components**:
+- `DoclingDocumentHandler` - Document extraction (priority 20, highest)
+- `DoclingOcrWave` - Image OCR wave (priority 58)
+- `DoclingTranscriptionWave` - Audio ASR wave (priority 62)
+- `DoclingClient` - HTTP client for Docling service communication
+
+**Handler Priority Order** (Document Pipeline):
+1. `DoclingDocumentHandler` (priority 20) - when enabled
+2. `EnhancedPdfDocumentHandler` (priority 10) - VLM OCR fallback
+3. Native handlers (priority 0) - PdfPig, OpenXml
+
+**Running Docling Service**:
+```bash
+# Using Docker
+docker run -p 5001:5001 ds4sd/docling-serve:latest
+
+# Or install locally
+pip install docling-serve
+docling-serve --port 5001
+```
+
 ---
 
 ## Key Directories

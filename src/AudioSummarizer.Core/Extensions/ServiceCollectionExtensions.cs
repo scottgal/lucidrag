@@ -7,6 +7,8 @@ using AudioSummarizer.Core.Services.Fingerprinting;
 using AudioSummarizer.Core.Services.SourceSeparation;
 using AudioSummarizer.Core.Services.Transcription;
 using AudioSummarizer.Core.Services.Voice;
+using Microsoft.Extensions.Options;
+using Mostlylucid.DocSummarizer.Config;
 using Mostlylucid.Summarizer.Core.Pipeline;
 
 namespace AudioSummarizer.Core.Extensions;
@@ -71,6 +73,16 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<IAudioWave, MusicAnalysisWave>();      // Phase 3.6: Priority 65
         services.AddSingleton<IAudioWave, SourceSeparationWave>();   // Phase 3.7: Priority 55 (Demucs)
         services.AddSingleton<IAudioWave, TranscriptionWave>();      // Phase 3: Priority 60
+
+        // DoclingTranscriptionWave - Transcription via Docling ASR (priority 62)
+        // When enabled, provides alternative transcription using Docling service
+        services.AddSingleton<IAudioWave>(sp =>
+        {
+            var docConfig = sp.GetRequiredService<IOptions<DocSummarizerConfig>>();
+            var logger = sp.GetService<Microsoft.Extensions.Logging.ILogger<DoclingTranscriptionWave>>();
+            return new DoclingTranscriptionWave(docConfig, logger);
+        });
+
         services.AddSingleton<IAudioWave, SpeakerDiarizationWave>(); // Phase 5: Priority 50
         services.AddSingleton<IAudioWave, VoiceEmbeddingWave>();     // Phase 4: Priority 30
 
