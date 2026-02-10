@@ -55,7 +55,7 @@ public class PostgresBm25Service : IBm25SearchService
         IEnumerable<Guid>? documentIds = null,
         CancellationToken ct = default)
     {
-        if (string.IsNullOrWhiteSpace(query))
+        if (string.IsNullOrWhiteSpace(query) || topK <= 0)
             return [];
 
         var stopwatch = Stopwatch.StartNew();

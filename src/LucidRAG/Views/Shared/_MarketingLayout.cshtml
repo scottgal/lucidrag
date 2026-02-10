@@ -1,0 +1,172 @@
+@{
+    var pageTitle = ViewData["Title"] as string ?? "lucidRAG - AI-Powered Search for Your Content";
+}
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<script>
+    (function () {
+        const savedTheme = localStorage.getItem('lucidrag-theme') || 'light';
+        document.documentElement.setAttribute('data-theme', savedTheme);
+    })();
+</script>
+<head>
+    <meta charset="utf-8"/>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+    <title>@pageTitle</title>
+    <meta name="description" content="@(ViewData["Description"] ?? "Add intelligent search and AI chat to any website in minutes. Open source, transparent, free during alpha.")"/>
+
+    <link rel="icon" type="image/svg+xml" href="~/img/logo.svg"/>
+    <link rel="icon" type="image/png" href="~/img/icon.png"/>
+    <link rel="apple-touch-icon" href="~/img/icon.png"/>
+
+    <!-- Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Raleway:ital,wght@0,400;0,600;0,700;0,800;1,400;1,600&display=swap" rel="stylesheet">
+
+    <!-- Tailwind CSS + DaisyUI (compiled) -->
+    <link href="~/css/dist/main.css" rel="stylesheet" type="text/css"/>
+
+    <!-- HTMX -->
+    <script src="https://unpkg.com/htmx.org@@2.0.3"></script>
+
+    <style>
+        body { font-family: 'Inter', sans-serif; }
+        .font-brand { font-family: 'Raleway', sans-serif; }
+        .hero-gradient {
+            background: linear-gradient(135deg, #1e293b 0%, #0f172a 50%, #1e1b4b 100%);
+        }
+        .code-block {
+            background: #1e293b;
+            border-radius: 0.75rem;
+            overflow: hidden;
+        }
+        .code-block pre {
+            padding: 1.5rem;
+            overflow-x: auto;
+            font-size: 0.875rem;
+            line-height: 1.7;
+        }
+        .code-block code { color: #e2e8f0; }
+        .code-block .comment { color: #64748b; }
+        .code-block .tag { color: #7dd3fc; }
+        .code-block .attr { color: #c4b5fd; }
+        .code-block .string { color: #86efac; }
+    </style>
+</head>
+<body class="bg-base-100">
+
+<!-- Navigation -->
+<nav class="navbar bg-gradient-to-r from-slate-800 to-slate-900 shadow-lg sticky top-0 z-50 px-4 lg:px-8">
+    <div class="flex-1">
+        <a href="/" class="flex items-center gap-1 text-2xl font-brand">
+            <span class="italic text-[#dddddd] font-semibold">lucid</span><span class="font-bold text-white">RAG</span>
+            <span class="badge badge-sm badge-warning ml-2">ALPHA</span>
+        </a>
+    </div>
+    <div class="flex-none gap-2 hidden md:flex">
+        <a href="#features" class="btn btn-ghost btn-sm text-slate-300 hover:text-white">Features</a>
+        <a href="#open-source" class="btn btn-ghost btn-sm text-slate-300 hover:text-white">Open Source</a>
+        <a href="#widget" class="btn btn-ghost btn-sm text-slate-300 hover:text-white">Widget</a>
+        <a href="#transparency" class="btn btn-ghost btn-sm text-slate-300 hover:text-white">How It Works</a>
+        <a href="https://www.mostlylucid.net/blog" target="_blank" class="btn btn-ghost btn-sm text-slate-300 hover:text-white">Blog</a>
+    </div>
+    <div class="flex-none gap-2 ml-4">
+        @if (User.Identity?.IsAuthenticated == true)
+        {
+            <a href="/admin" class="btn btn-ghost btn-sm text-slate-300 hover:text-white">Dashboard</a>
+        }
+        else
+        {
+            <a href="/auth/login" class="btn btn-ghost btn-sm text-slate-300 hover:text-white">Sign In</a>
+        }
+        <a href="/auth/register" class="btn btn-primary btn-sm">Try Free</a>
+        <!-- Theme toggle -->
+        <label class="swap swap-rotate btn btn-ghost btn-sm text-slate-300 hover:text-white">
+            <input type="checkbox" class="theme-controller" value="dark"/>
+            <svg class="swap-on h-5 w-5 fill-current" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+                <path d="M21.64,13a1,1,0,0,0-1.05-.14,8.05,8.05,0,0,1-3.37.73A8.15,8.15,0,0,1,9.08,5.49a8.59,8.59,0,0,1,.25-2A1,1,0,0,0,8,2.36,10.14,10.14,0,1,0,22,14.05,1,1,0,0,0,21.64,13Z"/>
+            </svg>
+            <svg class="swap-off h-5 w-5 fill-current" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+                <path d="M5.64,17l-.71.71a1,1,0,0,0,0,1.41,1,1,0,0,0,1.41,0l.71-.71A1,1,0,0,0,5.64,17ZM5,12a1,1,0,0,0-1-1H3a1,1,0,0,0,0,2H4A1,1,0,0,0,5,12Zm7-7a1,1,0,0,0,1-1V3a1,1,0,0,0-2,0V4A1,1,0,0,0,12,5ZM5.64,7.05a1,1,0,0,0,.7.29,1,1,0,0,0,.71-.29,1,1,0,0,0,0-1.41l-.71-.71A1,1,0,0,0,4.93,6.34Zm12,.29a1,1,0,0,0,.7-.29l.71-.71a1,1,0,1,0-1.41-1.41L17,5.64a1,1,0,0,0,0,1.41A1,1,0,0,0,17.66,7.34ZM21,11H20a1,1,0,0,0,0,2h1a1,1,0,0,0,0-2Zm-9,8a1,1,0,0,0-1,1v1a1,1,0,0,0,2,0V20A1,1,0,0,0,12,19ZM18.36,17A1,1,0,0,0,17,18.36l.71.71a1,1,0,0,0,1.41,0,1,1,0,0,0,0-1.41ZM12,6.5A5.5,5.5,0,1,0,17.5,12,5.51,5.51,0,0,0,12,6.5Zm0,9A3.5,3.5,0,1,1,15.5,12,3.5,3.5,0,0,1,12,15.5Z"/>
+            </svg>
+        </label>
+    </div>
+</nav>
+
+<!-- Main content -->
+@RenderBody()
+
+<!-- Footer -->
+<footer class="bg-slate-900 text-slate-400 py-12">
+    <div class="max-w-7xl mx-auto px-4">
+        <div class="grid md:grid-cols-4 gap-8">
+            <div>
+                <div class="text-2xl font-brand mb-4">
+                    <span class="italic text-[#dddddd]">lucid</span><span class="font-bold text-white">RAG</span>
+                </div>
+                <p class="text-sm">Open-source AI search and chat. Built with .NET, Qdrant, and ONNX embeddings. Free during alpha.</p>
+            </div>
+            <div>
+                <h4 class="text-white font-semibold mb-3">Product</h4>
+                <ul class="space-y-2 text-sm">
+                    <li><a href="#features" class="hover:text-white transition-colors">Features</a></li>
+                    <li><a href="#widget" class="hover:text-white transition-colors">Widget</a></li>
+                    <li><a href="/scalar/v1" class="hover:text-white transition-colors">API Reference</a></li>
+                    <li><a href="/public" class="hover:text-white transition-colors">Try Public Search</a></li>
+                </ul>
+            </div>
+            <div>
+                <h4 class="text-white font-semibold mb-3">Open Source</h4>
+                <ul class="space-y-2 text-sm">
+                    <li><a href="https://github.com/scottgal/lucidrag" target="_blank" class="hover:text-white transition-colors">lucidRAG</a></li>
+                    <li><a href="https://github.com/scottgal/DoomSummarizer" target="_blank" class="hover:text-white transition-colors">DoomSummarizer</a></li>
+                    <li><a href="https://github.com/scottgal/lucidResearch" target="_blank" class="hover:text-white transition-colors">lucidResearch</a></li>
+                    <li><a href="https://www.mostlylucid.net/blog" target="_blank" class="hover:text-white transition-colors">Blog & Docs</a></li>
+                </ul>
+            </div>
+            <div>
+                <h4 class="text-white font-semibold mb-3">Transparency</h4>
+                <ul class="space-y-2 text-sm">
+                    <li><a href="#transparency" class="hover:text-white transition-colors">How We Use AI</a></li>
+                    <li><a href="#transparency" class="hover:text-white transition-colors">Your Data, Your Control</a></li>
+                    <li><a href="https://github.com/scottgal/lucidrag" target="_blank" class="hover:text-white transition-colors">Source Code</a></li>
+                </ul>
+            </div>
+        </div>
+        <div class="border-t border-slate-800 mt-8 pt-8 text-sm text-center">
+            <p>&copy; 2026 lucidRAG. Open source. Free during alpha.</p>
+        </div>
+    </div>
+</footer>
+
+<!-- Smooth scroll -->
+<script>
+    document.querySelectorAll('a[href^="#"]').forEach(a => {
+        a.addEventListener('click', e => {
+            e.preventDefault();
+            const target = document.querySelector(a.getAttribute('href'));
+            if (target) target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        });
+    });
+</script>
+
+<!-- Theme persistence -->
+<script>
+    (function () {
+        const savedTheme = localStorage.getItem('lucidrag-theme') || 'light';
+        const themeCheckbox = document.querySelector('.theme-controller');
+        if (themeCheckbox) {
+            themeCheckbox.checked = savedTheme === 'dark';
+            themeCheckbox.addEventListener('change', function () {
+                const newTheme = this.checked ? 'dark' : 'light';
+                document.documentElement.setAttribute('data-theme', newTheme);
+                localStorage.setItem('lucidrag-theme', newTheme);
+            });
+        }
+    })();
+</script>
+
+@await RenderSectionAsync("Scripts", false)
+</body>
+</html>

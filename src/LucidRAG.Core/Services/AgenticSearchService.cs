@@ -26,6 +26,7 @@ public class AgenticSearchService(
     IEmbeddingService embeddingService,
     IConversationService conversationService,
     ISentinelService sentinelService,
+    ICollectionRouter collectionRouter,
     IQueryExpansionService queryExpansion,
     ILlmService llmService,
     SynthesisCacheService synthesisCache,
@@ -34,6 +35,7 @@ public class AgenticSearchService(
     ILensRegistry lensRegistry,
     ILensRenderService lensRender,
     IDomainPluginRegistry? domainPluginRegistry,
+    SalientSegmentCacheRegistry segmentCacheRegistry,
     IOptions<PromptsConfig> promptsConfig,
     IOptions<DocSummarizerConfig> docSummarizerConfig,
     IOptions<RagDocumentsConfig> ragDocumentsConfig,
@@ -50,13 +52,32 @@ public class AgenticSearchService(
     {
         var sw = Stopwatch.StartNew();
 
+        // Auto-route to collection if none specified and no explicit document IDs
+        var effectiveCollectionId = request.CollectionId;
+        CollectionRoutingResult? routingResult = null;
+        if (!effectiveCollectionId.HasValue && (request.DocumentIds is null || request.DocumentIds.Length == 0))
+        {
+            routingResult = await collectionRouter.RouteAsync(request.Query, null, ct);
+            if (routingResult.HasConfidentMatch)
+            {
+                effectiveCollectionId = routingResult.BestCollectionId;
+                logger.LogInformation("Auto-routed query to collection {CollectionId}: {Explanation}",
+                    effectiveCollectionId, routingResult.Explanation);
+            }
+            else if (routingResult.Candidates.Count > 0)
+            {
+                logger.LogDebug("Collection routing returned candidates but no confident match: {Explanation}",
+                    routingResult.Explanation);
+            }
+        }
+
         // Get documents to search
         var documentIds = request.DocumentIds;
         if (documentIds is null || documentIds.Length == 0)
         {
             var docs = await db.Documents
                 .Where(d => d.Status == DocumentStatus.Completed)
-                .Where(d => !request.CollectionId.HasValue || d.CollectionId == request.CollectionId)
+                .Where(d => !effectiveCollectionId.HasValue || d.CollectionId == effectiveCollectionId)
                 .Select(d => d.Id)
                 .ToListAsync(ct);
             documentIds = docs.ToArray();
@@ -65,12 +86,12 @@ public class AgenticSearchService(
         if (documentIds.Length == 0) return new SearchResult([], 0, sw.ElapsedMilliseconds);
 
         // Build schema context for Sentinel
-        var schema = await sentinelService.BuildSchemaContextAsync(request.CollectionId, ct);
+        var schema = await sentinelService.BuildSchemaContextAsync(effectiveCollectionId, ct);
 
         // Decompose query using Sentinel
         var options = new SentinelOptions
         {
-            CollectionId = request.CollectionId,
+            CollectionId = effectiveCollectionId,
             DocumentIds = documentIds,
             ValidateAssumptions = true,
             Mode = _prompts.QueryDecomposition.Enabled ? ExecutionMode.Hybrid : ExecutionMode.Traditional
@@ -227,9 +248,18 @@ public class AgenticSearchService(
         logger.LogInformation("Found {Count} merged results from {SubQueryCount} sub-queries",
             mergedResults.Count, queryPlan.SubQueries.Count);
 
+        // Capture raw segments (with embeddings) for salient segment caching in ChatAsync
+        var rawSegmentsForCache = dedupedResults
+            .Take(request.TopK)
+            .Select(x => x.Segment)
+            .Where(s => s.Embedding is { Length: > 0 })
+            .ToList();
+
         return new SearchResult(mergedResults, mergedResults.Count, sw.ElapsedMilliseconds)
         {
-            QueryPlan = queryPlan
+            QueryPlan = queryPlan,
+            RawSegments = rawSegmentsForCache,
+            RoutingResult = routingResult
         };
     }
 
@@ -406,6 +436,66 @@ public class AgenticSearchService(
             }
         }
 
+        // Salient segment cache: merge previously-relevant segments with fresh search results
+        // This gives follow-up turns access to segments that were useful before, even if
+        // the current query doesn't directly retrieve them
+        if (conversationId.HasValue)
+        {
+            var turn = segmentCacheRegistry.IncrementTurn(conversationId.Value);
+            var (cache, _) = segmentCacheRegistry.GetOrCreate(conversationId.Value);
+
+            // Get cached segments salient to the current query
+            var queryEmbedding = await embeddingService.EmbedAsync(queryToSearch, ct);
+            var cachedSegments = cache.GetSalient(queryEmbedding, turn);
+
+            if (cachedSegments.Count > 0)
+            {
+                // Build document lookup for cached segments (same as in SearchAsync)
+                var documents = await db.Documents
+                    .Where(d => d.VectorStoreDocId != null)
+                    .ToListAsync(ct);
+                var documentLookup = documents
+                    .GroupBy(d => ExtractDocHashFromVectorStoreDocId(d.VectorStoreDocId!))
+                    .Where(g => !string.IsNullOrEmpty(g.Key))
+                    .ToDictionary(g => g.Key!, g => g.OrderByDescending(d => d.CreatedAt).First());
+
+                // Merge cached segments that aren't already in search results
+                var existingIds = searchResult.Results.Select(r => r.SegmentId).ToHashSet();
+                var newCachedItems = cachedSegments
+                    .Where(s => !existingIds.Contains(s.Id))
+                    .Select(s => CreateSearchResultItem(s, s.QuerySimilarity * 0.8, documentLookup))
+                    .ToList();
+
+                if (newCachedItems.Count > 0)
+                {
+                    var mergedResults = searchResult.Results.Concat(newCachedItems).ToList();
+                    searchResult = searchResult with { Results = mergedResults };
+                    logger.LogDebug("Merged {CachedCount} cached segments into search results (turn {Turn})",
+                        newCachedItems.Count, turn);
+                }
+            }
+
+            // Update cache with segments from this turn's fresh results
+            if (searchResult.RawSegments is { Count: > 0 })
+            {
+                cache.AddRange(searchResult.RawSegments, turn);
+
+                // Track document focus for progressive narrowing
+                var docCounts = searchResult.RawSegments
+                    .GroupBy(s => ExtractDocIdFromSegmentId(s.Id))
+                    .Where(g => g.Key != null)
+                    .OrderByDescending(g => g.Count())
+                    .FirstOrDefault();
+                if (docCounts != null && docCounts.Count() > searchResult.RawSegments.Count / 2)
+                    cache.TrackDocumentFocus(docCounts.Key);
+
+                logger.LogDebug("Cached {Count} segments for conversation {ConversationId} (turn {Turn}, cache size: {CacheSize})",
+                    searchResult.RawSegments.Count, conversationId, turn, cache.Stats.count);
+            }
+
+            cache.Evict(turn);
+        }
+
         // Build sources for response with relevance filtering and deduplication
         // 1. Filter by minimum relevance score (semantic mode uses cosine similarity 0-1)
         // 2. Deduplicate semantically similar segments to avoid repetition
@@ -567,6 +657,37 @@ public class AgenticSearchService(
                 .ToArray();
             if (docIds.Length > 0)
                 await conversationService.SetActiveDocumentsAsync(conversationId.Value, docIds, queryToSearch, ct: ct);
+        }
+
+        // Salient segment cache: merge cached segments and update cache (same logic as ChatAsync)
+        if (conversationId.HasValue)
+        {
+            var turn = segmentCacheRegistry.IncrementTurn(conversationId.Value);
+            var (cache, _) = segmentCacheRegistry.GetOrCreate(conversationId.Value);
+
+            var queryEmb = await embeddingService.EmbedAsync(queryToSearch, ct);
+            var cachedSegs = cache.GetSalient(queryEmb, turn);
+            if (cachedSegs.Count > 0)
+            {
+                var docs = await db.Documents.Where(d => d.VectorStoreDocId != null).ToListAsync(ct);
+                var docLookup = docs
+                    .GroupBy(d => ExtractDocHashFromVectorStoreDocId(d.VectorStoreDocId!))
+                    .Where(g => !string.IsNullOrEmpty(g.Key))
+                    .ToDictionary(g => g.Key!, g => g.OrderByDescending(d => d.CreatedAt).First());
+
+                var existingIds = searchResult.Results.Select(r => r.SegmentId).ToHashSet();
+                var newCached = cachedSegs
+                    .Where(s => !existingIds.Contains(s.Id))
+                    .Select(s => CreateSearchResultItem(s, s.QuerySimilarity * 0.8, docLookup))
+                    .ToList();
+
+                if (newCached.Count > 0)
+                    searchResult = searchResult with { Results = searchResult.Results.Concat(newCached).ToList() };
+            }
+
+            if (searchResult.RawSegments is { Count: > 0 })
+                cache.AddRange(searchResult.RawSegments, turn);
+            cache.Evict(turn);
         }
 
         // Apply relevance filtering and deduplication (same as non-streaming)
@@ -1331,6 +1452,13 @@ ANSWER:";
         var thinking = new StringBuilder();
         thinking.AppendLine("*Thinking...*");
         thinking.AppendLine($"- Query type: **{plan.QueryType}** ({plan.Mode})");
+
+        // Show routing decision if auto-routing was applied
+        if (searchResult.RoutingResult is { HasConfidentMatch: true } routing)
+        {
+            var best = routing.Candidates[0];
+            thinking.AppendLine($"- Auto-routed to collection: **{best.Name}** ({best.Confidence:P0} confidence, {best.MatchedTermCount} terms matched)");
+        }
 
         // Only show interpreted query if it's meaningfully different from original
         // Avoid showing hallucinated interpretations from small models

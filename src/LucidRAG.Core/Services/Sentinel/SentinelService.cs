@@ -457,37 +457,86 @@ public class SentinelService : ISentinelService
 
         if (hasCoreference)
         {
-            _logger.LogDebug("Detected coreference in query: '{Query}' -> '{Resolved}'", query, resolvedQuery);
+            // Tier 2: LLM-assisted rewrite for higher quality resolution (if available)
+            var finalResolved = resolvedQuery;
+            try
+            {
+                var llmResolved = await RewriteFollowUpWithLlmAsync(query, previousQuery, conversationHistory, ct);
+                if (llmResolved != null
+                    && !llmResolved.Equals(query, StringComparison.OrdinalIgnoreCase)
+                    && llmResolved.Length <= Math.Max(query.Length * 2, 120))
+                {
+                    finalResolved = llmResolved;
+                    _logger.LogDebug("LLM rewrite improved coreference resolution: '{RuleBased}' -> '{LlmResolved}'",
+                        resolvedQuery, llmResolved);
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogDebug(ex, "LLM rewrite failed for coreference, using rule-based result");
+            }
+
+            _logger.LogDebug("Detected coreference in query: '{Query}' -> '{Resolved}'", query, finalResolved);
             return new FollowUpDetectionResult
             {
                 IsFollowUp = true,
                 Confidence = 0.9,
                 Reason = $"Coreference detected: {string.Join(", ", coreferences.Keys)}",
-                ResolvedQuery = resolvedQuery,
+                ResolvedQuery = finalResolved,
                 ResolvedCoreferences = coreferences,
                 UseSameDocumentSet = true
             };
         }
 
-        // 2. Check for explicit continuation markers
+        // 2. Check for explicit continuation markers with topic-aware rewrite
         var continuationMarkers = new[]
         {
             "tell me more", "more about", "go on", "continue", "what else",
             "and also", "additionally", "furthermore", "in addition",
             "can you explain", "could you elaborate", "please explain",
-            "why is that", "how does that", "what about"
+            "why is that", "how does that", "what about", "elaborate",
+            "keep going", "more detail", "more details", "explain further",
+            "how so", "in what way", "give me more"
         };
 
-        var hasContinuationMarker = continuationMarkers.Any(m => queryLower.Contains(m));
-        if (hasContinuationMarker)
+        var matchedMarker = continuationMarkers.FirstOrDefault(m => queryLower.Contains(m));
+        if (matchedMarker != null)
         {
-            _logger.LogDebug("Detected continuation marker in query: '{Query}'", query);
+            // Extract topic from previous query for a better rewrite
+            var topic = ExtractMainSubject(previousQuery);
+            string continuationRewrite;
+
+            // Generic continuations (query IS the marker): rewrite with topic
+            var isGeneric = queryLower.TrimEnd('?', '.', '!').Trim() == matchedMarker
+                            || queryLower.TrimEnd('?', '.', '!').Trim().Length <= matchedMarker.Length + 3;
+
+            if (isGeneric && !string.IsNullOrEmpty(topic))
+            {
+                continuationRewrite = $"More details about {topic}";
+            }
+            else if (matchedMarker.StartsWith("what about") || matchedMarker.StartsWith("how about"))
+            {
+                continuationRewrite = !string.IsNullOrEmpty(topic)
+                    ? $"{query} in relation to {topic}"
+                    : query;
+            }
+            else
+            {
+                // User included specific terms — keep the full question with context appended
+                continuationRewrite = !string.IsNullOrEmpty(topic)
+                    ? $"{query} (regarding {topic})"
+                    : query;
+            }
+
+            _logger.LogDebug("Continuation marker '{Marker}' in query: '{Query}' -> '{Resolved}'",
+                matchedMarker, query, continuationRewrite);
+
             return new FollowUpDetectionResult
             {
                 IsFollowUp = true,
-                Confidence = 0.85,
-                Reason = "Continuation marker detected",
-                ResolvedQuery = query,
+                Confidence = 0.9,
+                Reason = $"Continuation marker: '{matchedMarker}'",
+                ResolvedQuery = continuationRewrite,
                 UseSameDocumentSet = true
             };
         }
@@ -806,6 +855,71 @@ JSON only, no explanation: /no_think";
         var issues = string.Join("; ", failedAssumptions.Select(a => a.ValidationResult ?? a.Description));
         return
             $"I need some clarification about your query \"{query}\". {issues}. Could you rephrase or provide more context?";
+    }
+
+    /// <summary>
+    ///     Tier 2: LLM-assisted follow-up rewrite. Resolves pronouns and references using
+    ///     conversation history context. Only called when Tier 1 (rule-based) detects a follow-up.
+    /// </summary>
+    private async Task<string?> RewriteFollowUpWithLlmAsync(
+        string query,
+        string? previousQuery,
+        IReadOnlyList<string>? conversationHistory,
+        CancellationToken ct)
+    {
+        if (string.IsNullOrEmpty(previousQuery)) return null;
+
+        // Build compact history block (last 3 entries max)
+        var historyBlock = previousQuery;
+        if (conversationHistory is { Count: > 0 })
+        {
+            var recent = conversationHistory.TakeLast(6).ToList(); // 3 Q+A pairs
+            historyBlock = string.Join("\n", recent.Select(h =>
+                h.Length > 300 ? h[..300] + "..." : h));
+        }
+
+        var prompt = $$"""
+                       Rewrite the NEW QUESTION as a short standalone search query by resolving pronouns.
+
+                       PREVIOUS: {{previousQuery}}
+
+                       NEW QUESTION: "{{query}}"
+
+                       Output JSON:
+                       {"resolved_query": "short standalone query"}
+
+                       RULES:
+                       - Replace pronouns (it, they, that, etc.) with the specific subject from history
+                       - Keep the rewrite SHORT — same length or shorter than the original question
+                       - Do NOT add explanations, clauses, or background context
+                       - Do NOT restate what the subject is — just name it
+                       - Example: "How does it work?" -> "How does Bazzite work?"
+                       /no_think
+                       """;
+
+        try
+        {
+            var response = await CallOllamaAsync(_config.TinyModel, prompt, ct);
+            var jsonStart = response.IndexOf('{');
+            var jsonEnd = response.LastIndexOf('}');
+            if (jsonStart >= 0 && jsonEnd > jsonStart)
+            {
+                var json = response[jsonStart..(jsonEnd + 1)];
+                using var doc = JsonDocument.Parse(json);
+                if (doc.RootElement.TryGetProperty("resolved_query", out var rq))
+                {
+                    var resolved = rq.GetString();
+                    if (!string.IsNullOrWhiteSpace(resolved))
+                        return resolved;
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogDebug(ex, "LLM follow-up rewrite failed");
+        }
+
+        return null;
     }
 
     /// <summary>

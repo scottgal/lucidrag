@@ -45,6 +45,12 @@ var portArg = args.FirstOrDefault(a => a.StartsWith("--port="));
 if (portArg != null && int.TryParse(portArg.Split('=')[1], out var parsedPort))
     port = parsedPort;
 
+// --dbpath=PATH: root directory for all local data (SQLite, Lucene index, uploads, evidence)
+var dbPathArg = args.FirstOrDefault(a => a.StartsWith("--dbpath="));
+var dataBasePath = dbPathArg != null
+    ? Path.GetFullPath(dbPathArg.Split('=', 2)[1])
+    : Path.Combine(AppContext.BaseDirectory, "data");
+
 var builder = WebApplication.CreateBuilder(args);
 
 // Configure Kestrel for large file uploads (streaming)
@@ -96,9 +102,8 @@ var connectionString = builder.Configuration.GetConnectionString("DefaultConnect
 if (standaloneMode)
 {
     // Use SQLite for standalone mode (portable)
-    var dataDir = Path.Combine(AppContext.BaseDirectory, "data");
-    Directory.CreateDirectory(dataDir);
-    var sqliteConnectionString = $"Data Source={Path.Combine(dataDir, "ragdocs.db")}";
+    Directory.CreateDirectory(dataBasePath);
+    var sqliteConnectionString = $"Data Source={Path.Combine(dataBasePath, "ragdocs.db")}";
     builder.Services.AddDbContext<RagDocumentsDbContext>(options =>
         options.UseSqlite(sqliteConnectionString));
     connectionString = sqliteConnectionString; // Update for later checks
@@ -194,6 +199,16 @@ builder.Services.AddLucidRagLlm(
 // LFU cache for synthesis results
 builder.Services.AddSingleton<SynthesisCacheService>();
 
+// Per-conversation salient segment cache registry (in-memory, persists across requests)
+builder.Services.AddSingleton<SalientSegmentCacheRegistry>();
+
+// SaaS API key service
+builder.Services.AddMemoryCache();
+builder.Services.AddScoped<IApiKeyService, ApiKeyService>();
+
+// Personal memory service for user-scoped fact storage
+builder.Services.AddScoped<IPersonalMemoryService, PersonalMemoryService>();
+
 // Application services
 builder.Services.AddScoped<IDocumentProcessingService, DocumentProcessingService>();
 builder.Services.AddScoped<IConversationService, ConversationService>();
@@ -216,8 +231,9 @@ builder.Services.AddScoped<IExplorerSearchService, ExplorerSearchService>();
 builder.Services.AddYamlLenses(builder.Configuration);
 
 // Full-text search: Lucene.NET is core default, PostgreSQL plugin overrides when available
-var luceneIndexPath = Path.Combine(
-    builder.Environment.ContentRootPath, "data", "lucene-index");
+var luceneIndexPath = standaloneMode
+    ? Path.Combine(dataBasePath, "lucene-index")
+    : Path.Combine(builder.Environment.ContentRootPath, "data", "lucene-index");
 builder.Services.AddLuceneFullTextSearch(luceneIndexPath);
 builder.Services.AddScoped<IBm25SearchService, LuceneBm25SearchService>();
 
@@ -234,6 +250,7 @@ builder.Services.AddScoped<TableProcessingService>();
 builder.Services.Configure<SentinelConfig>(
     builder.Configuration.GetSection("Sentinel"));
 builder.Services.AddScoped<ISentinelService, SentinelService>();
+builder.Services.AddScoped<ICollectionRouter, CollectionRouter>();
 
 // Per-tenant LFU cache for evidence and entities (5-10x faster text hydration)
 builder.Services.Configure<LfuCacheConfig>(
@@ -336,6 +353,18 @@ builder.Services.AddAntiforgery(options =>
     options.Cookie.SameSite = SameSiteMode.Strict;
 });
 
+// CORS for SaaS widget (dynamic origins handled by ApiKeyAuthMiddleware,
+// but we need a base policy for the CORS middleware to activate)
+builder.Services.AddCors(options =>
+{
+    options.AddPolicy("SaasWidget", policy =>
+    {
+        policy.AllowAnyOrigin() // Actual origin validation is in ApiKeyAuthMiddleware
+            .AllowAnyHeader()
+            .AllowAnyMethod();
+    });
+});
+
 var app = builder.Build();
 
 // Initialize Lucene FTS index
@@ -358,8 +387,15 @@ app.UseStaticFiles();
 // Routing
 app.UseRouting();
 
+// CORS for SaaS widget endpoints
+app.UseCors("SaasWidget");
+
 // Authentication & Authorization
 app.UseAuthentication();
+
+// SaaS API key authentication (for /api/saas/ endpoints)
+app.UseApiKeyAuth();
+
 app.UseAuthorization();
 
 // Auto-login as demo admin in development mode
@@ -472,7 +508,7 @@ catch (Exception ex)
 
 // Ensure upload directory exists
 var uploadPath = standaloneMode
-    ? Path.Combine(AppContext.BaseDirectory, "uploads")
+    ? Path.Combine(dataBasePath, "uploads")
     : ragConfig.UploadPath;
 Directory.CreateDirectory(uploadPath);
 
@@ -482,7 +518,7 @@ var evidenceConfig = builder.Configuration
     .Get<EvidenceStorageOptions>() ?? new EvidenceStorageOptions();
 var evidencePath = evidenceConfig.BasePath
                    ?? (standaloneMode
-                       ? Path.Combine(AppContext.BaseDirectory, "evidence")
+                       ? Path.Combine(dataBasePath, "evidence")
                        : Path.Combine(uploadPath, "evidence"));
 Directory.CreateDirectory(evidencePath);
 
@@ -490,14 +526,15 @@ Directory.CreateDirectory(evidencePath);
 if (standaloneMode)
 {
     var url = $"http://localhost:{port}";
-    Log.Information("LucidRAG starting in standalone mode at {Url}", url);
+    Log.Information("LucidRAG starting in standalone mode at {Url} with data path {DataPath}", url, dataBasePath);
     Console.WriteLine();
-    Console.WriteLine("╔════════════════════════════════════════════════════════╗");
-    Console.WriteLine("║             lucidRAG - Standalone Mode                 ║");
-    Console.WriteLine("╠════════════════════════════════════════════════════════╣");
-    Console.WriteLine($"║  URL: {url,-49}║");
-    Console.WriteLine("║  Press Ctrl+C to stop                                  ║");
-    Console.WriteLine("╚════════════════════════════════════════════════════════╝");
+    Console.WriteLine("╔════════════════════════════════════════════════════════════╗");
+    Console.WriteLine("║               lucidRAG - Standalone Mode                  ║");
+    Console.WriteLine("╠════════════════════════════════════════════════════════════╣");
+    Console.WriteLine($"║  URL:  {url,-52}║");
+    Console.WriteLine($"║  Data: {dataBasePath,-52}║");
+    Console.WriteLine("║  Press Ctrl+C to stop                                    ║");
+    Console.WriteLine("╚════════════════════════════════════════════════════════════╝");
     Console.WriteLine();
 
     // Open browser

@@ -1,0 +1,85 @@
+<!-- Transparency Section -->
+<section id="transparency" class="py-16 lg:py-24">
+    <div class="max-w-7xl mx-auto px-4">
+        <div class="text-center mb-12">
+            <h2 class="text-3xl lg:text-4xl font-bold font-brand mb-4">Open and transparent</h2>
+            <p class="text-base-content/60 max-w-2xl mx-auto">We tell you exactly how it works. No hand-waving.</p>
+        </div>
+
+        <div class="grid md:grid-cols-2 gap-8 max-w-5xl mx-auto">
+            <!-- We DON'T train on your data -->
+            <div class="card bg-base-100 shadow-sm border-2 border-success/30">
+                <div class="card-body">
+                    <div class="flex items-center gap-3 mb-4">
+                        <div class="w-10 h-10 rounded-full bg-success/10 flex items-center justify-center">
+                            <svg class="h-5 w-5 text-success" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/></svg>
+                        </div>
+                        <h3 class="text-xl font-bold font-brand">We never train AI on your data</h3>
+                    </div>
+                    <p class="text-base-content/60 mb-4">
+                        Your documents are indexed for <em>your</em> search results only. We use ONNX embeddings locally &mdash;
+                        your content never leaves the system to train any model. The source code proves it.
+                    </p>
+                    <ul class="space-y-2 text-sm text-base-content/60">
+                        <li class="flex items-start gap-2">
+                            <svg class="h-4 w-4 text-success flex-shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
+                            Embeddings generated locally with ONNX (all-MiniLM-L6-v2)
+                        </li>
+                        <li class="flex items-start gap-2">
+                            <svg class="h-4 w-4 text-success flex-shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
+                            Each API key's data stored in isolated corpus
+                        </li>
+                        <li class="flex items-start gap-2">
+                            <svg class="h-4 w-4 text-success flex-shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
+                            Full source code on GitHub &mdash; verify yourself
+                        </li>
+                    </ul>
+                </div>
+            </div>
+
+            <!-- How we keep costs down -->
+            <div class="card bg-base-100 shadow-sm border-2 border-info/30">
+                <div class="card-body">
+                    <div class="flex items-center gap-3 mb-4">
+                        <div class="w-10 h-10 rounded-full bg-info/10 flex items-center justify-center">
+                            <svg class="h-5 w-5 text-info" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
+                        </div>
+                        <h3 class="text-xl font-bold font-brand">Smart system, tiny LLMs</h3>
+                    </div>
+                    <p class="text-base-content/60 mb-4">
+                        Our system does the heavy lifting so the LLMs can be small and cheap.
+                        Tiny 0.6B-class models handle query decomposition and response assembly.
+                        Embedded prompts train the semantic cache to make repeat queries even cheaper.
+                    </p>
+                    <ul class="space-y-2 text-sm text-base-content/60">
+                        <li class="flex items-start gap-2">
+                            <svg class="h-4 w-4 text-info flex-shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
+                            Search: vector lookup + BM25 index &mdash; no LLM at all
+                        </li>
+                        <li class="flex items-start gap-2">
+                            <svg class="h-4 w-4 text-info flex-shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
+                            Chat: 0.6B LLM for decomposition, small LLM for response
+                        </li>
+                        <li class="flex items-start gap-2">
+                            <svg class="h-4 w-4 text-info flex-shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
+                            Semantic cache with embedded prompt training
+                        </li>
+                        <li class="flex items-start gap-2">
+                            <svg class="h-4 w-4 text-info flex-shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
+                            No GPU required (but we use one for speed)
+                        </li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+
+        <!-- Blog link -->
+        <div class="text-center mt-10">
+            <p class="text-base-content/60 mb-4">Want the deep technical details? We write about everything.</p>
+            <a href="https://www.mostlylucid.net/blog" target="_blank" class="btn btn-outline btn-sm font-brand gap-2">
+                <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"/></svg>
+                Read the Blog
+            </a>
+        </div>
+    </div>
+</section>

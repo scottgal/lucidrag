@@ -45,6 +45,11 @@ public class RagDocumentsDbContext(DbContextOptions<RagDocumentsDbContext> optio
     // Intra-document segment graphs
     public DbSet<SegmentLink> SegmentLinks => Set<SegmentLink>();
 
+    // SaaS API keys
+    public DbSet<ApiKeyEntity> ApiKeys => Set<ApiKeyEntity>();
+    public DbSet<ApiKeyIndexingSource> ApiKeyIndexingSources => Set<ApiKeyIndexingSource>();
+    public DbSet<ApiKeyReadDomain> ApiKeyReadDomains => Set<ApiKeyReadDomain>();
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);
@@ -515,6 +520,61 @@ public class RagDocumentsDbContext(DbContextOptions<RagDocumentsDbContext> optio
             entity.HasOne(e => e.Document)
                 .WithMany()
                 .HasForeignKey(e => e.DocumentId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        // ApiKeyEntity - SaaS API keys
+        modelBuilder.Entity<ApiKeyEntity>(entity =>
+        {
+            entity.ToTable("api_keys");
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.KeyPrefix).HasMaxLength(16).IsRequired();
+            entity.Property(e => e.KeyHash).HasMaxLength(64).IsRequired();
+            entity.Property(e => e.Description).HasMaxLength(500);
+            entity.Property(e => e.UserId).HasMaxLength(450);
+            entity.Property(e => e.NormalizedOwnerEmail).HasMaxLength(320);
+            entity.Property(e => e.Plan).HasMaxLength(20).IsRequired();
+
+            entity.HasIndex(e => e.KeyHash).IsUnique();
+            entity.HasIndex(e => e.KeyPrefix).IsUnique();
+            entity.HasIndex(e => e.UserId);
+            entity.HasIndex(e => e.NormalizedOwnerEmail);
+
+            entity.HasOne(e => e.Collection)
+                .WithMany()
+                .HasForeignKey(e => e.CollectionId)
+                .OnDelete(DeleteBehavior.SetNull);
+        });
+
+        // ApiKeyIndexingSource - 1 per key
+        modelBuilder.Entity<ApiKeyIndexingSource>(entity =>
+        {
+            entity.ToTable("api_key_indexing_sources");
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.SourceType).HasConversion<string>().HasMaxLength(20).IsRequired();
+            entity.Property(e => e.SourceValue).HasMaxLength(500).IsRequired();
+            entity.Property(e => e.CrawlStatus).HasMaxLength(20);
+
+            entity.HasIndex(e => e.ApiKeyId).IsUnique();
+
+            entity.HasOne(e => e.ApiKey)
+                .WithOne(k => k.IndexingSource)
+                .HasForeignKey<ApiKeyIndexingSource>(e => e.ApiKeyId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        // ApiKeyReadDomain - up to 5 per key
+        modelBuilder.Entity<ApiKeyReadDomain>(entity =>
+        {
+            entity.ToTable("api_key_read_domains");
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.Domain).HasMaxLength(253).IsRequired();
+
+            entity.HasIndex(e => new { e.ApiKeyId, e.Domain }).IsUnique();
+
+            entity.HasOne(e => e.ApiKey)
+                .WithMany(k => k.ReadDomains)
+                .HasForeignKey(e => e.ApiKeyId)
                 .OnDelete(DeleteBehavior.Cascade);
         });
     }

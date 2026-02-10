@@ -790,6 +790,9 @@ public class DocumentQueueProcessor(
                 }
 
                 // Store as unified RetrievalEntity and evidence - independent of entity extraction
+                // These two operations are decoupled so evidence storage succeeds even if
+                // RetrievalEntity storage fails (e.g., SQLite schema differences in standalone mode)
+                RetrievalEntity? retrievalEntity = null;
                 try
                 {
                     progressChannel.Writer.TryWrite(
@@ -801,22 +804,55 @@ public class DocumentQueueProcessor(
                         .Select(del => del.Entity!)
                         .ToListAsync(ct);
 
-                    var retrievalEntity =
+                    retrievalEntity =
                         await retrievalEntityService.StoreDocumentAsync(document, segments, extractedEntities, result,
                             ct);
                     logger.LogInformation(
                         "Stored document {DocumentId} as RetrievalEntity with summary for cross-modal search",
                         job.DocumentId);
-
-                    // Store each segment as evidence artifact
-                    progressChannel.Writer.TryWrite(
-                        ProgressUpdates.Stage("Evidence", $"Storing {segments.Count} segment evidence artifacts..."));
-
-                    await StoreSegmentEvidenceAsync(evidenceRepository, retrievalEntity, segments, logger, ct);
                 }
                 catch (Exception ex)
                 {
-                    logger.LogWarning(ex, "Failed to store document {DocumentId} as RetrievalEntity, continuing",
+                    logger.LogWarning(ex,
+                        "Failed to store document {DocumentId} as RetrievalEntity, will store evidence using document ID directly",
+                        job.DocumentId);
+                }
+
+                // Store each segment as evidence artifact (uses document ID as fallback entity ID)
+                try
+                {
+                    // When RetrievalEntity storage failed, create a minimal RetrievalEntityRecord
+                    // so the FK constraint on EvidenceArtifact.EntityId is satisfied
+                    if (retrievalEntity == null)
+                    {
+                        var existingRecord = await db.RetrievalEntities
+                            .AnyAsync(r => r.Id == document.Id, ct);
+                        if (!existingRecord)
+                        {
+                            db.RetrievalEntities.Add(new RetrievalEntityRecord
+                            {
+                                Id = document.Id,
+                                ContentType = "document",
+                                Source = document.FilePath ?? document.SourceUrl ?? document.Name,
+                                Title = document.OriginalFilename ?? document.Name,
+                                CollectionId = document.CollectionId
+                            });
+                            await db.SaveChangesAsync(ct);
+                            logger.LogInformation(
+                                "Created minimal RetrievalEntityRecord {DocumentId} for evidence FK",
+                                document.Id);
+                        }
+                    }
+
+                    progressChannel.Writer.TryWrite(
+                        ProgressUpdates.Stage("Evidence", $"Storing {segments.Count} segment evidence artifacts..."));
+
+                    await StoreSegmentEvidenceAsync(
+                        evidenceRepository, document.Id, retrievalEntity, segments, logger, ct);
+                }
+                catch (Exception ex)
+                {
+                    logger.LogWarning(ex, "Failed to store segment evidence for document {DocumentId}",
                         job.DocumentId);
                 }
             }
@@ -950,26 +986,31 @@ public class DocumentQueueProcessor(
 
     /// <summary>
     ///     Store segment text as evidence artifacts.
-    ///     Each segment becomes an evidence artifact linked to the RetrievalEntity.
+    ///     Each segment becomes an evidence artifact linked to the RetrievalEntity (or document ID as fallback).
     ///     Evidence type: segment_text - the actual content extracted from document.
     ///     This allows the RAG vector store to contain only embeddings,
     ///     with all plaintext stored securely in the evidence repository.
-    ///     OPTIMIZATION: Uses SegmentSelector to reduce storage by:
-    ///     - Filtering by salience threshold (skip low-value segments)
-    ///     - Deduplicating semantically similar segments
-    ///     - Prioritizing segments with unique entities for coverage
     /// </summary>
     private static async Task StoreSegmentEvidenceAsync(
         IEvidenceRepository evidenceRepository,
-        RetrievalEntity entity,
+        Guid documentId,
+        RetrievalEntity? entity,
         IReadOnlyList<Segment> segments,
         ILogger logger,
         CancellationToken ct)
     {
-        if (!Guid.TryParse(entity.Id, out var entityId))
+        // Prefer RetrievalEntity ID (matches cross-modal lookup), fall back to document ID
+        Guid entityId;
+        if (entity != null && Guid.TryParse(entity.Id, out var parsedId))
         {
-            logger.LogWarning("Invalid entity ID format for evidence storage: {EntityId}", entity.Id);
-            return;
+            entityId = parsedId;
+        }
+        else
+        {
+            entityId = documentId;
+            logger.LogInformation(
+                "Using document ID {DocumentId} as entity ID for evidence storage (RetrievalEntity unavailable)",
+                documentId);
         }
 
         // NOTE: Segments are already pre-selected before indexing in Qdrant
