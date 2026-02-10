@@ -11,7 +11,6 @@ namespace LucidRAG.Plugin.Postgres;
 
 /// <summary>
 ///     PostgreSQL-native full-text search service using ts_rank_cd.
-///     Registered by PostgresPlugin as IBm25SearchService.
 ///
 ///     Requires the AddFullTextSearch migration which creates:
 ///     - content_tokens tsvector GENERATED ALWAYS column on evidence_artifacts
@@ -43,88 +42,12 @@ public class PostgresBm25Service : IBm25SearchService
                                 "DefaultConnection string not found in configuration");
     }
 
-    public async Task<List<(EvidenceArtifact artifact, double score)>> SearchAsync(
+    public Task<List<(EvidenceArtifact artifact, double score)>> SearchAsync(
         string query,
         int topK = 25,
         IEnumerable<Guid>? documentIds = null,
         CancellationToken ct = default)
-    {
-        if (string.IsNullOrWhiteSpace(query))
-            return [];
-
-        var stopwatch = Stopwatch.StartNew();
-
-        try
-        {
-            // Use the same Npgsql direct approach as SearchWithScoresAsync to get real scores.
-            // EF FromSqlRaw ignores extra columns (rank_score), so we query IDs+scores first.
-            var docIdArray = documentIds?.ToArray();
-            var hasDocFilter = docIdArray is { Length: > 0 };
-
-            var sql = hasDocFilter
-                ? """
-                  SELECT ea."Id",
-                      ts_rank_cd(ea.content_tokens, websearch_to_tsquery('english', $1), 32) as score
-                  FROM evidence_artifacts ea
-                  WHERE ea.content_tokens @@ websearch_to_tsquery('english', $1)
-                  AND ea."EntityId" = ANY($3)
-                  ORDER BY score DESC
-                  LIMIT $2
-                  """
-                : """
-                  SELECT ea."Id",
-                      ts_rank_cd(ea.content_tokens, websearch_to_tsquery('english', $1), 32) as score
-                  FROM evidence_artifacts ea
-                  WHERE ea.content_tokens @@ websearch_to_tsquery('english', $1)
-                  ORDER BY score DESC
-                  LIMIT $2
-                  """;
-
-            await using var connection = new NpgsqlConnection(_connectionString);
-            await connection.OpenAsync(ct);
-
-            await using var command = new NpgsqlCommand(sql, connection);
-            command.Parameters.AddWithValue(query);
-            command.Parameters.AddWithValue(topK);
-            if (hasDocFilter)
-                command.Parameters.AddWithValue(docIdArray!);
-
-            var idsAndScores = new List<(Guid id, double score)>();
-            await using var reader = await command.ExecuteReaderAsync(ct);
-            while (await reader.ReadAsync(ct))
-                idsAndScores.Add((reader.GetGuid(0), reader.GetDouble(1)));
-            await reader.CloseAsync();
-
-            if (idsAndScores.Count == 0)
-            {
-                stopwatch.Stop();
-                return [];
-            }
-
-            var ids = idsAndScores.Select(x => x.id).ToList();
-            var artifacts = await _db.EvidenceArtifacts
-                .Where(ea => ids.Contains(ea.Id))
-                .AsNoTracking()
-                .ToListAsync(ct);
-
-            var results = idsAndScores
-                .Select(x => (artifacts.FirstOrDefault(a => a.Id == x.id)!, x.score))
-                .Where(x => x.Item1 != null)
-                .ToList();
-
-            stopwatch.Stop();
-            _logger.LogDebug(
-                "PostgreSQL FTS query completed in {ElapsedMs}ms: '{Query}' returned {Count} results",
-                stopwatch.ElapsedMilliseconds, query, results.Count);
-
-            return results;
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "PostgreSQL FTS search failed for query: {Query}", query);
-            throw;
-        }
-    }
+        => SearchWithScoresAsync(query, topK, documentIds, ct);
 
     public async Task<List<(EvidenceArtifact artifact, double score)>> SearchWithScoresAsync(
         string query,
@@ -144,6 +67,7 @@ public class PostgresBm25Service : IBm25SearchService
 
             // EvidenceArtifact.EntityId == RetrievalEntityRecord.Id == DocumentEntity.Id
             // for document-type entities, so we can filter directly on EntityId.
+            // EF FromSqlRaw ignores extra columns (rank_score), so we query IDs+scores via Npgsql.
             var sql = hasDocFilter
                 ? """
                   SELECT ea."Id",
@@ -186,14 +110,15 @@ public class PostgresBm25Service : IBm25SearchService
             }
 
             var ids = idsAndScores.Select(x => x.id).ToList();
-            var artifacts = await _db.EvidenceArtifacts
+            var artifactLookup = (await _db.EvidenceArtifacts
                 .Where(ea => ids.Contains(ea.Id))
                 .AsNoTracking()
-                .ToListAsync(ct);
+                .ToListAsync(ct))
+                .ToDictionary(a => a.Id);
 
             var results = idsAndScores
-                .Select(x => (artifacts.FirstOrDefault(a => a.Id == x.id)!, x.score))
-                .Where(x => x.Item1 != null)
+                .Where(x => artifactLookup.ContainsKey(x.id))
+                .Select(x => (artifactLookup[x.id], x.score))
                 .ToList();
 
             stopwatch.Stop();
@@ -205,9 +130,8 @@ public class PostgresBm25Service : IBm25SearchService
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "PostgreSQL FTS search with scores failed for query: {Query}", query);
+            _logger.LogError(ex, "PostgreSQL FTS search failed for query: {Query}", query);
             throw;
         }
     }
-
 }

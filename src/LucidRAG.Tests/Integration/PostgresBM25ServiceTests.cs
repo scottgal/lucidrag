@@ -63,6 +63,14 @@ public class PostgresBM25ServiceTests : IAsyncLifetime
 
         _db.Documents.Add(document);
 
+        // EvidenceArtifact.EntityId FK references retrieval_entities, not documents
+        _db.RetrievalEntities.Add(new RetrievalEntityRecord
+        {
+            Id = document.Id,
+            ContentType = "document",
+            Source = document.FilePath
+        });
+
         // Create evidence artifacts with various content
         var evidence = new[]
         {
@@ -365,6 +373,12 @@ public class PostgresBM25ServiceTests : IAsyncLifetime
             Status = DocumentStatus.Completed
         };
         _db.Documents.Add(doc2);
+        _db.RetrievalEntities.Add(new RetrievalEntityRecord
+        {
+            Id = doc2.Id,
+            ContentType = "document",
+            Source = doc2.FilePath
+        });
 
         _db.EvidenceArtifacts.Add(new EvidenceArtifact
         {
@@ -417,6 +431,13 @@ public class PostgresBM25ServiceTests : IAsyncLifetime
 
         var rng = new Random(42);
         var parentId = Guid.NewGuid();
+
+        _db.RetrievalEntities.Add(new RetrievalEntityRecord
+        {
+            Id = parentId,
+            ContentType = "document",
+            Source = "/test/bulk.md"
+        });
 
         var artifacts = Enumerable.Range(0, count).Select(i => new EvidenceArtifact
         {

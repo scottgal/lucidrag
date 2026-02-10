@@ -62,8 +62,8 @@ public class LuceneBm25SearchService : IBm25SearchService
             // Apply document ID filter (same semantics as PostgreSQL service)
             if (documentIds != null)
             {
-                var docIdSet = documentIds.ToHashSet();
-                query2 = query2.Where(ea => docIdSet.Contains(ea.EntityId));
+                var docIdList = documentIds.ToList();
+                query2 = query2.Where(ea => docIdList.Contains(ea.EntityId));
             }
 
             var artifacts = await query2.AsNoTracking().ToListAsync(ct);

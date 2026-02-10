@@ -3,8 +3,6 @@ using LucidRAG.Data;
 using LucidRAG.Entities;
 using LucidRAG.Plugin.Postgres;
 using LucidRAG.Services;
-using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Mostlylucid.DocSummarizer.FullText.Lucene;
@@ -98,6 +96,11 @@ public class Bm25ParityTests : IAsyncLifetime
 
         _db.Documents.AddRange(doc1, doc2);
 
+        // EvidenceArtifact.EntityId FK references retrieval_entities, not documents
+        _db.RetrievalEntities.AddRange(
+            new RetrievalEntityRecord { Id = _doc1Id, ContentType = "document", Source = doc1.FilePath },
+            new RetrievalEntityRecord { Id = _doc2Id, ContentType = "document", Source = doc2.FilePath });
+
         var artifacts = new[]
         {
             new EvidenceArtifact
@@ -132,7 +135,7 @@ public class Bm25ParityTests : IAsyncLifetime
                 MimeType = "text/plain",
                 StorageBackend = "inline",
                 StoragePath = "inline:segment_text",
-                Content = "Quantum computing uses qubits and superposition to solve certain problems exponentially faster.",
+                Content = "Quantum computing applies machine learning algorithms to solve optimization problems exponentially faster.",
                 SegmentHash = "parity-hash-3",
                 Metadata = "{}"
             }
@@ -166,7 +169,7 @@ public class Bm25ParityTests : IAsyncLifetime
     [Fact]
     public async Task NonMatchingQuery_BothReturnEmpty()
     {
-        var query = "blockchain cryptocurrency ethereum";
+        var query = "cryptocurrency hedgehog xylophone";
 
         var pgResults = await _pgService.SearchWithScoresAsync(query, 10);
         var luceneResults = await _luceneService.SearchWithScoresAsync(query, 10);
@@ -178,16 +181,24 @@ public class Bm25ParityTests : IAsyncLifetime
     [Fact]
     public async Task DocumentIdFilter_BothRespectFilter()
     {
-        // Search for "machine learning" but restrict to doc2 (quantum computing) — should exclude ML results
+        // "machine learning" matches both doc1 (ML guide) and doc2 (quantum + ML)
         var query = "machine learning";
 
-        var pgResults = await _pgService.SearchWithScoresAsync(query, 10, [_doc2Id]);
-        var luceneResults = await _luceneService.SearchWithScoresAsync(query, 10, [_doc2Id]);
+        // Unfiltered should return results from both docs
+        var pgAll = await _pgService.SearchWithScoresAsync(query, 10);
+        pgAll.Should().Contain(r => r.artifact.EntityId == _doc1Id, "unfiltered should include doc1");
+        pgAll.Should().Contain(r => r.artifact.EntityId == _doc2Id, "unfiltered should include doc2");
 
-        // Both backends should only return artifacts from doc2
-        pgResults.Should().AllSatisfy(r =>
+        // Filtered to doc2 only — both backends should exclude doc1
+        var pgFiltered = await _pgService.SearchWithScoresAsync(query, 10, [_doc2Id]);
+        var luceneFiltered = await _luceneService.SearchWithScoresAsync(query, 10, [_doc2Id]);
+
+        pgFiltered.Should().NotBeEmpty("PostgreSQL should find matches in doc2");
+        pgFiltered.Should().AllSatisfy(r =>
             r.artifact.EntityId.Should().Be(_doc2Id, "PostgreSQL should filter to doc2 only"));
-        luceneResults.Should().AllSatisfy(r =>
+
+        luceneFiltered.Should().NotBeEmpty("Lucene should find matches in doc2");
+        luceneFiltered.Should().AllSatisfy(r =>
             r.artifact.EntityId.Should().Be(_doc2Id, "Lucene should filter to doc2 only"));
     }
 

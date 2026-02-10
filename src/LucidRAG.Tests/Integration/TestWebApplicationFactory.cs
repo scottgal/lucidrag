@@ -4,6 +4,8 @@ using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Mostlylucid.DocSummarizer.FullText.Lucene;
+using Mostlylucid.DocSummarizer.Search;
 
 namespace LucidRAG.Tests.Integration;
 
@@ -12,6 +14,8 @@ namespace LucidRAG.Tests.Integration;
 /// </summary>
 public class TestWebApplicationFactory : WebApplicationFactory<Program>
 {
+    private string? _tempLucenePath;
+
     /// <summary>
     ///     Connection string for existing dev PostgreSQL.
     ///     Reads from ConnectionStrings__DefaultConnection env var (CI), POSTGRES_PASSWORD env var, or .env file.
@@ -89,6 +93,12 @@ public class TestWebApplicationFactory : WebApplicationFactory<Program>
             // Add PostgreSQL for testing
             services.AddDbContext<RagDocumentsDbContext>(options =>
                 options.UseNpgsql(PostgresConnectionString));
+
+            // Replace Lucene index with a temp path to avoid lock conflicts with running app
+            var luceneDescriptor = services.SingleOrDefault(d => d.ServiceType == typeof(IFullTextSearch));
+            if (luceneDescriptor != null) services.Remove(luceneDescriptor);
+            _tempLucenePath = Path.Combine(Path.GetTempPath(), "lucidrag-test-lucene-" + Guid.NewGuid().ToString("N"));
+            services.AddSingleton<IFullTextSearch>(new LuceneFullTextSearch(_tempLucenePath));
         });
 
         builder.ConfigureAppConfiguration((context, config) =>
@@ -167,15 +177,28 @@ public class TestWebApplicationFactory : WebApplicationFactory<Program>
         using var scope = Services.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<RagDocumentsDbContext>();
 
-        // Delete test data
+        // Delete test data (RetrievalEntities cascades to EvidenceArtifacts via FK)
         db.ConversationMessages.RemoveRange(db.ConversationMessages);
         db.Conversations.RemoveRange(db.Conversations);
         db.DocumentEntityLinks.RemoveRange(db.DocumentEntityLinks);
         db.EntityRelationships.RemoveRange(db.EntityRelationships);
+        db.RetrievalEntities.RemoveRange(db.RetrievalEntities);
         db.Entities.RemoveRange(db.Entities);
         db.Documents.RemoveRange(db.Documents);
         db.Collections.RemoveRange(db.Collections);
 
         await db.SaveChangesAsync();
+    }
+
+    protected override void Dispose(bool disposing)
+    {
+        base.Dispose(disposing);
+
+        // Clean up temp Lucene index directory
+        if (_tempLucenePath != null && Directory.Exists(_tempLucenePath))
+        {
+            try { Directory.Delete(_tempLucenePath, true); }
+            catch { /* best effort */ }
+        }
     }
 }
