@@ -8,7 +8,7 @@ namespace DoomSummarizer.Services;
 ///     Entity operations are in <see cref="IEntityGraphStore" /> / <see cref="DuckDbEntityGraphStore" />.
 ///     Single-file database (~/.doomsummarizer/vectors.duckdb).
 /// </summary>
-public class DuckDbVectorStore : IAsyncDisposable
+public class DuckDbVectorStore : IItemVectorStore
 {
     private readonly string _dbPath;
     private readonly int _dim;
@@ -181,6 +181,12 @@ public class DuckDbVectorStore : IAsyncDisposable
                          WHERE indexed_at < current_timestamp - INTERVAL '{retentionDays} days';
                          """);
     }
+
+    /// <inheritdoc />
+    public bool SupportsHnsw => true;
+
+    /// <inheritdoc />
+    public object? GetUnderlyingConnection() => _conn;
 
     // --- Helpers ---
 

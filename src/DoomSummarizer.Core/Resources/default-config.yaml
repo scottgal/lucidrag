@@ -226,9 +226,23 @@ expansion:
   expansion_count: 8                # Extra chunks to pull from concentrated source
   deferred_embedding: true          # Embed low-salience chunks on-demand during expansion
 
+# ─── Background Learning ──────────────────────────────────────────────
+# Controls how the classifier learns from sentinel LLM corrections.
+# When enabled, sentinel disagreements are logged and periodically analyzed.
+learning:
+  enabled: true                        # Enable learning from sentinel disagreements
+  scan_interval: "06:00:00"            # How often to check for new disagreements (HH:MM:SS)
+                                       # CLI: checked on startup, learns if enough time has passed
+                                       # Server: background service scan interval
+  min_cluster_size: 3                  # Minimum disagreement cluster size to propose an exemplar
+  auto_merge: false                    # Auto-merge proposals if tests pass (true = no --learn-apply needed)
+  auto_merge_min_improvement: 1        # Minimum net improvement to auto-merge
+
 # ─── Storage ─────────────────────────────────────────────────────────
 storage:
   db_path: "~/.doomsummarizer/doom.db" # SQLite database path (~ expands to home dir)
+  vector_db_path: "~/.doomsummarizer/vectors.duckdb"  # Vector store database path
+  vector_backend: "duckdb"             # Vector backend: duckdb (HNSW, ~96MB) or sqlite-vec (brute-force, ~369KB)
   retention_days: 30                   # Days to keep articles before cleanup
 
 # ─── Plugins ─────────────────────────────────────────────────────────

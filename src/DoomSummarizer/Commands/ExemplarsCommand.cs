@@ -5,6 +5,8 @@ using DoomSummarizer.Models;
 using DoomSummarizer.Services;
 using Spectre.Console;
 using Spectre.Console.Cli;
+using YamlDotNet.Serialization;
+using YamlDotNet.Serialization.NamingConventions;
 
 namespace DoomSummarizer.Commands;
 
@@ -35,6 +37,15 @@ public sealed class ExemplarsCommand : AsyncCommand<ExemplarsCommand.Settings>
 
         if (settings.Benchmark)
             return await RunBenchmarkAsync(settings, cancellationToken);
+
+        if (settings.Learn)
+            return await RunLearnAsync(settings, cancellationToken);
+
+        if (settings.LearnApply)
+            return await RunLearnApplyAsync(settings, cancellationToken);
+
+        if (settings.LearnSchedule)
+            return await ShowLearnScheduleAsync(settings, cancellationToken);
 
         // Default: show summary
         return ShowSummary();
@@ -69,6 +80,9 @@ public sealed class ExemplarsCommand : AsyncCommand<ExemplarsCommand.Settings>
         AnsiConsole.MarkupLine("  [grey]exemplars --test[/]      Run diagnostic test matrix (80+ prompts)");
         AnsiConsole.MarkupLine("  [grey]exemplars --test -v[/]   Full per-query breakdown");
         AnsiConsole.MarkupLine("  [grey]exemplars --benchmark[/] Benchmark classifier latency (p50/p95/p99)");
+        AnsiConsole.MarkupLine("  [grey]exemplars --learn[/]     Analyze sentinel disagreements, propose exemplars");
+        AnsiConsole.MarkupLine("  [grey]exemplars --learn-apply[/] Validate proposals against test matrix and merge");
+        AnsiConsole.MarkupLine("  [grey]exemplars --learn-schedule[/] Show learning schedule and next auto-learn time");
 
         return 0;
     }
@@ -635,6 +649,8 @@ public sealed class ExemplarsCommand : AsyncCommand<ExemplarsCommand.Settings>
         new("AI developments this week and compare the top models", ExpectedComposite: true),
         new("Get me business news and find out what's new in AI", ExpectedComposite: true),
         new("Summarize tech news and also what's happening in politics", ExpectedComposite: true),
+        // Punctuation-based composite (no "and also" needed)
+        new("AI news; politics; ukraine", ExpectedComposite: true),
         // These should NOT be composite
         new("Latest tech news", ExpectedComposite: false),
         new("What's happening in AI today?", ExpectedComposite: false),
@@ -816,6 +832,381 @@ public sealed class ExemplarsCommand : AsyncCommand<ExemplarsCommand.Settings>
         return sorted[Math.Max(0, Math.Min(idx, sorted.Count - 1))];
     }
 
+    // ══════════════════════════════════════════════════════════════════
+    // ── Learning from sentinel disagreements ────────────────────────
+    // ══════════════════════════════════════════════════════════════════
+
+    /// <summary>
+    ///     Analyze sentinel disagreements and propose new exemplars.
+    ///     Reads from the learning_log table, clusters by embedding similarity,
+    ///     and outputs proposed YAML exemplars.
+    /// </summary>
+    private static async Task<int> RunLearnAsync(Settings settings, CancellationToken ct)
+    {
+        var boot = await CommandBootstrap.CreateAsync(settings.GpuDevice, ct);
+        await using (boot)
+        {
+            var minCluster = settings.LearnMinCluster ?? boot.Config.Learning.MinClusterSize;
+            var analyzer = new LearningAnalyzer(boot.Storage, minCluster);
+
+            var (total, unpromoted, promoted) = await boot.Storage.GetLearningLogCountsAsync();
+            AnsiConsole.MarkupLine($"[bold cyan]Learning Log[/]");
+            AnsiConsole.MarkupLine($"  Total entries: [green]{total}[/]");
+            AnsiConsole.MarkupLine($"  Unpromoted: [yellow]{unpromoted}[/]");
+            AnsiConsole.MarkupLine($"  Promoted: [grey]{promoted}[/]");
+
+            if (unpromoted == 0)
+            {
+                AnsiConsole.MarkupLine(
+                    "\n[yellow]No unpromoted disagreements found.[/] Run queries that trigger the sentinel LLM to accumulate data.");
+                return 0;
+            }
+
+            AnsiConsole.MarkupLine("\n[grey]Analyzing disagreements...[/]");
+            var result = await analyzer.AnalyzeAsync(ct);
+
+            // Show disagreement stats
+            var stats = await boot.Storage.GetDisagreementStatsAsync();
+            if (stats.Count > 0)
+            {
+                var statsTable = new Table()
+                    .Border(TableBorder.Rounded)
+                    .AddColumn("Topic")
+                    .AddColumn("Type")
+                    .AddColumn("Count")
+                    .AddColumn("Topic Disagree")
+                    .AddColumn("Type Disagree")
+                    .AddColumn("Avg Emb Score");
+
+                foreach (var stat in stats)
+                {
+                    statsTable.AddRow(
+                        $"[cyan]{FormattingHelpers.Esc(stat.SentinelTopic ?? "?")}[/]",
+                        $"[yellow]{FormattingHelpers.Esc(stat.SentinelType)}[/]",
+                        stat.Count.ToString(),
+                        stat.TopicDisagreeCount.ToString(),
+                        stat.TypeDisagreeCount.ToString(),
+                        $"{stat.AvgEmbeddingScore:F2}");
+                }
+
+                AnsiConsole.Write(statsTable);
+            }
+
+            // Show proposed exemplars
+            if (result.TotalProposals == 0)
+            {
+                AnsiConsole.MarkupLine(
+                    $"\n[yellow]No proposals generated.[/] Need at least {minCluster} disagreements per (topic, type) bucket.");
+                if (result.SmallGroupCount > 0)
+                    AnsiConsole.MarkupLine(
+                        $"  [grey]{result.SmallGroupCount} groups below threshold ({result.SmallGroupQueries.Count} queries)[/]");
+                return 0;
+            }
+
+            AnsiConsole.MarkupLine($"\n[bold green]Proposed Exemplars ({result.TotalProposals}):[/]");
+
+            var proposalTable = new Table()
+                .Border(TableBorder.Rounded)
+                .AddColumn("Gap")
+                .AddColumn("Count")
+                .AddColumn("Proposed Question")
+                .AddColumn("Topic")
+                .AddColumn("Type")
+                .AddColumn("Emb Score");
+
+            foreach (var gap in result.Gaps)
+            {
+                foreach (var proposal in gap.ProposedExemplars)
+                {
+                    proposalTable.AddRow(
+                        $"{FormattingHelpers.Esc(gap.SentinelTopic)}/{FormattingHelpers.Esc(gap.SentinelType)}",
+                        gap.DisagreementCount.ToString(),
+                        FormattingHelpers.TruncEsc(proposal.Question, 50),
+                        $"[cyan]{FormattingHelpers.Esc(proposal.Topic)}[/]",
+                        $"[yellow]{FormattingHelpers.Esc(proposal.Type)}[/]",
+                        $"{proposal.EmbeddingScore:F2}");
+                }
+            }
+
+            AnsiConsole.Write(proposalTable);
+
+            // Write YAML to user exemplars dir
+            var allProposals = result.Gaps.SelectMany(g => g.ProposedExemplars).ToList();
+            var yaml = LearningAnalyzer.ProposalsToYaml(allProposals);
+
+            var userDir = Path.Combine(ConfigService.GetConfigDir(), "exemplars");
+            Directory.CreateDirectory(userDir);
+            var outputPath = Path.Combine(userDir, "auto-learned.yaml");
+            await File.WriteAllTextAsync(outputPath, yaml, ct);
+
+            AnsiConsole.MarkupLine($"\n[green]Written to:[/] {FormattingHelpers.Esc(outputPath)}");
+            AnsiConsole.MarkupLine("[grey]Run: exemplars --learn-apply  to validate and merge[/]");
+
+            return 0;
+        }
+    }
+
+    /// <summary>
+    ///     Merge proposed exemplars, validate against the test matrix, and commit if no regressions.
+    /// </summary>
+    private static async Task<int> RunLearnApplyAsync(Settings settings, CancellationToken ct)
+    {
+        var userDir = Path.Combine(ConfigService.GetConfigDir(), "exemplars");
+        var proposalPath = Path.Combine(userDir, "auto-learned.yaml");
+
+        if (!File.Exists(proposalPath))
+        {
+            AnsiConsole.MarkupLine("[red]No proposals found.[/] Run: exemplars --learn  first");
+            return 1;
+        }
+
+        // Load proposals
+        var proposalExemplars = QueryClassifier.LoadExemplarsFromFile(proposalPath);
+        if (proposalExemplars.Count == 0)
+        {
+            AnsiConsole.MarkupLine("[yellow]No exemplars in proposal file.[/]");
+            return 0;
+        }
+
+        AnsiConsole.MarkupLine($"[bold cyan]Validating {proposalExemplars.Count} proposed exemplars[/]\n");
+
+        var boot = await CommandBootstrap.CreateAsync(settings.GpuDevice, ct);
+        await using (boot)
+        {
+            // Run baseline test matrix
+            AnsiConsole.MarkupLine("[grey]Running baseline test matrix...[/]");
+            var baselineClassifier = new QueryClassifier();
+            await baselineClassifier.InitializeAsync(boot.Embedding, ct);
+            var testCases = BuildTestMatrix();
+
+            var baselinePass = 0;
+            var baselineResults = new List<(bool Passed, string? Reason)>();
+            foreach (var test in testCases)
+            {
+                var result = await baselineClassifier.ClassifyAsync(test.Query, ct);
+                var (passed, reason) = EvaluateTestCase(test, result);
+                baselineResults.Add((passed, reason));
+                if (passed) baselinePass++;
+            }
+
+            AnsiConsole.MarkupLine($"  Baseline: [green]{baselinePass}/{testCases.Count}[/] tests pass");
+
+            // Run with proposals merged
+            AnsiConsole.MarkupLine("[grey]Running with proposals merged...[/]");
+            var allExemplars = QueryClassifier.LoadAllExemplars();
+            allExemplars.AddRange(proposalExemplars);
+
+            var mergedClassifier = new QueryClassifier();
+            await mergedClassifier.InitializeWithExemplarsAsync(boot.Embedding, allExemplars, ct);
+
+            var mergedPass = 0;
+            var regressions = new List<(TestCase Test, string Reason)>();
+            var improvements = new List<string>();
+
+            for (var i = 0; i < testCases.Count; i++)
+            {
+                var result = await mergedClassifier.ClassifyAsync(testCases[i].Query, ct);
+                var (passed, reason) = EvaluateTestCase(testCases[i], result);
+                if (passed) mergedPass++;
+
+                // Detect regressions and improvements
+                if (baselineResults[i].Passed && !passed)
+                    regressions.Add((testCases[i], reason ?? "unknown"));
+                else if (!baselineResults[i].Passed && passed)
+                    improvements.Add(testCases[i].Query);
+            }
+
+            AnsiConsole.MarkupLine($"  Merged:   [green]{mergedPass}/{testCases.Count}[/] tests pass");
+
+            if (improvements.Count > 0)
+            {
+                AnsiConsole.MarkupLine($"\n[green]Improvements ({improvements.Count}):[/]");
+                foreach (var q in improvements)
+                    AnsiConsole.MarkupLine($"  [green]+[/] {FormattingHelpers.TruncEsc(q, 60)}");
+            }
+
+            if (regressions.Count > 0)
+            {
+                AnsiConsole.MarkupLine($"\n[bold red]REGRESSIONS ({regressions.Count}) — proposals REJECTED:[/]");
+                foreach (var (test, reason) in regressions)
+                    AnsiConsole.MarkupLine(
+                        $"  [red]-[/] {FormattingHelpers.TruncEsc(test.Query, 50)} — {FormattingHelpers.Esc(reason)}");
+
+                AnsiConsole.MarkupLine(
+                    "\n[yellow]Fix the proposals in auto-learned.yaml and try again, or delete the file.[/]");
+                return 1;
+            }
+
+            // All good — the proposals file is already in the exemplars dir, so it will be loaded
+            // by the classifier on next startup. Mark entries as promoted.
+            var analyzer = new LearningAnalyzer(boot.Storage, settings.LearnMinCluster ?? boot.Config.Learning.MinClusterSize);
+            var analysis = await analyzer.AnalyzeAsync(ct);
+            var allEntryIds = analysis.Gaps.SelectMany(g => g.EntryIds).ToList();
+            if (allEntryIds.Count > 0)
+                await boot.Storage.MarkPromotedAsync(allEntryIds);
+
+            AnsiConsole.MarkupLine(
+                $"\n[bold green]Proposals accepted![/] {proposalExemplars.Count} new exemplars in auto-learned.yaml");
+            AnsiConsole.MarkupLine(
+                $"  Net improvement: [green]+{improvements.Count}[/] tests, [red]0[/] regressions");
+            AnsiConsole.MarkupLine($"  Promoted {allEntryIds.Count} learning log entries");
+
+            return 0;
+        }
+    }
+
+    /// <summary>
+    ///     Show the current learning schedule: config, last run, next due time.
+    /// </summary>
+    private static async Task<int> ShowLearnScheduleAsync(Settings settings, CancellationToken ct)
+    {
+        var boot = await CommandBootstrap.CreateAsync(settings.GpuDevice, ct);
+        await using (boot)
+        {
+            var config = boot.Config.Learning;
+            var lastRun = await boot.Storage.GetLastLearnRunAsync();
+            var (total, unpromoted, _) = await boot.Storage.GetLearningLogCountsAsync();
+
+            AnsiConsole.MarkupLine("[bold cyan]Learning Schedule[/]");
+            AnsiConsole.MarkupLine($"  Enabled:        [green]{config.Enabled}[/]");
+            AnsiConsole.MarkupLine($"  Scan interval:  [green]{config.ScanInterval}[/]");
+            AnsiConsole.MarkupLine($"  Min cluster:    [green]{config.MinClusterSize}[/]");
+            AnsiConsole.MarkupLine($"  Auto-merge:     [green]{config.AutoMerge}[/]");
+            AnsiConsole.MarkupLine($"  Last promoted:  {(lastRun.HasValue ? $"[green]{lastRun.Value:g}[/]" : "[grey]never[/]")}");
+            AnsiConsole.MarkupLine($"  Log entries:    [green]{total}[/] total, [yellow]{unpromoted}[/] unpromoted");
+
+            if (lastRun.HasValue)
+            {
+                var nextDue = lastRun.Value + config.ScanInterval;
+                var now = DateTimeOffset.UtcNow;
+                if (now >= nextDue)
+                    AnsiConsole.MarkupLine($"  Next due:       [yellow]NOW[/] (overdue by {now - nextDue:hh\\:mm})");
+                else
+                    AnsiConsole.MarkupLine($"  Next due:       [green]{nextDue:g}[/] (in {nextDue - now:hh\\:mm})");
+            }
+            else
+            {
+                AnsiConsole.MarkupLine($"  Next due:       [grey]after first sentinel disagreements are promoted[/]");
+            }
+
+            AnsiConsole.MarkupLine("");
+            AnsiConsole.MarkupLine("[grey]Config: learning section in ~/.doomsummarizer/config.yaml[/]");
+            return 0;
+        }
+    }
+
+    /// <summary>
+    ///     Check if auto-learning is due on CLI startup.
+    ///     Called by commands like scroll/ask after bootstrap.
+    ///     If learning is enabled and scan interval has elapsed, runs analysis and optionally auto-merges.
+    ///     Returns the number of new exemplars proposed (0 if nothing to learn or not due).
+    /// </summary>
+    public static async Task<int> CheckAutoLearnAsync(CommandBootstrap boot, CancellationToken ct)
+    {
+        var config = boot.Config.Learning;
+        if (!config.Enabled)
+            return 0;
+
+        var (_, unpromoted, _) = await boot.Storage.GetLearningLogCountsAsync();
+        if (unpromoted < config.MinClusterSize)
+            return 0; // Not enough data yet
+
+        // Check if enough time has passed since last promoted learn run
+        var lastRun = await boot.Storage.GetLastLearnRunAsync();
+        if (lastRun.HasValue && DateTimeOffset.UtcNow - lastRun.Value < config.ScanInterval)
+            return 0; // Not due yet
+
+        // Run analysis
+        var analyzer = new LearningAnalyzer(boot.Storage, config.MinClusterSize);
+        var result = await analyzer.AnalyzeAsync(ct);
+
+        if (result.TotalProposals == 0)
+            return 0;
+
+        var allProposals = result.Gaps.SelectMany(g => g.ProposedExemplars).ToList();
+
+        if (config.AutoMerge)
+        {
+            // Validate proposals against test matrix
+            var validation = await LearningAnalyzer.ValidateProposalsAsync(
+                allProposals, boot.Embedding,
+                () => BuildTestMatrix().Select(t =>
+                    (t.Query, t.ExpectedTopic, t.ExpectedType, t.ExpectedVibe,
+                     t.ExpectedComposite, t.ExpectedComplex)).ToList(),
+                ct);
+
+            if (validation.Regressions.Count == 0 &&
+                validation.Improvements.Count >= config.AutoMergeMinImprovement)
+            {
+                // Write exemplars and mark promoted
+                var yaml = LearningAnalyzer.ProposalsToYaml(allProposals);
+                var userDir = Path.Combine(ConfigService.GetConfigDir(), "exemplars");
+                Directory.CreateDirectory(userDir);
+                var outputPath = Path.Combine(userDir, "auto-learned.yaml");
+                await File.WriteAllTextAsync(outputPath, yaml, ct);
+
+                var allEntryIds = result.Gaps.SelectMany(g => g.EntryIds).ToList();
+                if (allEntryIds.Count > 0)
+                    await boot.Storage.MarkPromotedAsync(allEntryIds);
+
+                AnsiConsole.MarkupLine(
+                    $"[green]Auto-learned {allProposals.Count} exemplars (+{validation.Improvements.Count} tests, 0 regressions)[/]");
+                return allProposals.Count;
+            }
+        }
+        else
+        {
+            // Just notify the user that learning data is available
+            AnsiConsole.MarkupLine(
+                $"[cyan]Learning:[/] {unpromoted} disagreements ready. Run [bold]exemplars --learn[/] to propose {result.TotalProposals} exemplar(s).");
+        }
+
+        return 0;
+    }
+
+    /// <summary>
+    ///     Evaluate a single test case against a classification result.
+    /// </summary>
+    private static (bool Passed, string? Reason) EvaluateTestCase(TestCase test, QueryClassification result)
+    {
+        var reasons = new List<string>();
+
+        if (test.ExpectedTopic != null)
+        {
+            var topTopics = result.Categories
+                .OrderByDescending(kv => kv.Value)
+                .Take(3)
+                .Select(kv => kv.Key)
+                .ToList();
+            if (!topTopics.Contains(test.ExpectedTopic, StringComparer.OrdinalIgnoreCase))
+                reasons.Add($"topic: expected={test.ExpectedTopic}, got=[{string.Join(",", topTopics)}]");
+        }
+
+        if (test.ExpectedType != null &&
+            !result.QueryType.Equals(test.ExpectedType, StringComparison.OrdinalIgnoreCase))
+            reasons.Add($"type: expected={test.ExpectedType}, got={result.QueryType}");
+
+        if (test.ExpectedVibe != null)
+        {
+            var expectNone = test.ExpectedVibe.Equals("none", StringComparison.OrdinalIgnoreCase);
+            var vibeMatch = expectNone
+                ? result.Vibe == null
+                : string.Equals(result.Vibe, test.ExpectedVibe, StringComparison.OrdinalIgnoreCase);
+            if (!vibeMatch)
+                reasons.Add($"vibe: expected={test.ExpectedVibe}, got={result.Vibe ?? "null"}");
+        }
+
+        if (test.ExpectedComposite != null && result.IsComposite != test.ExpectedComposite.Value)
+            reasons.Add($"composite: expected={test.ExpectedComposite}, got={result.IsComposite}");
+
+        if (test.ExpectedComplex != null && result.IsComplex != test.ExpectedComplex.Value)
+            reasons.Add($"complex: expected={test.ExpectedComplex}, got={result.IsComplex}");
+
+        return reasons.Count == 0
+            ? (true, null)
+            : (false, string.Join("; ", reasons));
+    }
+
     public sealed class Settings : CommandSettings
     {
         [CommandOption("--list")]
@@ -857,5 +1248,21 @@ public sealed class ExemplarsCommand : AsyncCommand<ExemplarsCommand.Settings>
         [CommandOption("--gpu")]
         [Description("GPU device ID for ONNX embedding")]
         public int? GpuDevice { get; init; }
+
+        [CommandOption("--learn")]
+        [Description("Analyze sentinel disagreements and propose new exemplars")]
+        public bool Learn { get; init; }
+
+        [CommandOption("--learn-apply")]
+        [Description("Merge proposals into classifier, validate against test matrix, commit if safe")]
+        public bool LearnApply { get; init; }
+
+        [CommandOption("--learn-min-cluster")]
+        [Description("Minimum disagreement cluster size for learning (default: from config)")]
+        public int? LearnMinCluster { get; init; }
+
+        [CommandOption("--learn-schedule")]
+        [Description("Show learning schedule: config, last run, next due time")]
+        public bool LearnSchedule { get; init; }
     }
 }

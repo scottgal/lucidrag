@@ -25,6 +25,13 @@ public partial class PromptInterpreter
     private static QueryClassifier SharedClassifier = new();
 
     /// <summary>
+    ///     Optional learning logger for capturing sentinel disagreements.
+    ///     When set, logs cases where the sentinel LLM corrects the embedding classifier.
+    ///     Wired in CommandBootstrap after storage initialization.
+    /// </summary>
+    public static ILearningLogger? LearningLogger { get; set; }
+
+    /// <summary>
     ///     Configure the shared classifier with custom thresholds from config.
     ///     Must be called before the first InterpretAsync call for settings to take effect.
     /// </summary>
@@ -223,6 +230,24 @@ public partial class PromptInterpreter
                     var router = await GetRouterAsync();
                     var result = SentinelSourceMapper.ToInterpretedPrompt(intent, router, prompt, nerContext);
                     result.EmbeddingClassification = embeddingClassification;
+
+                    // Log sentinel disagreement for background learning
+                    if (LearningLogger != null && embeddingClassification != null)
+                    {
+                        try
+                        {
+                            var queryEmb = _embedding != null
+                                ? await _embedding.EmbedAsync(prompt, ct)
+                                : null;
+                            await LearningLogger.LogDisagreementAsync(
+                                prompt, queryEmb, embeddingClassification, intent);
+                        }
+                        catch (Exception logEx)
+                        {
+                            Debug.WriteLine($"Learning log failed: {logEx.Message}");
+                        }
+                    }
+
                     return result;
                 }
 

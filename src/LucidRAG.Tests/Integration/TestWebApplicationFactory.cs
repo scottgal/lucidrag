@@ -112,13 +112,51 @@ public class TestWebApplicationFactory : WebApplicationFactory<Program>
     }
 
     /// <summary>
-    ///     Ensure database is created and migrated
+    ///     Ensure database is created and migrated.
+    ///     EnsureCreatedAsync creates tables from the EF model but skips migrations,
+    ///     so we manually apply FTS schema (tsvector, GIN index, corpus_stats).
     /// </summary>
     public async Task EnsureDatabaseAsync()
     {
         using var scope = Services.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<RagDocumentsDbContext>();
         await db.Database.EnsureCreatedAsync();
+
+        if (db.Database.IsNpgsql())
+            await ApplyFtsSchemaAsync(db);
+    }
+
+    private static async Task ApplyFtsSchemaAsync(RagDocumentsDbContext db)
+    {
+        // EnsureCreatedAsync doesn't run migrations, so apply FTS schema manually.
+        // Uses DO block with IF NOT EXISTS to be idempotent.
+        await db.Database.ExecuteSqlRawAsync("""
+            DO $$
+            BEGIN
+                IF NOT EXISTS (
+                    SELECT 1 FROM information_schema.columns
+                    WHERE table_name = 'evidence_artifacts' AND column_name = 'content_tokens'
+                ) THEN
+                    ALTER TABLE evidence_artifacts
+                    ADD COLUMN content_tokens tsvector
+                    GENERATED ALWAYS AS (to_tsvector('english', COALESCE("Content", ''))) STORED;
+
+                    CREATE INDEX IF NOT EXISTS idx_evidence_fts
+                    ON evidence_artifacts USING GIN(content_tokens);
+                END IF;
+            END $$;
+            """);
+
+        await db.Database.ExecuteSqlRawAsync("""
+            CREATE MATERIALIZED VIEW IF NOT EXISTS corpus_stats AS
+            SELECT COUNT(*) as total_docs, AVG(length("Content")) as avg_doc_length
+            FROM evidence_artifacts WHERE "Content" IS NOT NULL;
+            """);
+
+        await db.Database.ExecuteSqlRawAsync("""
+            CREATE UNIQUE INDEX IF NOT EXISTS idx_corpus_stats_unique
+            ON corpus_stats (total_docs);
+            """);
     }
 
     /// <summary>

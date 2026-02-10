@@ -22,15 +22,15 @@ public class KnowledgeGraphService
 {
     private readonly EntityProfileService? _entityProfileService;
     private readonly IEntityGraphStore _entityStore;
-    private readonly DuckDbVectorStore _vectorStore;
+    private readonly IItemVectorStore _vectorStore;
 
-    public KnowledgeGraphService(DuckDbVectorStore vectorStore, IEntityGraphStore entityStore)
+    public KnowledgeGraphService(IItemVectorStore vectorStore, IEntityGraphStore entityStore)
     {
         _vectorStore = vectorStore;
         _entityStore = entityStore;
     }
 
-    public KnowledgeGraphService(DuckDbVectorStore vectorStore, IEntityGraphStore entityStore,
+    public KnowledgeGraphService(IItemVectorStore vectorStore, IEntityGraphStore entityStore,
         EntityProfileService entityProfileService)
     {
         _vectorStore = vectorStore;

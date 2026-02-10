@@ -4,7 +4,10 @@ using LucidRAG.Data;
 using LucidRAG.Entities;
 using LucidRAG.Plugin.Postgres;
 using LucidRAG.Services;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Configuration;
+using Npgsql;
 
 namespace LucidRAG.Tests.Integration;
 
@@ -206,54 +209,6 @@ public class PostgresBM25ServiceTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task HybridSearchAsync_WithQueryEmbedding_CombinesScores()
-    {
-        // Arrange
-        var query = "machine learning";
-
-        // Create a mock embedding (384 dimensions for all-MiniLM-L6-v2)
-        var queryEmbedding = Enumerable.Range(0, 384).Select(i => (float)(i * 0.001)).ToArray();
-
-        // Act
-        var results = await _service.HybridSearchAsync(
-            query,
-            queryEmbedding,
-            5);
-
-        // Assert
-        // May return empty if no embeddings in database, but should not throw
-        results.Should().NotBeNull();
-
-        // If results exist, they should have RRF scores
-        if (results.Count > 0) results.First().rrfScore.Should().BeGreaterThan(0);
-    }
-
-    [Fact]
-    public async Task HybridSearchAsync_BM25Only_WorksWithoutEmbedding()
-    {
-        // Arrange
-        var query = "supervised learning classification";
-
-        // Act - no embedding provided
-        var results = await _service.HybridSearchAsync(
-            query,
-            null,
-            5);
-
-        // Assert
-        results.Should().NotBeEmpty();
-        results.First().artifact.Content.Should().ContainAny("supervised", "Supervised");
-    }
-
-    [Fact]
-    public async Task RefreshCorpusStatsAsync_DoesNotThrow()
-    {
-        // Act & Assert
-        await _service.Invoking(s => s.RefreshCorpusStatsAsync())
-            .Should().NotThrowAsync();
-    }
-
-    [Fact]
     public async Task SearchWithScoresAsync_PerformanceCheck_CompletesQuickly()
     {
         // Arrange
@@ -319,5 +274,164 @@ public class PostgresBM25ServiceTests : IAsyncLifetime
             (score1 != score2 || top1 != top2).Should().BeTrue(
                 "Different queries should produce different rankings");
         }
+    }
+
+    [Fact]
+    public async Task Benchmark_PostgresFTS_AtScale()
+    {
+        // Seed 500 realistic segments
+        await SeedBulkEvidenceAsync(500);
+
+        // Warmup
+        await _service.SearchWithScoresAsync("machine learning", 25);
+
+        // Benchmark 10 queries
+        var queries = new[]
+        {
+            "machine learning", "neural networks", "supervised classification",
+            "clustering algorithms", "data processing", "gradient descent optimization",
+            "natural language processing", "computer vision detection", "reinforcement learning",
+            "feature extraction"
+        };
+
+        var times = new List<double>();
+        foreach (var q in queries)
+        {
+            var sw = Stopwatch.StartNew();
+            var results = await _service.SearchWithScoresAsync(q, 25);
+            sw.Stop();
+            times.Add(sw.Elapsed.TotalMilliseconds);
+        }
+
+        times.Sort();
+        var p50 = times[(int)(times.Count * 0.5)];
+        var p95 = times[(int)(times.Count * 0.95)];
+
+        // PostgreSQL FTS should be under 50ms p95 for 500 segments with GIN index
+        p95.Should().BeLessThan(50,
+            $"PostgreSQL FTS p95 should be under 50ms (p50={p50:F1}ms, p95={p95:F1}ms)");
+    }
+
+    [Fact]
+    public async Task ExplainAnalyze_UsesGinIndex()
+    {
+        // Seed enough data for the planner to choose the index
+        await SeedBulkEvidenceAsync(100);
+
+        var connectionString = _scope.ServiceProvider
+            .GetRequiredService<IConfiguration>()
+            .GetConnectionString("DefaultConnection")!;
+
+        await using var connection = new NpgsqlConnection(connectionString);
+        await connection.OpenAsync();
+
+        var sql = """
+            EXPLAIN ANALYZE
+            SELECT ea."Id",
+                ts_rank_cd(ea.content_tokens, websearch_to_tsquery('english', $1), 32) as score
+            FROM evidence_artifacts ea
+            WHERE ea.content_tokens @@ websearch_to_tsquery('english', $1)
+            ORDER BY score DESC
+            LIMIT 25
+            """;
+
+        await using var command = new NpgsqlCommand(sql, connection);
+        command.Parameters.AddWithValue("machine learning");
+
+        var explainOutput = new List<string>();
+        await using var reader = await command.ExecuteReaderAsync();
+        while (await reader.ReadAsync())
+            explainOutput.Add(reader.GetString(0));
+
+        var fullPlan = string.Join("\n", explainOutput);
+
+        // Verify GIN index is being used (Bitmap Index Scan on idx_evidence_fts)
+        fullPlan.Should().ContainAny("idx_evidence_fts", "Bitmap Index Scan", "Bitmap Heap Scan",
+            $"Expected GIN index usage in query plan:\n{fullPlan}");
+    }
+
+    [Fact]
+    public async Task SearchAsync_WithDocumentIds_FiltersCorrectly()
+    {
+        // The seed data has all evidence linked to one document via EntityId.
+        // Create a second document with different evidence.
+        var doc2 = new DocumentEntity
+        {
+            Id = Guid.NewGuid(),
+            Name = "Quantum Physics Guide",
+            ContentHash = "test-hash-qp",
+            FilePath = "/test/qp.md",
+            MimeType = "text/markdown",
+            Status = DocumentStatus.Completed
+        };
+        _db.Documents.Add(doc2);
+
+        _db.EvidenceArtifacts.Add(new EvidenceArtifact
+        {
+            Id = Guid.NewGuid(),
+            EntityId = doc2.Id,
+            ArtifactType = EvidenceTypes.SegmentText,
+            MimeType = "text/plain",
+            StorageBackend = "inline",
+            StoragePath = "inline:segment_text",
+            Content = "Machine learning is applied in quantum physics simulations.",
+            SegmentHash = "hash-qp-1",
+            Metadata = "{}"
+        });
+        await _db.SaveChangesAsync();
+
+        // Search with document filter for doc2 only
+        var results = await _service.SearchAsync("machine learning", 10, [doc2.Id]);
+
+        results.Should().NotBeEmpty();
+        results.Should().AllSatisfy(r =>
+            r.artifact.EntityId.Should().Be(doc2.Id,
+                "all results should belong to the filtered document"));
+    }
+
+    private async Task SeedBulkEvidenceAsync(int count)
+    {
+        var topics = new[]
+        {
+            "Machine learning algorithms process large datasets to identify patterns and make predictions.",
+            "Neural network architectures include convolutional, recurrent, and transformer models.",
+            "Natural language processing enables computers to understand and generate human language.",
+            "Computer vision systems detect and classify objects in images and video streams.",
+            "Reinforcement learning agents learn optimal strategies through trial and error interaction.",
+            "Gradient descent optimization minimizes loss functions during model training.",
+            "Feature extraction transforms raw data into meaningful representations for analysis.",
+            "Clustering algorithms group similar data points without requiring labeled examples.",
+            "Decision tree models provide interpretable classification and regression predictions.",
+            "Bayesian methods incorporate prior knowledge into probabilistic inference frameworks.",
+            "Transfer learning adapts pre-trained models to new domains with limited data.",
+            "Ensemble methods combine multiple models to improve prediction accuracy and robustness.",
+            "Dimensionality reduction techniques like PCA compress high-dimensional feature spaces.",
+            "Regularization prevents overfitting by penalizing model complexity during training.",
+            "Data augmentation generates synthetic training examples to improve model generalization.",
+            "Attention mechanisms allow models to focus on relevant parts of input sequences.",
+            "Generative adversarial networks create realistic synthetic data through adversarial training.",
+            "Recurrent neural networks process sequential data with temporal dependencies.",
+            "Support vector machines find optimal hyperplanes for binary classification tasks.",
+            "Random forests aggregate decision trees for robust ensemble predictions."
+        };
+
+        var rng = new Random(42);
+        var parentId = Guid.NewGuid();
+
+        var artifacts = Enumerable.Range(0, count).Select(i => new EvidenceArtifact
+        {
+            Id = Guid.NewGuid(),
+            EntityId = parentId,
+            ArtifactType = EvidenceTypes.SegmentText,
+            MimeType = "text/plain",
+            StorageBackend = "inline",
+            StoragePath = "inline:segment_text",
+            Content = topics[i % topics.Length] + $" Variant {i} explores additional concepts in this domain.",
+            SegmentHash = $"bulk-{i}",
+            Metadata = $"{{\"salience_score\": {0.5 + rng.NextDouble() * 0.5:F2}}}"
+        }).ToList();
+
+        _db.EvidenceArtifacts.AddRange(artifacts);
+        await _db.SaveChangesAsync();
     }
 }

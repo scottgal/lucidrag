@@ -195,6 +195,24 @@ public partial class StorageService : IAsyncDisposable
                               document_count INTEGER NOT NULL DEFAULT 1,
                               updated_at TEXT NOT NULL
                           );
+
+                          -- Learning log: sentinel LLM corrections to embedding classifier
+                          CREATE TABLE IF NOT EXISTS learning_log (
+                              id INTEGER PRIMARY KEY AUTOINCREMENT,
+                              query_text TEXT NOT NULL,
+                              query_embedding BLOB,
+                              emb_topic TEXT, emb_type TEXT, emb_vibe TEXT, emb_best_score REAL,
+                              emb_is_composite INTEGER DEFAULT 0, emb_is_complex INTEGER DEFAULT 0,
+                              sentinel_topic TEXT, sentinel_type TEXT, sentinel_vibe TEXT,
+                              sentinel_is_composite INTEGER DEFAULT 0,
+                              topic_disagreement INTEGER DEFAULT 0,
+                              type_disagreement INTEGER DEFAULT 0,
+                              vibe_disagreement INTEGER DEFAULT 0,
+                              logged_at TEXT NOT NULL,
+                              promoted INTEGER DEFAULT 0
+                          );
+                          CREATE INDEX IF NOT EXISTS idx_learning_log_promoted ON learning_log(promoted);
+                          CREATE INDEX IF NOT EXISTS idx_learning_log_logged ON learning_log(logged_at);
                           """;
         await cmd.ExecuteNonQueryAsync();
 

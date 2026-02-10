@@ -18,6 +18,7 @@ public record DoomConfig
     public IngestionConfig Ingestion { get; init; } = new();
     public ExpansionConfig Expansion { get; init; } = new();
     public ClassifierConfig Classifier { get; init; } = new();
+    public LearningConfig Learning { get; init; } = new();
     public Dictionary<string, string> Vibes { get; init; } = new();
     public List<ApiKeyEntry> Keys { get; init; } = [];
     public ApiBudgetConfig ApiBudget { get; init; } = new();
@@ -195,6 +196,39 @@ public record ClassifierConfig
     public double ShortQueryConfidenceScale { get; init; } = 0.85;
 }
 
+/// <summary>
+///     Background learning configuration. Controls how the classifier learns
+///     from sentinel disagreements over time.
+/// </summary>
+public record LearningConfig
+{
+    /// <summary>Enable automatic learning from sentinel disagreements.</summary>
+    public bool Enabled { get; init; } = true;
+
+    /// <summary>
+    ///     How often to check for new disagreements and propose exemplars.
+    ///     For CLI: checked on startup, learns if enough time has passed.
+    ///     For server: used as the background service scan interval.
+    /// </summary>
+    public TimeSpan ScanInterval { get; init; } = TimeSpan.FromHours(6);
+
+    /// <summary>Minimum cluster size to generate an exemplar proposal.</summary>
+    public int MinClusterSize { get; init; } = 3;
+
+    /// <summary>
+    ///     Automatically merge proposals if all tests pass and improvement exceeds threshold.
+    ///     false (default) = propose only, require manual --learn-apply.
+    ///     true = auto-merge if no regressions detected.
+    /// </summary>
+    public bool AutoMerge { get; init; } = false;
+
+    /// <summary>
+    ///     Minimum net improvement (improvements - regressions) to auto-merge.
+    ///     Only used when AutoMerge is true.
+    /// </summary>
+    public int AutoMergeMinImprovement { get; init; } = 1;
+}
+
 public record SourcesConfig
 {
     public HackerNewsConfig HackerNews { get; init; } = new();
@@ -316,6 +350,14 @@ public record StorageConfig
     public string DbPath { get; init; } = "~/.doomsummarizer/doom.db";
     public string VectorDbPath { get; init; } = "~/.doomsummarizer/vectors.duckdb";
     public int RetentionDays { get; init; } = 30;
+
+    /// <summary>
+    ///     Vector store backend for item embeddings.
+    ///     "duckdb" (default) — DuckDB with HNSW index, ~96MB, best for LucidResearch.
+    ///     "sqlite-vec" — sqlite-vec brute-force cosine, ~369KB, best for DoomSummarizer CLI.
+    ///     See docs/VECTOR_STORE_TIERS.md for the full three-tier architecture.
+    /// </summary>
+    public string VectorBackend { get; init; } = "duckdb";
 }
 
 public record LinkFollowingConfig
@@ -467,6 +509,7 @@ public record PluginSettings
 [JsonSerializable(typeof(PreDedupWeights))]
 [JsonSerializable(typeof(ExpansionConfig))]
 [JsonSerializable(typeof(ClassifierConfig))]
+[JsonSerializable(typeof(LearningConfig))]
 [JsonSerializable(typeof(List<ApiKeyEntry>))]
 [JsonSerializable(typeof(List<string>))]
 [JsonSerializable(typeof(Dictionary<string, string>))]
