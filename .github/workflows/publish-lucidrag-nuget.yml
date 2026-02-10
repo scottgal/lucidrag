@@ -1,0 +1,112 @@
+name: Publish LucidRAG Core NuGet Packages
+
+on:
+  push:
+    tags:
+      - 'lucidrag-core-v*.*.*'
+      - 'lucidrag-postgres-v*.*.*'
+  workflow_dispatch:
+    inputs:
+      package:
+        description: 'Package to publish'
+        required: true
+        type: choice
+        options:
+          - LucidRAG.Core
+          - LucidRAG.Plugin.Postgres
+      version:
+        description: 'Version to publish (e.g., 0.1.0)'
+        required: true
+        type: string
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  build-and-publish:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+          dotnet-quality: 'preview'
+
+      - name: Determine package and version
+        id: get_info
+        run: |
+          if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
+            PACKAGE="${{ github.event.inputs.package }}"
+            VERSION="${{ github.event.inputs.version }}"
+          else
+            TAG=${GITHUB_REF#refs/tags/}
+            if [[ "$TAG" == lucidrag-core-v* ]]; then
+              PACKAGE="LucidRAG.Core"
+              VERSION=${TAG#lucidrag-core-v}
+            elif [[ "$TAG" == lucidrag-postgres-v* ]]; then
+              PACKAGE="LucidRAG.Plugin.Postgres"
+              VERSION=${TAG#lucidrag-postgres-v}
+            fi
+          fi
+
+          if [ "$PACKAGE" == "LucidRAG.Core" ]; then
+            PROJECT_PATH="src/LucidRAG.Core/LucidRAG.Core.csproj"
+          elif [ "$PACKAGE" == "LucidRAG.Plugin.Postgres" ]; then
+            PROJECT_PATH="src/LucidRAG.Plugin.Postgres/LucidRAG.Plugin.Postgres.csproj"
+          fi
+
+          echo "PACKAGE=$PACKAGE" >> $GITHUB_OUTPUT
+          echo "VERSION=$VERSION" >> $GITHUB_OUTPUT
+          echo "PROJECT_PATH=$PROJECT_PATH" >> $GITHUB_OUTPUT
+          echo "Publishing $PACKAGE version $VERSION from $PROJECT_PATH"
+
+      - name: Restore dependencies
+        run: dotnet restore ${{ steps.get_info.outputs.PROJECT_PATH }}
+
+      - name: Build
+        run: |
+          dotnet build ${{ steps.get_info.outputs.PROJECT_PATH }} \
+            --configuration Release \
+            --no-restore \
+            -p:GeneratePackageOnBuild=false \
+            -p:MinVerVersionOverride=${{ steps.get_info.outputs.VERSION }}
+
+      - name: Pack
+        run: |
+          dotnet pack ${{ steps.get_info.outputs.PROJECT_PATH }} \
+            --configuration Release \
+            --no-build \
+            --output ./artifacts \
+            -p:GeneratePackageOnBuild=false \
+            -p:MinVerVersionOverride=${{ steps.get_info.outputs.VERSION }}
+
+      - name: List artifacts
+        run: ls -la ./artifacts/
+
+      - name: Login to NuGet (OIDC)
+        id: nuget_login
+        uses: NuGet/login@v1
+        with:
+          user: 'mostlylucid'
+
+      - name: Publish to NuGet (Trusted Publisher)
+        run: |
+          dotnet nuget push ./artifacts/*.nupkg \
+            --api-key ${{ steps.nuget_login.outputs.NUGET_API_KEY }} \
+            --source https://api.nuget.org/v3/index.json \
+            --skip-duplicate --no-symbols
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: nuget-packages
+          path: |
+            ./artifacts/*.nupkg
+            ./artifacts/*.snupkg

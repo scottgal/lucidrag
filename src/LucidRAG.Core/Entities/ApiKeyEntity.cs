@@ -76,6 +76,16 @@ public class ApiKeyIndexingSource
 
     public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.UtcNow;
 
+    // Background indexer scheduling
+    public DateTimeOffset? NextScheduledAt { get; set; }
+    public bool TriggerCrawlNow { get; set; }
+    public int ConsecutiveFailures { get; set; }
+    public string? LastError { get; set; }
+
+    // Conditional re-crawl (ETag / If-Modified-Since)
+    public string? ETag { get; set; }
+    public string? LastModifiedHeader { get; set; }
+
     // Navigation
     public ApiKeyEntity? ApiKey { get; set; }
 }
@@ -99,7 +109,9 @@ public class ApiKeyReadDomain
 public enum SourceType
 {
     Domain,
-    GitHubRepo
+    GitHubRepo,
+    WordPress,
+    GitHubApp
 }
 
 /// <summary>

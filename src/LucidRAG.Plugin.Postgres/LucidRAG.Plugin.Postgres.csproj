@@ -5,8 +5,29 @@
         <Nullable>enable</Nullable>
         <ImplicitUsings>enable</ImplicitUsings>
         <RootNamespace>LucidRAG.Plugin.Postgres</RootNamespace>
+
+        <!-- Package metadata -->
+        <PackageId>Mostlylucid.LucidRAG.Plugin.Postgres</PackageId>
         <Description>PostgreSQL plugin for LucidRAG - provides ts_rank_cd FTS, pgVector embeddings, and schema-based multitenancy</Description>
+        <Authors>Scott Galloway</Authors>
+        <PackageLicenseExpression>MIT</PackageLicenseExpression>
+        <PackageProjectUrl>https://github.com/scottgal/lucidrag</PackageProjectUrl>
+        <RepositoryUrl>https://github.com/scottgal/lucidrag</RepositoryUrl>
+        <PackageTags>rag;postgresql;fts;pgvector;lucidrag</PackageTags>
     </PropertyGroup>
+
+    <!-- MinVer -->
+    <PropertyGroup>
+        <MinVerTagPrefix>lucidrag-postgres-v</MinVerTagPrefix>
+        <MinVerSkip Condition="'$(Configuration)' == 'Debug'">true</MinVerSkip>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <PackageReference Include="MinVer" Version="8.0.0-alpha.1">
+            <PrivateAssets>all</PrivateAssets>
+            <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+        </PackageReference>
+    </ItemGroup>
 
     <!-- PostgreSQL-specific packages -->
     <ItemGroup>
