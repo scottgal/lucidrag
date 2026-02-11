@@ -50,6 +50,10 @@ public class RagDocumentsDbContext(DbContextOptions<RagDocumentsDbContext> optio
     public DbSet<ApiKeyIndexingSource> ApiKeyIndexingSources => Set<ApiKeyIndexingSource>();
     public DbSet<ApiKeyReadDomain> ApiKeyReadDomains => Set<ApiKeyReadDomain>();
 
+    // SaaS analytics
+    public DbSet<SaasQueryLogEntity> SaasQueryLogs => Set<SaasQueryLogEntity>();
+    public DbSet<SaasUsageRollupEntity> SaasUsageRollups => Set<SaasUsageRollupEntity>();
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);
@@ -574,6 +578,43 @@ public class RagDocumentsDbContext(DbContextOptions<RagDocumentsDbContext> optio
 
             entity.HasOne(e => e.ApiKey)
                 .WithMany(k => k.ReadDomains)
+                .HasForeignKey(e => e.ApiKeyId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        // SaasQueryLogEntity - per-query audit log
+        modelBuilder.Entity<SaasQueryLogEntity>(entity =>
+        {
+            entity.ToTable("saas_query_logs");
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.QueryText).HasMaxLength(2000).IsRequired();
+            entity.Property(e => e.QueryType).HasMaxLength(20).IsRequired();
+            entity.Property(e => e.SearchMode).HasMaxLength(20);
+            entity.Property(e => e.ErrorCode).HasMaxLength(100);
+            entity.Property(e => e.RequestDomain).HasMaxLength(253);
+            entity.Property(e => e.CountryCode).HasMaxLength(2);
+            entity.Property(e => e.UserAgent).HasMaxLength(500);
+
+            entity.HasIndex(e => new { e.ApiKeyId, e.CreatedAt });
+            entity.HasIndex(e => e.CountryCode);
+            entity.HasIndex(e => e.QueryType);
+
+            entity.HasOne(e => e.ApiKey)
+                .WithMany()
+                .HasForeignKey(e => e.ApiKeyId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        // SaasUsageRollupEntity - pre-aggregated daily stats
+        modelBuilder.Entity<SaasUsageRollupEntity>(entity =>
+        {
+            entity.ToTable("saas_usage_rollups");
+            entity.HasKey(e => e.Id);
+
+            entity.HasIndex(e => new { e.ApiKeyId, e.Date }).IsUnique();
+
+            entity.HasOne(e => e.ApiKey)
+                .WithMany()
                 .HasForeignKey(e => e.ApiKeyId)
                 .OnDelete(DeleteBehavior.Cascade);
         });

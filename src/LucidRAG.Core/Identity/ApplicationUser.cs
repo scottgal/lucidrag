@@ -31,4 +31,9 @@ public class ApplicationUser : IdentityUser
     ///     Last login timestamp.
     /// </summary>
     public DateTimeOffset? LastLoginAt { get; set; }
+
+    /// <summary>
+    ///     Whether the user has completed the onboarding flow.
+    /// </summary>
+    public bool HasCompletedOnboarding { get; set; }
 }
