@@ -49,6 +49,7 @@ public class RagDocumentsDbContext(DbContextOptions<RagDocumentsDbContext> optio
     public DbSet<ApiKeyEntity> ApiKeys => Set<ApiKeyEntity>();
     public DbSet<ApiKeyIndexingSource> ApiKeyIndexingSources => Set<ApiKeyIndexingSource>();
     public DbSet<ApiKeyReadDomain> ApiKeyReadDomains => Set<ApiKeyReadDomain>();
+    public DbSet<ApiKeyCollectionLink> ApiKeyCollectionLinks => Set<ApiKeyCollectionLink>();
 
     // SaaS analytics
     public DbSet<SaasQueryLogEntity> SaasQueryLogs => Set<SaasQueryLogEntity>();
@@ -564,6 +565,26 @@ public class RagDocumentsDbContext(DbContextOptions<RagDocumentsDbContext> optio
             entity.HasOne(e => e.ApiKey)
                 .WithOne(k => k.IndexingSource)
                 .HasForeignKey<ApiKeyIndexingSource>(e => e.ApiKeyId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        // ApiKeyCollectionLink - many-to-many between keys and collections
+        modelBuilder.Entity<ApiKeyCollectionLink>(entity =>
+        {
+            entity.ToTable("api_key_collection_links");
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.Label).HasMaxLength(100);
+
+            entity.HasIndex(e => new { e.ApiKeyId, e.CollectionId }).IsUnique();
+
+            entity.HasOne(e => e.ApiKey)
+                .WithMany(k => k.CollectionLinks)
+                .HasForeignKey(e => e.ApiKeyId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne(e => e.Collection)
+                .WithMany()
+                .HasForeignKey(e => e.CollectionId)
                 .OnDelete(DeleteBehavior.Cascade);
         });
 

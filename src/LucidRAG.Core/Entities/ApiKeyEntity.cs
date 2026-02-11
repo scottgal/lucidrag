@@ -46,6 +46,12 @@ public class ApiKeyEntity
     public DateTimeOffset? LastUsedAt { get; set; }
 
     /// <summary>
+    ///     Per-key signing secret for HMAC authentication.
+    ///     Allows widget embedders to use HMAC(signing_secret, salt) instead of exposing the raw API key.
+    /// </summary>
+    public string? SigningSecret { get; set; }
+
+    /// <summary>
     ///     Auto-created collection for this key's documents.
     /// </summary>
     public Guid? CollectionId { get; set; }
@@ -54,6 +60,7 @@ public class ApiKeyEntity
     public CollectionEntity? Collection { get; set; }
     public ApiKeyIndexingSource? IndexingSource { get; set; }
     public ICollection<ApiKeyReadDomain> ReadDomains { get; set; } = [];
+    public ICollection<ApiKeyCollectionLink> CollectionLinks { get; set; } = [];
 }
 
 public class ApiKeyIndexingSource

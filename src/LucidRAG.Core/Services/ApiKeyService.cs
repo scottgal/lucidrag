@@ -27,6 +27,14 @@ public interface IApiKeyService
     Task<ApiKeyReadDomain> AddReadDomainAsync(Guid keyId, string domain, CancellationToken ct);
     Task RemoveReadDomainAsync(Guid keyId, Guid domainId, CancellationToken ct);
 
+    // Collection links (multi-collection per key)
+    Task<ApiKeyCollectionLink> LinkCollectionAsync(Guid keyId, Guid collectionId, string? label, CancellationToken ct);
+    Task UnlinkCollectionAsync(Guid keyId, Guid collectionId, CancellationToken ct);
+    Task<List<ApiKeyCollectionLink>> GetLinkedCollectionsAsync(Guid keyId, CancellationToken ct);
+
+    // HMAC authentication
+    Task<ApiKeyEntity?> ValidateHmacAsync(Guid keyId, string hmac, string salt, CancellationToken ct);
+
     // Validation
     bool ValidateReadDomain(ApiKeyEntity key, string? referer, string? origin);
     Task<bool> CheckDocumentQuotaAsync(Guid keyId, CancellationToken ct);
@@ -35,6 +43,9 @@ public interface IApiKeyService
     bool CheckRateLimit(Guid keyId, int perMinute, int perDay);
     void RecordRequest(Guid keyId);
     Task IncrementRequestCountAsync(Guid keyId, CancellationToken ct);
+
+    // Cache management
+    void InvalidateCacheForKey(Guid keyId);
 }
 
 public class ApiKeyService(
@@ -86,6 +97,7 @@ public class ApiKeyService(
             Id = Guid.NewGuid(),
             KeyPrefix = keyPrefix,
             KeyHash = keyHash,
+            SigningSecret = GenerateSigningSecret(),
             Description = description,
             UserId = userId,
             NormalizedOwnerEmail = userEmail is not null ? EmailNormalizer.Normalize(userEmail) : null,
@@ -122,6 +134,9 @@ public class ApiKeyService(
         var entity = await db.ApiKeys
             .Include(k => k.ReadDomains)
             .Include(k => k.IndexingSource)
+            .Include(k => k.Collection)
+            .Include(k => k.CollectionLinks)
+                .ThenInclude(l => l.Collection)
             .FirstOrDefaultAsync(k => k.KeyHash == keyHash, ct);
 
         if (entity is null)
@@ -148,7 +163,60 @@ public class ApiKeyService(
             .Include(k => k.ReadDomains)
             .Include(k => k.IndexingSource)
             .Include(k => k.Collection)
+            .Include(k => k.CollectionLinks)
+                .ThenInclude(l => l.Collection)
             .FirstOrDefaultAsync(k => k.Id == keyId, ct);
+    }
+
+    public async Task<ApiKeyEntity?> ValidateHmacAsync(Guid keyId, string hmac, string salt, CancellationToken ct)
+    {
+        var cacheKey = CachePrefix + "hmac:" + keyId;
+
+        // Try cache first
+        if (cache.TryGetValue(cacheKey, out ApiKeyEntity? cached) && cached is not null)
+        {
+            if (VerifyHmac(cached.SigningSecret!, salt, hmac))
+            {
+                cached.LastUsedAt = DateTimeOffset.UtcNow;
+                return cached;
+            }
+            return null;
+        }
+
+        var entity = await db.ApiKeys
+            .Include(k => k.ReadDomains)
+            .Include(k => k.IndexingSource)
+            .Include(k => k.Collection)
+            .Include(k => k.CollectionLinks)
+                .ThenInclude(l => l.Collection)
+            .FirstOrDefaultAsync(k => k.Id == keyId, ct);
+
+        if (entity is null || !entity.IsActive || entity.RevokedAt is not null)
+            return null;
+
+        if (entity.ExpiresAt is not null && entity.ExpiresAt < DateTimeOffset.UtcNow)
+            return null;
+
+        if (string.IsNullOrEmpty(entity.SigningSecret))
+            return null;
+
+        if (!VerifyHmac(entity.SigningSecret, salt, hmac))
+            return null;
+
+        cache.Set(cacheKey, entity, CacheTtl);
+        entity.LastUsedAt = DateTimeOffset.UtcNow;
+        return entity;
+    }
+
+    private static bool VerifyHmac(string signingSecret, string salt, string providedHmac)
+    {
+        var secretBytes = Encoding.UTF8.GetBytes(signingSecret);
+        var saltBytes = Encoding.UTF8.GetBytes(salt);
+        var expectedBytes = HMACSHA256.HashData(secretBytes, saltBytes);
+        var expectedHex = Convert.ToHexStringLower(expectedBytes);
+        return CryptographicOperations.FixedTimeEquals(
+            Encoding.UTF8.GetBytes(expectedHex),
+            Encoding.UTF8.GetBytes(providedHmac.ToLowerInvariant()));
     }
 
     public async Task<List<ApiKeyEntity>> GetByUserIdAsync(string userId, CancellationToken ct)
@@ -192,6 +260,7 @@ public class ApiKeyService(
             Id = Guid.NewGuid(),
             KeyPrefix = fullKey[..12],
             KeyHash = HashKey(fullKey),
+            SigningSecret = GenerateSigningSecret(),
             Description = oldKey.Description,
             UserId = oldKey.UserId,
             NormalizedOwnerEmail = oldKey.NormalizedOwnerEmail,
@@ -245,10 +314,12 @@ public class ApiKeyService(
     {
         domain = NormalizeDomain(domain);
 
-        // Check limit (5 for free tier)
+        // Check limit based on plan
+        var key = await db.ApiKeys.FindAsync([keyId], ct);
+        var maxDomains = key is not null ? GetPlanMaxDomains(key.Plan) : 5;
         var count = await db.ApiKeyReadDomains.CountAsync(d => d.ApiKeyId == keyId, ct);
-        if (count >= 5)
-            throw new InvalidOperationException("Maximum 5 read domains per API key (free tier).");
+        if (count >= maxDomains)
+            throw new InvalidOperationException($"Maximum {maxDomains} read domains per API key ({key?.Plan ?? "free"} plan).");
 
         // Check uniqueness
         var exists = await db.ApiKeyReadDomains
@@ -267,7 +338,6 @@ public class ApiKeyService(
         await db.SaveChangesAsync(ct);
 
         // Evict key from cache so domain list refreshes
-        var key = await db.ApiKeys.FindAsync([keyId], ct);
         if (key is not null)
             cache.Remove(CachePrefix + key.KeyHash);
 
@@ -288,6 +358,65 @@ public class ApiKeyService(
             if (key is not null)
                 cache.Remove(CachePrefix + key.KeyHash);
         }
+    }
+
+    public async Task<ApiKeyCollectionLink> LinkCollectionAsync(Guid keyId, Guid collectionId, string? label,
+        CancellationToken ct)
+    {
+        // Check uniqueness
+        var exists = await db.ApiKeyCollectionLinks
+            .AnyAsync(l => l.ApiKeyId == keyId && l.CollectionId == collectionId, ct);
+        if (exists)
+            throw new InvalidOperationException("Collection is already linked to this API key.");
+
+        var maxSort = await db.ApiKeyCollectionLinks
+            .Where(l => l.ApiKeyId == keyId)
+            .Select(l => (int?)l.SortOrder)
+            .MaxAsync(ct) ?? 0;
+
+        var link = new ApiKeyCollectionLink
+        {
+            Id = Guid.NewGuid(),
+            ApiKeyId = keyId,
+            CollectionId = collectionId,
+            Label = label,
+            SortOrder = maxSort + 1
+        };
+
+        db.ApiKeyCollectionLinks.Add(link);
+        await db.SaveChangesAsync(ct);
+
+        // Evict key from cache
+        var apiKey = await db.ApiKeys.FindAsync([keyId], ct);
+        if (apiKey is not null)
+            cache.Remove(CachePrefix + apiKey.KeyHash);
+
+        return link;
+    }
+
+    public async Task UnlinkCollectionAsync(Guid keyId, Guid collectionId, CancellationToken ct)
+    {
+        var link = await db.ApiKeyCollectionLinks
+            .FirstOrDefaultAsync(l => l.ApiKeyId == keyId && l.CollectionId == collectionId, ct);
+        if (link is not null)
+        {
+            db.ApiKeyCollectionLinks.Remove(link);
+            await db.SaveChangesAsync(ct);
+
+            // Evict key from cache
+            var apiKey = await db.ApiKeys.FindAsync([keyId], ct);
+            if (apiKey is not null)
+                cache.Remove(CachePrefix + apiKey.KeyHash);
+        }
+    }
+
+    public async Task<List<ApiKeyCollectionLink>> GetLinkedCollectionsAsync(Guid keyId, CancellationToken ct)
+    {
+        return await db.ApiKeyCollectionLinks
+            .Include(l => l.Collection)
+            .Where(l => l.ApiKeyId == keyId)
+            .OrderBy(l => l.SortOrder)
+            .ToListAsync(ct);
     }
 
     public bool ValidateReadDomain(ApiKeyEntity key, string? referer, string? origin)
@@ -356,13 +485,31 @@ public class ApiKeyService(
                 .SetProperty(k => k.LastUsedAt, DateTimeOffset.UtcNow), ct);
     }
 
+    public void InvalidateCacheForKey(Guid keyId)
+    {
+        // Evict HMAC cache entry
+        cache.Remove(CachePrefix + "hmac:" + keyId);
+
+        // For hash-based cache entries, we need to find the key's hash
+        // Look up the key directly (bypassing cache) to get the hash
+        var key = db.ApiKeys.AsNoTracking().FirstOrDefault(k => k.Id == keyId);
+        if (key is not null)
+            cache.Remove(CachePrefix + key.KeyHash);
+    }
+
     private static string GenerateKey()
     {
-        var bytes = RandomNumberGenerator.GetBytes(24);
+        var bytes = RandomNumberGenerator.GetBytes(32);
         var sb = new StringBuilder("lrag_", 37);
         foreach (var b in bytes)
             sb.Append(Base62Chars[b % 62]);
         return sb.ToString()[..37]; // lrag_ + 32 chars = 37 total
+    }
+
+    private static string GenerateSigningSecret()
+    {
+        var bytes = RandomNumberGenerator.GetBytes(32);
+        return Convert.ToHexStringLower(bytes);
     }
 
     private static string HashKey(string key)
@@ -398,6 +545,17 @@ public class ApiKeyService(
             return null;
         }
     }
+
+    /// <summary>
+    ///     Returns the maximum read domains allowed for a plan tier.
+    /// </summary>
+    private static int GetPlanMaxDomains(string plan) => plan.ToLowerInvariant() switch
+    {
+        "starter" => 10,
+        "pro" => 25,
+        "enterprise" => 100,
+        _ => 5 // free
+    };
 
     private class RateLimitEntry
     {
