@@ -56,11 +56,19 @@ public class ApiKeyEntity
     /// </summary>
     public Guid? CollectionId { get; set; }
 
+    /// <summary>
+    ///     URL-friendly slug for hosted search pages (e.g., "abc123def0").
+    ///     Auto-generated from key prefix on creation.
+    /// </summary>
+    public string? Slug { get; set; }
+
     // Navigation
     public CollectionEntity? Collection { get; set; }
     public ApiKeyIndexingSource? IndexingSource { get; set; }
     public ICollection<ApiKeyReadDomain> ReadDomains { get; set; } = [];
     public ICollection<ApiKeyCollectionLink> CollectionLinks { get; set; } = [];
+    public WidgetConfigEntity? WidgetConfig { get; set; }
+    public CustomDomainEntity? CustomDomain { get; set; }
 }
 
 public class ApiKeyIndexingSource

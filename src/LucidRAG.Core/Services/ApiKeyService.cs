@@ -32,6 +32,9 @@ public interface IApiKeyService
     Task UnlinkCollectionAsync(Guid keyId, Guid collectionId, CancellationToken ct);
     Task<List<ApiKeyCollectionLink>> GetLinkedCollectionsAsync(Guid keyId, CancellationToken ct);
 
+    // Slug / hosted page
+    Task<ApiKeyEntity?> GetBySlugAsync(string slug, CancellationToken ct);
+
     // HMAC authentication
     Task<ApiKeyEntity?> ValidateHmacAsync(Guid keyId, string hmac, string salt, CancellationToken ct);
 
@@ -98,6 +101,7 @@ public class ApiKeyService(
             KeyPrefix = keyPrefix,
             KeyHash = keyHash,
             SigningSecret = GenerateSigningSecret(),
+            Slug = GenerateSlug(keyPrefix),
             Description = description,
             UserId = userId,
             NormalizedOwnerEmail = userEmail is not null ? EmailNormalizer.Normalize(userEmail) : null,
@@ -165,7 +169,20 @@ public class ApiKeyService(
             .Include(k => k.Collection)
             .Include(k => k.CollectionLinks)
                 .ThenInclude(l => l.Collection)
+            .Include(k => k.WidgetConfig)
+            .Include(k => k.CustomDomain)
             .FirstOrDefaultAsync(k => k.Id == keyId, ct);
+    }
+
+    public async Task<ApiKeyEntity?> GetBySlugAsync(string slug, CancellationToken ct)
+    {
+        return await db.ApiKeys
+            .Include(k => k.Collection)
+            .Include(k => k.CollectionLinks)
+                .ThenInclude(l => l.Collection)
+            .Include(k => k.WidgetConfig)
+            .Include(k => k.CustomDomain)
+            .FirstOrDefaultAsync(k => k.Slug == slug && k.IsActive && k.RevokedAt == null, ct);
     }
 
     public async Task<ApiKeyEntity?> ValidateHmacAsync(Guid keyId, string hmac, string salt, CancellationToken ct)
@@ -510,6 +527,25 @@ public class ApiKeyService(
     {
         var bytes = RandomNumberGenerator.GetBytes(32);
         return Convert.ToHexStringLower(bytes);
+    }
+
+    /// <summary>
+    ///     Generates a URL-friendly slug from the key prefix.
+    ///     E.g., "lrag_Ab3Xk9z" → "ab3xk9z" (lowercase, no prefix).
+    /// </summary>
+    private static string GenerateSlug(string keyPrefix)
+    {
+        // Strip "lrag_" prefix and lowercase
+        var slug = keyPrefix.StartsWith("lrag_", StringComparison.OrdinalIgnoreCase)
+            ? keyPrefix[5..].ToLowerInvariant()
+            : keyPrefix.ToLowerInvariant();
+        // Ensure minimum length by appending random chars if needed
+        if (slug.Length < 6)
+        {
+            var extra = RandomNumberGenerator.GetBytes(4);
+            foreach (var b in extra) slug += Base62Chars[b % 62];
+        }
+        return slug;
     }
 
     private static string HashKey(string key)

@@ -55,6 +55,10 @@ public class RagDocumentsDbContext(DbContextOptions<RagDocumentsDbContext> optio
     public DbSet<SaasQueryLogEntity> SaasQueryLogs => Set<SaasQueryLogEntity>();
     public DbSet<SaasUsageRollupEntity> SaasUsageRollups => Set<SaasUsageRollupEntity>();
 
+    // Widget config & custom domains
+    public DbSet<WidgetConfigEntity> WidgetConfigs => Set<WidgetConfigEntity>();
+    public DbSet<CustomDomainEntity> CustomDomains => Set<CustomDomainEntity>();
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);
@@ -540,8 +544,11 @@ public class RagDocumentsDbContext(DbContextOptions<RagDocumentsDbContext> optio
             entity.Property(e => e.NormalizedOwnerEmail).HasMaxLength(320);
             entity.Property(e => e.Plan).HasMaxLength(20).IsRequired();
 
+            entity.Property(e => e.Slug).HasMaxLength(20);
+
             entity.HasIndex(e => e.KeyHash).IsUnique();
             entity.HasIndex(e => e.KeyPrefix).IsUnique();
+            entity.HasIndex(e => e.Slug).IsUnique().HasFilter("\"Slug\" IS NOT NULL");
             entity.HasIndex(e => e.UserId);
             entity.HasIndex(e => e.NormalizedOwnerEmail);
 
@@ -600,6 +607,50 @@ public class RagDocumentsDbContext(DbContextOptions<RagDocumentsDbContext> optio
             entity.HasOne(e => e.ApiKey)
                 .WithMany(k => k.ReadDomains)
                 .HasForeignKey(e => e.ApiKeyId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        // WidgetConfigEntity - 1:1 per API key
+        modelBuilder.Entity<WidgetConfigEntity>(entity =>
+        {
+            entity.ToTable("widget_configs");
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.Theme).HasMaxLength(10);
+            entity.Property(e => e.AccentColor).HasMaxLength(20);
+            entity.Property(e => e.FontFamily).HasMaxLength(200);
+            entity.Property(e => e.CustomCss).HasMaxLength(10000);
+            entity.Property(e => e.LogoUrl).HasMaxLength(500);
+            entity.Property(e => e.Position).HasMaxLength(10).IsRequired();
+            entity.Property(e => e.Mode).HasMaxLength(10).IsRequired();
+            entity.Property(e => e.Placeholder).HasMaxLength(200);
+            entity.Property(e => e.CorpusStyle).HasMaxLength(10).IsRequired();
+            entity.Property(e => e.PageTitle).HasMaxLength(200);
+            entity.Property(e => e.PageDescription).HasMaxLength(500);
+            entity.Property(e => e.FaviconUrl).HasMaxLength(500);
+            entity.Property(e => e.WelcomeMessage).HasMaxLength(1000);
+
+            entity.HasIndex(e => e.ApiKeyId).IsUnique();
+
+            entity.HasOne(e => e.ApiKey)
+                .WithOne(k => k.WidgetConfig)
+                .HasForeignKey<WidgetConfigEntity>(e => e.ApiKeyId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        // CustomDomainEntity - custom domain mapping per API key
+        modelBuilder.Entity<CustomDomainEntity>(entity =>
+        {
+            entity.ToTable("custom_domains");
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.Domain).HasMaxLength(253).IsRequired();
+            entity.Property(e => e.VerificationToken).HasMaxLength(64);
+
+            entity.HasIndex(e => e.Domain).IsUnique();
+            entity.HasIndex(e => e.ApiKeyId).IsUnique();
+
+            entity.HasOne(e => e.ApiKey)
+                .WithOne(k => k.CustomDomain)
+                .HasForeignKey<CustomDomainEntity>(e => e.ApiKeyId)
                 .OnDelete(DeleteBehavior.Cascade);
         });
 
