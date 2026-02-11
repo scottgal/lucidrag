@@ -4,6 +4,7 @@ using System.Text;
 using LucidRAG.Data;
 using LucidRAG.Entities;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Caching.Distributed;
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Logging;
 
@@ -54,6 +55,7 @@ public interface IApiKeyService
 public class ApiKeyService(
     RagDocumentsDbContext db,
     IMemoryCache cache,
+    IDistributedCache distributedCache,
     ILogger<ApiKeyService> logger) : IApiKeyService
 {
     private static readonly ConcurrentDictionary<Guid, RateLimitEntry> RateLimits = new();
@@ -469,28 +471,13 @@ public class ApiKeyService(
     public bool CheckRateLimit(Guid keyId, int perMinute, int perDay)
     {
         var entry = RateLimits.GetOrAdd(keyId, _ => new RateLimitEntry());
-        var now = DateTimeOffset.UtcNow;
-
-        lock (entry)
-        {
-            // Clean old entries
-            entry.MinuteRequests.RemoveAll(t => now - t > TimeSpan.FromMinutes(1));
-            entry.DayRequests.RemoveAll(t => now - t > TimeSpan.FromDays(1));
-
-            return entry.MinuteRequests.Count < perMinute && entry.DayRequests.Count < perDay;
-        }
+        return entry.Check(perMinute, perDay);
     }
 
     public void RecordRequest(Guid keyId)
     {
         var entry = RateLimits.GetOrAdd(keyId, _ => new RateLimitEntry());
-        var now = DateTimeOffset.UtcNow;
-
-        lock (entry)
-        {
-            entry.MinuteRequests.Add(now);
-            entry.DayRequests.Add(now);
-        }
+        entry.Record();
     }
 
     public async Task IncrementRequestCountAsync(Guid keyId, CancellationToken ct)
@@ -512,6 +499,12 @@ public class ApiKeyService(
         var key = db.ApiKeys.AsNoTracking().FirstOrDefault(k => k.Id == keyId);
         if (key is not null)
             cache.Remove(CachePrefix + key.KeyHash);
+
+        // Signal distributed cache so other instances invalidate their local cache
+        var invalidationKey = CachePrefix + "invalidated:" + keyId;
+        distributedCache.SetString(invalidationKey,
+            DateTimeOffset.UtcNow.ToUnixTimeSeconds().ToString(),
+            new DistributedCacheEntryOptions { AbsoluteExpirationRelativeToNow = CacheTtl });
     }
 
     private static string GenerateKey()
@@ -593,9 +586,90 @@ public class ApiKeyService(
         _ => 5 // free
     };
 
+    /// <summary>
+    ///     O(1) sliding window rate limiter using bucket arrays.
+    ///     Minute window: 60 second-buckets. Day window: 1440 minute-buckets.
+    /// </summary>
     private class RateLimitEntry
     {
-        public List<DateTimeOffset> MinuteRequests { get; } = [];
-        public List<DateTimeOffset> DayRequests { get; } = [];
+        private readonly int[] _secondBuckets = new int[60];
+        private readonly int[] _minuteBuckets = new int[1440];
+        private long _lastSecondTick;
+        private long _lastMinuteTick;
+        private int _minuteCount;
+        private int _dayCount;
+        private readonly object _lock = new();
+
+        public bool Check(int perMinute, int perDay)
+        {
+            lock (_lock)
+            {
+                RotateBuckets();
+                return _minuteCount < perMinute && _dayCount < perDay;
+            }
+        }
+
+        public void Record()
+        {
+            lock (_lock)
+            {
+                RotateBuckets();
+                var now = DateTimeOffset.UtcNow;
+                var sec = (int)(now.ToUnixTimeSeconds() % 60);
+                var min = (int)(now.ToUnixTimeSeconds() / 60 % 1440);
+                _secondBuckets[sec]++;
+                _minuteBuckets[min]++;
+                _minuteCount++;
+                _dayCount++;
+            }
+        }
+
+        private void RotateBuckets()
+        {
+            var nowSeconds = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+            var nowMinutes = nowSeconds / 60;
+
+            // Rotate second buckets (minute window)
+            var elapsedSeconds = nowSeconds - _lastSecondTick;
+            if (elapsedSeconds > 0)
+            {
+                if (elapsedSeconds >= 60)
+                {
+                    Array.Clear(_secondBuckets);
+                    _minuteCount = 0;
+                }
+                else
+                {
+                    for (var i = 1; i <= elapsedSeconds; i++)
+                    {
+                        var idx = (int)((_lastSecondTick + i) % 60);
+                        _minuteCount -= _secondBuckets[idx];
+                        _secondBuckets[idx] = 0;
+                    }
+                }
+                _lastSecondTick = nowSeconds;
+            }
+
+            // Rotate minute buckets (day window)
+            var elapsedMinutes = nowMinutes - _lastMinuteTick;
+            if (elapsedMinutes > 0)
+            {
+                if (elapsedMinutes >= 1440)
+                {
+                    Array.Clear(_minuteBuckets);
+                    _dayCount = 0;
+                }
+                else
+                {
+                    for (var i = 1; i <= elapsedMinutes; i++)
+                    {
+                        var idx = (int)((_lastMinuteTick + i) % 1440);
+                        _dayCount -= _minuteBuckets[idx];
+                        _minuteBuckets[idx] = 0;
+                    }
+                }
+                _lastMinuteTick = nowMinutes;
+            }
+        }
     }
 }

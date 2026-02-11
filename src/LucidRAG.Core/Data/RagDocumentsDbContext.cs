@@ -668,6 +668,8 @@ public class RagDocumentsDbContext(DbContextOptions<RagDocumentsDbContext> optio
             entity.Property(e => e.UserAgent).HasMaxLength(500);
 
             entity.HasIndex(e => new { e.ApiKeyId, e.CreatedAt });
+            entity.HasIndex(e => new { e.ApiKeyId, e.Success, e.CreatedAt });
+            entity.HasIndex(e => e.CreatedAt);
             entity.HasIndex(e => e.CountryCode);
             entity.HasIndex(e => e.QueryType);
 
