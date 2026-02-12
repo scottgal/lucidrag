@@ -10,6 +10,7 @@ namespace LucidRAG.Controllers.Api;
 public class ChatController(
     IAgenticSearchService searchService,
     IConversationService conversationService,
+    IPersonalMemoryService personalMemory,
     ILogger<ChatController> logger) : ControllerBase
 {
     [HttpPost]
@@ -201,7 +202,42 @@ public class ChatController(
         await conversationService.DeleteConversationAsync(id, ct);
         return Ok(new { success = true });
     }
+
+    // --- Personal Memory Endpoints ---
+
+    [HttpPost("personal/remember")]
+    public async Task<IActionResult> RememberFact([FromBody] RememberRequest request, CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(request.Fact)) return BadRequest(new { error = "Fact is required" });
+
+        var userId = request.UserId ?? "default";
+        var fact = await personalMemory.RememberAsync(userId, request.Fact, ct);
+
+        return Ok(new { id = fact.Id, fact = fact.Fact, createdAt = fact.CreatedAt });
+    }
+
+    [HttpGet("personal/facts")]
+    public async Task<IActionResult> GetFacts([FromQuery] string? userId = null, CancellationToken ct = default)
+    {
+        var facts = await personalMemory.GetFactsAsync(userId ?? "default", ct);
+        return Ok(new
+        {
+            facts = facts.Select(f => new { id = f.Id, fact = f.Fact, createdAt = f.CreatedAt })
+        });
+    }
+
+    [HttpDelete("personal/facts/{id:guid}")]
+    public async Task<IActionResult> ForgetFact(Guid id, [FromQuery] string? userId = null,
+        CancellationToken ct = default)
+    {
+        var deleted = await personalMemory.ForgetAsync(userId ?? "default", id, ct);
+        if (!deleted) return NotFound(new { error = "Fact not found" });
+
+        return Ok(new { success = true });
+    }
 }
+
+public record RememberRequest(string Fact, string? UserId = null);
 
 public record ChatApiRequest(
     string Query,

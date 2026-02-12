@@ -127,14 +127,36 @@ public partial class WebCrawlerService : IWebCrawlerService
 
                 try
                 {
-                    // Fetch page
-                    var response = await client.GetAsync(url, ct);
+                    // Fetch page with conditional request support
+                    var requestMessage = new HttpRequestMessage(HttpMethod.Get, url);
+                    if (request.ETagCache?.TryGetValue(url, out var cachedETag) == true && cachedETag != null)
+                        requestMessage.Headers.IfNoneMatch.Add(new System.Net.Http.Headers.EntityTagHeaderValue($"\"{cachedETag}\""));
+                    if (request.LastModifiedCache?.TryGetValue(url, out var cachedLastModified) == true && cachedLastModified != null)
+                        requestMessage.Headers.IfModifiedSince = cachedLastModified;
+
+                    var response = await client.SendAsync(requestMessage, ct);
+
+                    // 304 Not Modified - skip processing
+                    if (response.StatusCode == System.Net.HttpStatusCode.NotModified)
+                    {
+                        _logger.LogDebug("304 Not Modified for {Url}, skipping", url);
+                        continue;
+                    }
+
                     if (!response.IsSuccessStatusCode)
                     {
                         _logger.LogDebug("HTTP {StatusCode} for {Url}", response.StatusCode, url);
                         job.PagesFailed++;
                         continue;
                     }
+
+                    // Cache ETag and Last-Modified for future conditional requests
+                    var responseETag = response.Headers.ETag?.Tag?.Trim('"');
+                    var responseLastModified = response.Content.Headers.LastModified;
+                    if (responseETag != null)
+                        request.ETagCache?.TryAdd(url, responseETag);
+                    if (responseLastModified != null)
+                        request.LastModifiedCache?.TryAdd(url, responseLastModified);
 
                     var contentType = response.Content.Headers.ContentType?.MediaType ?? "";
                     if (!contentType.Contains("html"))

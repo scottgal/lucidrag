@@ -33,7 +33,7 @@ public sealed class CommandBootstrap : IAsyncDisposable
     public ApiBudgetService? ApiBudget { get; private set; }
     public LlmRouter? LlmRouter { get; private set; }
     public CircuitBreakerService? CircuitBreaker { get; private set; }
-    public DuckDbVectorStore? VectorStore { get; private set; }
+    public IItemVectorStore? VectorStore { get; private set; }
     public IEntityGraphStore? EntityStore { get; private set; }
 #if FEATURE_LLAMASHARP
     public LLamaSharpLlmService? LLamaSharp { get; private set; }
@@ -93,6 +93,9 @@ public sealed class CommandBootstrap : IAsyncDisposable
 
         // Configure the shared query classifier with thresholds from config
         PromptInterpreter.ConfigureClassifier(config.Classifier);
+
+        // Wire learning logger for sentinel disagreement capture
+        PromptInterpreter.LearningLogger = storage;
 
         return new CommandBootstrap(config, dbPath, storage, embedding, vibeResolver);
     }
@@ -310,17 +313,46 @@ public sealed class CommandBootstrap : IAsyncDisposable
     }
 
     /// <summary>
-    ///     Initialize DuckDB vector store and entity graph store sharing a single connection.
+    ///     Initialize vector store and entity graph store.
+    ///     Backend selected by Config.Storage.VectorBackend:
+    ///     "sqlite-vec" → SqliteVecItemVectorStore + SQLite entity graph (StorageService)
+    ///     "duckdb" (default) → DuckDbVectorStore + DuckDbEntityGraphStore (shared connection)
     /// </summary>
     public async Task InitializeEntityStoresAsync()
     {
-        var vectorDbPath = ConfigService.GetVectorDbPath(Config);
-        VectorStore = new DuckDbVectorStore(vectorDbPath);
-        await VectorStore.InitializeAsync();
-        // Share the VectorStore's connection — DuckDB.NET doesn't support
-        // multiple connections to the same file in the same process.
-        EntityStore = new DuckDbEntityGraphStore(VectorStore.Connection!);
-        await EntityStore.InitializeAsync();
+        var backend = Config.Storage.VectorBackend;
+
+        if (string.Equals(backend, "sqlite-vec", StringComparison.OrdinalIgnoreCase))
+        {
+            // sqlite-vec: lightweight brute-force vector search
+            var sqliteVecPath = Path.ChangeExtension(
+                ConfigService.GetVectorDbPath(Config), ".vec.db");
+            var sqliteVecStore = new SqliteVecItemVectorStore(sqliteVecPath);
+            await sqliteVecStore.InitializeAsync();
+
+            // One-time migration from DuckDB if needed
+            var duckDbPath = ConfigService.GetVectorDbPath(Config);
+            var migrated = await VectorStoreMigration.MigrateIfNeededAsync(duckDbPath, sqliteVecStore);
+            if (migrated > 0)
+                AnsiConsole.MarkupLine($"[green]Migrated {migrated} embeddings from DuckDB to sqlite-vec[/]");
+
+            VectorStore = sqliteVecStore;
+            // Entity graph uses SQLite (StorageService) — no DuckDB connection sharing needed
+            EntityStore = new SqliteEntityGraphStore(Storage);
+            await EntityStore.InitializeAsync();
+        }
+        else
+        {
+            // DuckDB: HNSW-indexed vector search (default)
+            var vectorDbPath = ConfigService.GetVectorDbPath(Config);
+            var duckStore = new DuckDbVectorStore(vectorDbPath);
+            await duckStore.InitializeAsync();
+            VectorStore = duckStore;
+            // Share the VectorStore's connection — DuckDB.NET doesn't support
+            // multiple connections to the same file in the same process.
+            EntityStore = new DuckDbEntityGraphStore(duckStore.Connection!);
+            await EntityStore.InitializeAsync();
+        }
     }
 
     /// <summary>
@@ -329,9 +361,15 @@ public sealed class CommandBootstrap : IAsyncDisposable
     /// </summary>
     public async Task<IEntityGraphStore> InitializeEntityGraphStoreAsync()
     {
-        if (VectorStore?.Connection != null)
+        var backend = Config.Storage.VectorBackend;
+
+        if (string.Equals(backend, "sqlite-vec", StringComparison.OrdinalIgnoreCase))
         {
-            EntityStore = new DuckDbEntityGraphStore(VectorStore.Connection);
+            EntityStore = new SqliteEntityGraphStore(Storage);
+        }
+        else if (VectorStore?.GetUnderlyingConnection() is DuckDB.NET.Data.DuckDBConnection duckConn)
+        {
+            EntityStore = new DuckDbEntityGraphStore(duckConn);
         }
         else
         {

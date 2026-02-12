@@ -51,9 +51,19 @@ public class QueryClassifier
     /// </summary>
     public async Task InitializeAsync(IEmbeddingService embedding, CancellationToken ct = default)
     {
+        var exemplars = LoadAllExemplars();
+        await InitializeWithExemplarsAsync(embedding, exemplars, ct);
+    }
+
+    /// <summary>
+    ///     Initialize with a specific exemplar list (for testing with proposed exemplars).
+    ///     Batch-embeds and builds the IDF-weighted voting tables.
+    /// </summary>
+    public async Task InitializeWithExemplarsAsync(IEmbeddingService embedding,
+        List<QueryExemplar> exemplars, CancellationToken ct = default)
+    {
         _embedding = embedding;
 
-        var exemplars = LoadAllExemplars();
         if (exemplars.Count == 0)
         {
             Debug.WriteLine("QueryClassifier: no exemplars found");
@@ -281,13 +291,22 @@ public class QueryClassifier
         var isComplex = bestComplexScore > _config.ComplexThreshold
                         && bestComplexScore >= bestScore * _config.ComplexMinRatio;
 
-        // 6. Composite consensus
+        // 6. Composite consensus (exemplar-based + multi-topic heuristic)
         var compositeThreshold = _config.CompositeRawThreshold;
         if (features.HasCompositeConjunction && features.WordCount >= 5)
             compositeThreshold *= 0.85;
         var isComposite = compositeTop2 > 0
                           && compositeTop1 > compositeThreshold
                           && compositeTop2 > compositeThreshold * 0.85;
+
+        // Multi-topic heuristic: 2+ strong topics + punctuation separator → likely composite.
+        // Catches "AI news; politics; ukraine" without needing composite exemplars.
+        if (!isComposite && features.HasCompositeConjunction)
+        {
+            var strongTopicCount = filteredTopics.Count(kv => kv.Value >= 0.70);
+            if (strongTopicCount >= 2)
+                isComposite = true;
+        }
 
         // 7. Build top matches from bounded top-5 array (already sorted by insertion)
         // Sort the filled portion (insertion sort may leave unsorted initial fills)

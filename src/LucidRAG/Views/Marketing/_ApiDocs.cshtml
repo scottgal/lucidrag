@@ -1,0 +1,65 @@
+<!-- API Section -->
+<section id="api" class="py-16 lg:py-24">
+    <div class="max-w-7xl mx-auto px-4">
+        <div class="text-center mb-12">
+            <h2 class="text-3xl lg:text-4xl font-bold font-brand mb-4">Clean REST API</h2>
+            <p class="text-base-content/60 max-w-2xl mx-auto">
+                Use the widget or call the API directly. Full
+                <a href="/scalar/v1" class="link link-primary">OpenAPI docs</a> included.
+            </p>
+        </div>
+
+        <div class="grid lg:grid-cols-2 gap-8">
+            <div class="code-block">
+                <div class="flex items-center gap-2 px-4 py-2 border-b border-slate-700">
+                    <span class="text-slate-400 text-xs font-brand">Search API</span>
+                </div>
+<pre><code><span class="comment">// POST /api/saas/search</span>
+<span class="tag">curl</span> -X POST /api/saas/search \
+  -H <span class="string">"X-Api-Key: lrag_your_key"</span> \
+  -H <span class="string">"Content-Type: application/json"</span> \
+  -d <span class="string">'{"query": "how to configure auth"}'</span>
+
+<span class="comment">// Response</span>
+{
+  <span class="attr">"results"</span>: [{
+    <span class="attr">"title"</span>: <span class="string">"Auth Guide"</span>,
+    <span class="attr">"text"</span>: <span class="string">"Configure OAuth..."</span>,
+    <span class="attr">"score"</span>: <span class="string">0.89</span>
+  }],
+  <span class="attr">"responseTimeMs"</span>: <span class="string">45</span>
+}</code></pre>
+            </div>
+
+            <div class="code-block">
+                <div class="flex items-center gap-2 px-4 py-2 border-b border-slate-700">
+                    <span class="text-slate-400 text-xs font-brand">Chat API (SSE)</span>
+                </div>
+<pre><code><span class="comment">// POST /api/saas/chat/stream</span>
+<span class="tag">curl</span> -N -X POST /api/saas/chat/stream \
+  -H <span class="string">"X-Api-Key: lrag_your_key"</span> \
+  -H <span class="string">"Content-Type: application/json"</span> \
+  -d <span class="string">'{"query": "explain auth flow"}'</span>
+
+<span class="comment">// Server-Sent Events</span>
+data: {<span class="attr">"type"</span>:<span class="string">"sources"</span>, ...}
+data: {<span class="attr">"type"</span>:<span class="string">"text"</span>, <span class="attr">"text"</span>:<span class="string">"Based on..."</span>}
+data: [DONE]</code></pre>
+            </div>
+        </div>
+
+        <div class="text-center mt-8">
+            <div class="flex flex-wrap justify-center gap-3 text-sm">
+                <span class="badge badge-lg badge-outline gap-2">
+                    <code class="text-primary font-mono text-xs">POST</code> /api/saas/search
+                </span>
+                <span class="badge badge-lg badge-outline gap-2">
+                    <code class="text-primary font-mono text-xs">POST</code> /api/saas/chat/stream
+                </span>
+                <span class="badge badge-lg badge-outline gap-2">
+                    <code class="text-primary font-mono text-xs">GET</code> /api/saas/autocomplete
+                </span>
+            </div>
+        </div>
+    </div>
+</section>

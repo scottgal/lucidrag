@@ -1,3 +1,5 @@
+using System.Collections.Concurrent;
+
 namespace LucidRAG.Models;
 
 /// <summary>
@@ -25,7 +27,19 @@ public record CrawlRequest(
     /// Collection to add crawled documents to
     /// </summary>
     Guid? CollectionId = null
-);
+)
+{
+    /// <summary>
+    ///     Per-URL ETag cache for conditional re-crawl (If-None-Match).
+    ///     Populated during crawl, can be pre-seeded from previous crawl data.
+    /// </summary>
+    public ConcurrentDictionary<string, string>? ETagCache { get; init; }
+
+    /// <summary>
+    ///     Per-URL Last-Modified cache for conditional re-crawl (If-Modified-Since).
+    /// </summary>
+    public ConcurrentDictionary<string, DateTimeOffset?>? LastModifiedCache { get; init; }
+};
 
 /// <summary>
 ///     Active crawl job tracking

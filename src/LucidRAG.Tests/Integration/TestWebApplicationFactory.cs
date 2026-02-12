@@ -4,6 +4,8 @@ using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Mostlylucid.DocSummarizer.FullText.Lucene;
+using Mostlylucid.DocSummarizer.Search;
 
 namespace LucidRAG.Tests.Integration;
 
@@ -12,6 +14,8 @@ namespace LucidRAG.Tests.Integration;
 /// </summary>
 public class TestWebApplicationFactory : WebApplicationFactory<Program>
 {
+    private string? _tempLucenePath;
+
     /// <summary>
     ///     Connection string for existing dev PostgreSQL.
     ///     Reads from ConnectionStrings__DefaultConnection env var (CI), POSTGRES_PASSWORD env var, or .env file.
@@ -89,6 +93,12 @@ public class TestWebApplicationFactory : WebApplicationFactory<Program>
             // Add PostgreSQL for testing
             services.AddDbContext<RagDocumentsDbContext>(options =>
                 options.UseNpgsql(PostgresConnectionString));
+
+            // Replace Lucene index with a temp path to avoid lock conflicts with running app
+            var luceneDescriptor = services.SingleOrDefault(d => d.ServiceType == typeof(IFullTextSearch));
+            if (luceneDescriptor != null) services.Remove(luceneDescriptor);
+            _tempLucenePath = Path.Combine(Path.GetTempPath(), "lucidrag-test-lucene-" + Guid.NewGuid().ToString("N"));
+            services.AddSingleton<IFullTextSearch>(new LuceneFullTextSearch(_tempLucenePath));
         });
 
         builder.ConfigureAppConfiguration((context, config) =>
@@ -112,13 +122,51 @@ public class TestWebApplicationFactory : WebApplicationFactory<Program>
     }
 
     /// <summary>
-    ///     Ensure database is created and migrated
+    ///     Ensure database is created and migrated.
+    ///     EnsureCreatedAsync creates tables from the EF model but skips migrations,
+    ///     so we manually apply FTS schema (tsvector, GIN index, corpus_stats).
     /// </summary>
     public async Task EnsureDatabaseAsync()
     {
         using var scope = Services.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<RagDocumentsDbContext>();
         await db.Database.EnsureCreatedAsync();
+
+        if (db.Database.IsNpgsql())
+            await ApplyFtsSchemaAsync(db);
+    }
+
+    private static async Task ApplyFtsSchemaAsync(RagDocumentsDbContext db)
+    {
+        // EnsureCreatedAsync doesn't run migrations, so apply FTS schema manually.
+        // Uses DO block with IF NOT EXISTS to be idempotent.
+        await db.Database.ExecuteSqlRawAsync("""
+            DO $$
+            BEGIN
+                IF NOT EXISTS (
+                    SELECT 1 FROM information_schema.columns
+                    WHERE table_name = 'evidence_artifacts' AND column_name = 'content_tokens'
+                ) THEN
+                    ALTER TABLE evidence_artifacts
+                    ADD COLUMN content_tokens tsvector
+                    GENERATED ALWAYS AS (to_tsvector('english', COALESCE("Content", ''))) STORED;
+
+                    CREATE INDEX IF NOT EXISTS idx_evidence_fts
+                    ON evidence_artifacts USING GIN(content_tokens);
+                END IF;
+            END $$;
+            """);
+
+        await db.Database.ExecuteSqlRawAsync("""
+            CREATE MATERIALIZED VIEW IF NOT EXISTS corpus_stats AS
+            SELECT COUNT(*) as total_docs, AVG(length("Content")) as avg_doc_length
+            FROM evidence_artifacts WHERE "Content" IS NOT NULL;
+            """);
+
+        await db.Database.ExecuteSqlRawAsync("""
+            CREATE UNIQUE INDEX IF NOT EXISTS idx_corpus_stats_unique
+            ON corpus_stats (total_docs);
+            """);
     }
 
     /// <summary>
@@ -129,15 +177,28 @@ public class TestWebApplicationFactory : WebApplicationFactory<Program>
         using var scope = Services.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<RagDocumentsDbContext>();
 
-        // Delete test data
+        // Delete test data (RetrievalEntities cascades to EvidenceArtifacts via FK)
         db.ConversationMessages.RemoveRange(db.ConversationMessages);
         db.Conversations.RemoveRange(db.Conversations);
         db.DocumentEntityLinks.RemoveRange(db.DocumentEntityLinks);
         db.EntityRelationships.RemoveRange(db.EntityRelationships);
+        db.RetrievalEntities.RemoveRange(db.RetrievalEntities);
         db.Entities.RemoveRange(db.Entities);
         db.Documents.RemoveRange(db.Documents);
         db.Collections.RemoveRange(db.Collections);
 
         await db.SaveChangesAsync();
+    }
+
+    protected override void Dispose(bool disposing)
+    {
+        base.Dispose(disposing);
+
+        // Clean up temp Lucene index directory
+        if (_tempLucenePath != null && Directory.Exists(_tempLucenePath))
+        {
+            try { Directory.Delete(_tempLucenePath, true); }
+            catch { /* best effort */ }
+        }
     }
 }

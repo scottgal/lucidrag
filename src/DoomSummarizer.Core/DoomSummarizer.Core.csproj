@@ -74,8 +74,11 @@
         <PackageReference Include="NuGet.CommandLine" Version="6.12.2" ExcludeAssets="all" PrivateAssets="all"/>
         <PackageReference Include="SmartReader" Version="0.11.0"/>
 
-        <!-- DuckDB with VSS for HNSW vector search -->
+        <!-- DuckDB with VSS for HNSW vector search (LucidResearch tier) -->
         <PackageReference Include="DuckDB.NET.Data.Full" Version="1.4.4"/>
+
+        <!-- sqlite-vec for lightweight brute-force vector search (DoomSummarizer CLI tier) -->
+        <PackageReference Include="sqlite-vec" Version="0.1.7-alpha.2.1"/>
 
         <!-- ONNX for local embeddings with GPU auto-detection -->
         <!-- DirectML on Windows (GPU auto-detect), base CPU on other platforms or when GPU excluded -->

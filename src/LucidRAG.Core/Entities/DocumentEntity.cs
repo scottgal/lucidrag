@@ -55,6 +55,11 @@ public class DocumentEntity
     public string? VectorStoreDocId { get; set; }
 
     /// <summary>
+    ///     S3 staging path for upload durability. Cleared after processing completes.
+    /// </summary>
+    public string? StagingPath { get; set; }
+
+    /// <summary>
     ///     Optional folder ID for organizing documents within a collection.
     ///     Null means the document is at the root of the collection.
     /// </summary>

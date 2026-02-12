@@ -119,6 +119,16 @@ public sealed partial class ScrollCommand : AsyncCommand<ScrollCommand.Settings>
         // Auto-backfill FTS5 index if empty (one-time migration for existing KB items)
         if (await boot.Storage.IsFtsIndexEmptyAsync()) await BackfillFtsIndexAsync(boot.Storage, settings.Quiet);
 
+        // Check if background learning is due (lightweight — only queries DB if enabled)
+        try
+        {
+            await ExemplarsCommand.CheckAutoLearnAsync(boot, cancellationToken);
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"Auto-learn check failed: {ex.Message}");
+        }
+
         // Initialize DuckDB vector store and entity graph store if needed
         var vectorDbPath = ConfigService.GetVectorDbPath(boot.Config);
         if (File.Exists(vectorDbPath) || settings.Graph || settings.BackfillEntityProfiles)

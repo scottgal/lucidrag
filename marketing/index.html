@@ -1,0 +1,733 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="utf-8"/>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+    <title>lucidRAG - AI-Powered Search for Your Content</title>
+    <meta name="description" content="Add intelligent search and chat to any website in minutes. Embed a search widget powered by your own documents. Free tier available."/>
+
+    <!-- Favicon -->
+    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' width='32' height='32' viewBox='0 0 32 32'><rect width='32' height='32' rx='6' fill='%231e293b'/><text x='4' y='23' font-family='sans-serif' font-size='18' font-weight='700' fill='%23fff'>lR</text></svg>"/>
+
+    <!-- Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Raleway:ital,wght@0,400;0,600;0,700;0,800;1,400;1,600&display=swap" rel="stylesheet">
+
+    <!-- Tailwind + DaisyUI CDN -->
+    <link href="https://cdn.jsdelivr.net/npm/daisyui@4.12.23/dist/full.min.css" rel="stylesheet"/>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        'brand': ['Raleway', 'sans-serif'],
+                        'body': ['Inter', 'sans-serif'],
+                    }
+                }
+            }
+        }
+    </script>
+
+    <style>
+        body { font-family: 'Inter', sans-serif; }
+        .font-brand { font-family: 'Raleway', sans-serif; }
+        .gradient-text {
+            background: linear-gradient(135deg, #6366f1, #8b5cf6, #a855f7);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+        .hero-gradient {
+            background: linear-gradient(135deg, #1e293b 0%, #0f172a 50%, #1e1b4b 100%);
+        }
+        .feature-card:hover { transform: translateY(-2px); }
+        .pricing-popular { border: 2px solid oklch(var(--p)); }
+        @keyframes float { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-10px); } }
+        .float-animation { animation: float 6s ease-in-out infinite; }
+        .code-block {
+            background: #1e293b;
+            border-radius: 0.75rem;
+            overflow: hidden;
+        }
+        .code-block pre {
+            padding: 1.5rem;
+            overflow-x: auto;
+            font-size: 0.875rem;
+            line-height: 1.7;
+        }
+        .code-block code { color: #e2e8f0; }
+        .code-block .comment { color: #64748b; }
+        .code-block .tag { color: #7dd3fc; }
+        .code-block .attr { color: #c4b5fd; }
+        .code-block .string { color: #86efac; }
+    </style>
+</head>
+<body class="bg-base-100">
+
+<!-- Navigation -->
+<nav class="navbar bg-gradient-to-r from-slate-800 to-slate-900 shadow-lg sticky top-0 z-50 px-4 lg:px-8">
+    <div class="flex-1">
+        <a href="#" class="flex items-center gap-1 text-2xl font-brand">
+            <span class="italic text-[#dddddd] font-semibold">lucid</span><span class="font-bold text-white">RAG</span>
+        </a>
+    </div>
+    <div class="flex-none gap-2 hidden md:flex">
+        <a href="#features" class="btn btn-ghost btn-sm text-slate-300 hover:text-white">Features</a>
+        <a href="#pricing" class="btn btn-ghost btn-sm text-slate-300 hover:text-white">Pricing</a>
+        <a href="#widget" class="btn btn-ghost btn-sm text-slate-300 hover:text-white">Widget</a>
+        <a href="#docs" class="btn btn-ghost btn-sm text-slate-300 hover:text-white">Docs</a>
+    </div>
+    <div class="flex-none gap-2 ml-4">
+        <a href="/auth/login" class="btn btn-ghost btn-sm text-slate-300 hover:text-white">Sign In</a>
+        <a href="/auth/register" class="btn btn-primary btn-sm">Get Started Free</a>
+    </div>
+</nav>
+
+<!-- Hero Section -->
+<section class="hero-gradient text-white">
+    <div class="max-w-7xl mx-auto px-4 py-20 lg:py-32">
+        <div class="grid lg:grid-cols-2 gap-12 items-center">
+            <div>
+                <div class="badge badge-outline badge-lg text-slate-300 border-slate-500 mb-6">Free tier available</div>
+                <h1 class="text-4xl lg:text-6xl font-bold font-brand leading-tight mb-6">
+                    AI search for
+                    <span class="text-transparent bg-clip-text bg-gradient-to-r from-indigo-400 to-purple-400">your content</span>
+                </h1>
+                <p class="text-xl text-slate-300 mb-8 leading-relaxed">
+                    Add intelligent search and AI chat to any website in under 5 minutes.
+                    Point us at your docs, your site, or your GitHub repo &mdash;
+                    we index it and give you an embeddable widget.
+                </p>
+                <div class="flex flex-wrap gap-4">
+                    <a href="/auth/register" class="btn btn-primary btn-lg">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
+                        Start Free
+                    </a>
+                    <a href="#widget" class="btn btn-outline btn-lg text-white border-slate-500 hover:bg-slate-700 hover:border-slate-500">
+                        See the Widget
+                    </a>
+                </div>
+                <div class="flex items-center gap-6 mt-8 text-sm text-slate-400">
+                    <span class="flex items-center gap-1">
+                        <svg class="h-4 w-4 text-green-400" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
+                        No credit card
+                    </span>
+                    <span class="flex items-center gap-1">
+                        <svg class="h-4 w-4 text-green-400" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
+                        25 docs free
+                    </span>
+                    <span class="flex items-center gap-1">
+                        <svg class="h-4 w-4 text-green-400" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
+                        5 min setup
+                    </span>
+                </div>
+            </div>
+            <div class="hidden lg:block">
+                <!-- Widget mockup -->
+                <div class="bg-white rounded-xl shadow-2xl p-1 float-animation">
+                    <div class="rounded-lg border border-slate-200 overflow-hidden">
+                        <div class="flex items-center gap-2 px-4 py-3 border-b border-slate-100">
+                            <svg class="h-4 w-4 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+                            <span class="text-slate-400 text-sm">How do I configure authentication?</span>
+                        </div>
+                        <div class="p-4 space-y-3">
+                            <div class="bg-slate-50 rounded-lg p-3">
+                                <div class="font-semibold text-sm text-slate-800">Authentication Guide</div>
+                                <div class="text-xs text-slate-500 mt-1 line-clamp-2">To configure authentication, add your OAuth provider settings to the config file. LucidRAG supports Google, GitHub, and SAML SSO...</div>
+                                <div class="text-xs text-indigo-500 mt-1">docs/authentication.md</div>
+                            </div>
+                            <div class="bg-slate-50 rounded-lg p-3">
+                                <div class="font-semibold text-sm text-slate-800">API Key Setup</div>
+                                <div class="text-xs text-slate-500 mt-1 line-clamp-2">Generate an API key from the dashboard. Each key can be scoped to specific collections and rate limited per plan...</div>
+                                <div class="text-xs text-indigo-500 mt-1">docs/api-keys.md</div>
+                            </div>
+                            <div class="bg-slate-50 rounded-lg p-3">
+                                <div class="font-semibold text-sm text-slate-800">SSO Integration</div>
+                                <div class="text-xs text-slate-500 mt-1 line-clamp-2">Enterprise SSO can be configured via SAML 2.0. Contact support for custom identity provider setup...</div>
+                                <div class="text-xs text-indigo-500 mt-1">docs/sso.md</div>
+                            </div>
+                        </div>
+                        <div class="text-center text-[10px] text-slate-400 py-2 border-t border-slate-100">
+                            Powered by <span class="font-brand"><span class="italic">lucid</span><span class="font-bold">RAG</span></span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+
+<!-- Social proof strip -->
+<section class="bg-base-200 border-y border-base-300 py-6">
+    <div class="max-w-7xl mx-auto px-4 flex flex-wrap items-center justify-center gap-8 text-sm text-base-content/60">
+        <span class="font-semibold">Built with:</span>
+        <span class="flex items-center gap-2">
+            <svg class="h-5 w-5" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2L2 19.5h20L12 2zm0 4l7 13.5H5L12 6z"/></svg>
+            .NET 10
+        </span>
+        <span>Qdrant Vectors</span>
+        <span>ONNX Embeddings</span>
+        <span>BM25 + Semantic Hybrid</span>
+        <span>GraphRAG</span>
+    </div>
+</section>
+
+<!-- Features Section -->
+<section id="features" class="py-20 lg:py-28">
+    <div class="max-w-7xl mx-auto px-4">
+        <div class="text-center mb-16">
+            <h2 class="text-3xl lg:text-4xl font-bold font-brand mb-4">Everything you need for intelligent search</h2>
+            <p class="text-lg text-base-content/60 max-w-2xl mx-auto">Point us at your content. We do the rest.</p>
+        </div>
+
+        <div class="grid md:grid-cols-2 lg:grid-cols-3 gap-8">
+            <!-- Feature 1 -->
+            <div class="card bg-base-100 shadow-sm border border-base-200 feature-card transition-all duration-200">
+                <div class="card-body">
+                    <div class="w-12 h-12 rounded-lg bg-primary/10 flex items-center justify-center mb-4">
+                        <svg class="h-6 w-6 text-primary" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
+                    </div>
+                    <h3 class="card-title text-lg">Hybrid Search</h3>
+                    <p class="text-base-content/60">Semantic vectors + BM25 keyword search fused with RRF. Better results than either alone.</p>
+                </div>
+            </div>
+
+            <!-- Feature 2 -->
+            <div class="card bg-base-100 shadow-sm border border-base-200 feature-card transition-all duration-200">
+                <div class="card-body">
+                    <div class="w-12 h-12 rounded-lg bg-secondary/10 flex items-center justify-center mb-4">
+                        <svg class="h-6 w-6 text-secondary" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z"/></svg>
+                    </div>
+                    <h3 class="card-title text-lg">AI Chat</h3>
+                    <p class="text-base-content/60">RAG-powered conversations grounded in your documents. Sources cited, hallucinations minimized.</p>
+                </div>
+            </div>
+
+            <!-- Feature 3 -->
+            <div class="card bg-base-100 shadow-sm border border-base-200 feature-card transition-all duration-200">
+                <div class="card-body">
+                    <div class="w-12 h-12 rounded-lg bg-accent/10 flex items-center justify-center mb-4">
+                        <svg class="h-6 w-6 text-accent" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4"/></svg>
+                    </div>
+                    <h3 class="card-title text-lg">2-Line Embed</h3>
+                    <p class="text-base-content/60">Drop a &lt;script&gt; tag on your site. Shadow DOM keeps styles isolated. Zero dependencies.</p>
+                </div>
+            </div>
+
+            <!-- Feature 4 -->
+            <div class="card bg-base-100 shadow-sm border border-base-200 feature-card transition-all duration-200">
+                <div class="card-body">
+                    <div class="w-12 h-12 rounded-lg bg-info/10 flex items-center justify-center mb-4">
+                        <svg class="h-6 w-6 text-info" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3.055 11H5a2 2 0 012 2v1a2 2 0 002 2 2 2 0 012 2v2.945M8 3.935V5.5A2.5 2.5 0 0010.5 8h.5a2 2 0 012 2 2 2 0 104 0 2 2 0 012-2h1.064M15 20.488V18a2 2 0 012-2h3.064M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                    </div>
+                    <h3 class="card-title text-lg">Domain Crawling</h3>
+                    <p class="text-base-content/60">Point us at a domain or GitHub repo. We crawl, extract, chunk, and embed automatically.</p>
+                </div>
+            </div>
+
+            <!-- Feature 5 -->
+            <div class="card bg-base-100 shadow-sm border border-base-200 feature-card transition-all duration-200">
+                <div class="card-body">
+                    <div class="w-12 h-12 rounded-lg bg-success/10 flex items-center justify-center mb-4">
+                        <svg class="h-6 w-6 text-success" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/></svg>
+                    </div>
+                    <h3 class="card-title text-lg">Corpus Isolation</h3>
+                    <p class="text-base-content/60">Each API key gets its own corpus. Your data never leaks into other customers' search results.</p>
+                </div>
+            </div>
+
+            <!-- Feature 6 -->
+            <div class="card bg-base-100 shadow-sm border border-base-200 feature-card transition-all duration-200">
+                <div class="card-body">
+                    <div class="w-12 h-12 rounded-lg bg-warning/10 flex items-center justify-center mb-4">
+                        <svg class="h-6 w-6 text-warning" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"/></svg>
+                    </div>
+                    <h3 class="card-title text-lg">Autocomplete</h3>
+                    <p class="text-base-content/60">TF-IDF + entity-aware salient terms. Your users get smart suggestions as they type.</p>
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+
+<!-- How It Works -->
+<section class="py-20 bg-base-200">
+    <div class="max-w-7xl mx-auto px-4">
+        <div class="text-center mb-16">
+            <h2 class="text-3xl lg:text-4xl font-bold font-brand mb-4">Three steps to smart search</h2>
+        </div>
+        <div class="grid md:grid-cols-3 gap-8">
+            <div class="text-center">
+                <div class="w-16 h-16 rounded-full bg-primary text-primary-content text-2xl font-bold flex items-center justify-center mx-auto mb-6">1</div>
+                <h3 class="text-xl font-bold mb-3">Get your API key</h3>
+                <p class="text-base-content/60">Sign up, get a key. One click, one key, free tier included.</p>
+            </div>
+            <div class="text-center">
+                <div class="w-16 h-16 rounded-full bg-primary text-primary-content text-2xl font-bold flex items-center justify-center mx-auto mb-6">2</div>
+                <h3 class="text-xl font-bold mb-3">Point at your content</h3>
+                <p class="text-base-content/60">Enter a domain URL or GitHub repo. We crawl and index up to 25 pages (free) or thousands (paid).</p>
+            </div>
+            <div class="text-center">
+                <div class="w-16 h-16 rounded-full bg-primary text-primary-content text-2xl font-bold flex items-center justify-center mx-auto mb-6">3</div>
+                <h3 class="text-xl font-bold mb-3">Embed the widget</h3>
+                <p class="text-base-content/60">Paste two lines of HTML. Your users get instant semantic search and AI chat.</p>
+            </div>
+        </div>
+    </div>
+</section>
+
+<!-- Widget Demo -->
+<section id="widget" class="py-20 lg:py-28">
+    <div class="max-w-7xl mx-auto px-4">
+        <div class="grid lg:grid-cols-2 gap-12 items-center">
+            <div>
+                <h2 class="text-3xl lg:text-4xl font-bold font-brand mb-6">Embed in 2 lines</h2>
+                <p class="text-lg text-base-content/60 mb-8">
+                    No build step. No npm install. Just a script tag with your API key.
+                    Shadow DOM keeps our styles out of your way.
+                </p>
+
+                <div class="code-block">
+                    <div class="flex items-center gap-2 px-4 py-2 border-b border-slate-700">
+                        <span class="w-3 h-3 rounded-full bg-red-500"></span>
+                        <span class="w-3 h-3 rounded-full bg-yellow-500"></span>
+                        <span class="w-3 h-3 rounded-full bg-green-500"></span>
+                        <span class="text-slate-400 text-xs ml-2">index.html</span>
+                    </div>
+<pre><code><span class="comment">&lt;!-- Add this where you want the search widget --&gt;</span>
+<span class="tag">&lt;div</span> <span class="attr">id</span>=<span class="string">"lucidrag-search"</span><span class="tag">&gt;&lt;/div&gt;</span>
+<span class="tag">&lt;script</span> <span class="attr">src</span>=<span class="string">"https://search.lucidrag.com/widget/lucidrag-search.js"</span>
+        <span class="attr">data-api-key</span>=<span class="string">"lrag_your_key_here"</span>
+        <span class="attr">data-mode</span>=<span class="string">"both"</span>
+        <span class="attr">data-theme</span>=<span class="string">"auto"</span><span class="tag">&gt;</span>
+<span class="tag">&lt;/script&gt;</span></code></pre>
+                </div>
+
+                <div class="mt-8 space-y-3">
+                    <div class="flex items-center gap-3 text-sm">
+                        <span class="badge badge-primary badge-sm">data-mode</span>
+                        <span class="text-base-content/60">"search" | "chat" | "both"</span>
+                    </div>
+                    <div class="flex items-center gap-3 text-sm">
+                        <span class="badge badge-primary badge-sm">data-theme</span>
+                        <span class="text-base-content/60">"light" | "dark" | "auto"</span>
+                    </div>
+                    <div class="flex items-center gap-3 text-sm">
+                        <span class="badge badge-primary badge-sm">data-position</span>
+                        <span class="text-base-content/60">"inline" | "floating"</span>
+                    </div>
+                </div>
+            </div>
+
+            <div>
+                <!-- Live widget preview area -->
+                <div class="mockup-browser border border-base-300 bg-base-200">
+                    <div class="mockup-browser-toolbar">
+                        <div class="input border border-base-300 text-sm">https://your-docs-site.com</div>
+                    </div>
+                    <div class="bg-base-100 p-6">
+                        <p class="text-base-content/40 text-sm mb-4">Your existing page content...</p>
+                        <!-- Inline widget mockup -->
+                        <div class="border border-base-300 rounded-lg overflow-hidden">
+                            <div class="flex items-center gap-2 px-3 py-2.5 border-b border-base-200">
+                                <svg class="h-4 w-4 text-base-content/40" fill="none" viewBox="0 0 24 24" stroke="currentColor"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+                                <input type="text" placeholder="Search docs..." class="flex-1 text-sm bg-transparent outline-none border-none text-base-content" disabled/>
+                            </div>
+                            <div class="p-3 space-y-2">
+                                <div class="bg-base-200/50 rounded p-2.5">
+                                    <div class="font-medium text-xs">Getting Started Guide</div>
+                                    <div class="text-[11px] text-base-content/50 mt-0.5">Install the SDK and configure your first project in under 5 minutes...</div>
+                                </div>
+                                <div class="bg-base-200/50 rounded p-2.5">
+                                    <div class="font-medium text-xs">Configuration Reference</div>
+                                    <div class="text-[11px] text-base-content/50 mt-0.5">Full list of configuration options for the YAML config file...</div>
+                                </div>
+                            </div>
+                            <div class="text-center text-[9px] text-base-content/30 py-1.5 border-t border-base-200">
+                                Powered by <span class="font-brand"><span class="italic">lucid</span><span class="font-bold">RAG</span></span>
+                            </div>
+                        </div>
+                        <p class="text-base-content/40 text-sm mt-4">...more of your page content</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+
+<!-- Pricing Section -->
+<section id="pricing" class="py-20 lg:py-28 bg-base-200">
+    <div class="max-w-7xl mx-auto px-4">
+        <div class="text-center mb-16">
+            <h2 class="text-3xl lg:text-4xl font-bold font-brand mb-4">Simple, honest pricing</h2>
+            <p class="text-lg text-base-content/60 max-w-2xl mx-auto">
+                Search is cheap (no LLM costs). Chat uses AI tokens so costs more.
+                We price accordingly &mdash; no surprises.
+            </p>
+        </div>
+
+        <div class="grid md:grid-cols-2 lg:grid-cols-4 gap-6">
+
+            <!-- Free -->
+            <div class="card bg-base-100 shadow-sm border border-base-200">
+                <div class="card-body">
+                    <h3 class="text-lg font-bold">Free</h3>
+                    <div class="mt-2">
+                        <span class="text-4xl font-bold">$0</span>
+                        <span class="text-base-content/60">/month</span>
+                    </div>
+                    <p class="text-sm text-base-content/60 mt-2">Prove the value. No credit card.</p>
+                    <div class="divider my-4"></div>
+                    <ul class="space-y-3 text-sm">
+                        <li class="flex items-start gap-2">
+                            <svg class="h-5 w-5 text-success flex-shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
+                            <span><strong>500</strong> searches/day</span>
+                        </li>
+                        <li class="flex items-start gap-2">
+                            <svg class="h-5 w-5 text-success flex-shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
+                            <span><strong>20</strong> AI chats/day</span>
+                        </li>
+                        <li class="flex items-start gap-2">
+                            <svg class="h-5 w-5 text-success flex-shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
+                            <span><strong>25</strong> documents</span>
+                        </li>
+                        <li class="flex items-start gap-2">
+                            <svg class="h-5 w-5 text-success flex-shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
+                            <span><strong>1</strong> API key</span>
+                        </li>
+                        <li class="flex items-start gap-2">
+                            <svg class="h-5 w-5 text-success flex-shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
+                            <span><strong>1</strong> source (domain or repo)</span>
+                        </li>
+                        <li class="flex items-start gap-2">
+                            <svg class="h-5 w-5 text-success flex-shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
+                            <span><strong>3</strong> embed domains</span>
+                        </li>
+                        <li class="flex items-start gap-2 text-base-content/40">
+                            <svg class="h-5 w-5 flex-shrink-0" fill="none" viewBox="0 0 20 20" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+                            <span>"Powered by" badge required</span>
+                        </li>
+                    </ul>
+                    <div class="card-actions mt-6">
+                        <a href="/auth/register" class="btn btn-outline btn-block">Get Started</a>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Starter -->
+            <div class="card bg-base-100 shadow-sm border border-base-200">
+                <div class="card-body">
+                    <h3 class="text-lg font-bold">Starter</h3>
+                    <div class="mt-2">
+                        <span class="text-4xl font-bold">$19</span>
+                        <span class="text-base-content/60">/month</span>
+                    </div>
+                    <p class="text-sm text-base-content/60 mt-2">For personal projects and small docs sites.</p>
+                    <div class="divider my-4"></div>
+                    <ul class="space-y-3 text-sm">
+                        <li class="flex items-start gap-2">
+                            <svg class="h-5 w-5 text-success flex-shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
+                            <span><strong>5,000</strong> searches/day</span>
+                        </li>
+                        <li class="flex items-start gap-2">
+                            <svg class="h-5 w-5 text-success flex-shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
+                            <span><strong>200</strong> AI chats/day</span>
+                        </li>
+                        <li class="flex items-start gap-2">
+                            <svg class="h-5 w-5 text-success flex-shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
+                            <span><strong>100</strong> documents</span>
+                        </li>
+                        <li class="flex items-start gap-2">
+                            <svg class="h-5 w-5 text-success flex-shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
+                            <span><strong>3</strong> API keys</span>
+                        </li>
+                        <li class="flex items-start gap-2">
+                            <svg class="h-5 w-5 text-success flex-shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
+                            <span><strong>3</strong> sources</span>
+                        </li>
+                        <li class="flex items-start gap-2">
+                            <svg class="h-5 w-5 text-success flex-shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
+                            <span><strong>10</strong> embed domains</span>
+                        </li>
+                        <li class="flex items-start gap-2">
+                            <svg class="h-5 w-5 text-success flex-shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
+                            <span>No badge required</span>
+                        </li>
+                    </ul>
+                    <div class="card-actions mt-6">
+                        <a href="/auth/register?plan=starter" class="btn btn-outline btn-block">Start Trial</a>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Pro (Popular) -->
+            <div class="card bg-base-100 shadow-lg pricing-popular relative">
+                <div class="absolute -top-3 left-1/2 -translate-x-1/2">
+                    <span class="badge badge-primary badge-lg">Most Popular</span>
+                </div>
+                <div class="card-body">
+                    <h3 class="text-lg font-bold">Pro</h3>
+                    <div class="mt-2">
+                        <span class="text-4xl font-bold">$49</span>
+                        <span class="text-base-content/60">/month</span>
+                    </div>
+                    <p class="text-sm text-base-content/60 mt-2">For growing teams and documentation sites.</p>
+                    <div class="divider my-4"></div>
+                    <ul class="space-y-3 text-sm">
+                        <li class="flex items-start gap-2">
+                            <svg class="h-5 w-5 text-success flex-shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
+                            <span><strong>50,000</strong> searches/day</span>
+                        </li>
+                        <li class="flex items-start gap-2">
+                            <svg class="h-5 w-5 text-success flex-shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
+                            <span><strong>2,000</strong> AI chats/day</span>
+                        </li>
+                        <li class="flex items-start gap-2">
+                            <svg class="h-5 w-5 text-success flex-shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
+                            <span><strong>500</strong> documents</span>
+                        </li>
+                        <li class="flex items-start gap-2">
+                            <svg class="h-5 w-5 text-success flex-shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
+                            <span><strong>10</strong> API keys</span>
+                        </li>
+                        <li class="flex items-start gap-2">
+                            <svg class="h-5 w-5 text-success flex-shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
+                            <span><strong>10</strong> sources</span>
+                        </li>
+                        <li class="flex items-start gap-2">
+                            <svg class="h-5 w-5 text-success flex-shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
+                            <span><strong>25</strong> embed domains</span>
+                        </li>
+                        <li class="flex items-start gap-2">
+                            <svg class="h-5 w-5 text-success flex-shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
+                            <span>Priority email support</span>
+                        </li>
+                    </ul>
+                    <div class="card-actions mt-6">
+                        <a href="/auth/register?plan=pro" class="btn btn-primary btn-block">Start Trial</a>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Business -->
+            <div class="card bg-base-100 shadow-sm border border-base-200">
+                <div class="card-body">
+                    <h3 class="text-lg font-bold">Business</h3>
+                    <div class="mt-2">
+                        <span class="text-4xl font-bold">$149</span>
+                        <span class="text-base-content/60">/month</span>
+                    </div>
+                    <p class="text-sm text-base-content/60 mt-2">For companies with serious documentation.</p>
+                    <div class="divider my-4"></div>
+                    <ul class="space-y-3 text-sm">
+                        <li class="flex items-start gap-2">
+                            <svg class="h-5 w-5 text-success flex-shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
+                            <span><strong>Unlimited</strong> searches</span>
+                        </li>
+                        <li class="flex items-start gap-2">
+                            <svg class="h-5 w-5 text-success flex-shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
+                            <span><strong>10,000</strong> AI chats/day</span>
+                        </li>
+                        <li class="flex items-start gap-2">
+                            <svg class="h-5 w-5 text-success flex-shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
+                            <span><strong>2,000</strong> documents</span>
+                        </li>
+                        <li class="flex items-start gap-2">
+                            <svg class="h-5 w-5 text-success flex-shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
+                            <span><strong>25</strong> API keys</span>
+                        </li>
+                        <li class="flex items-start gap-2">
+                            <svg class="h-5 w-5 text-success flex-shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
+                            <span><strong>Unlimited</strong> sources</span>
+                        </li>
+                        <li class="flex items-start gap-2">
+                            <svg class="h-5 w-5 text-success flex-shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
+                            <span><strong>Unlimited</strong> embed domains</span>
+                        </li>
+                        <li class="flex items-start gap-2">
+                            <svg class="h-5 w-5 text-success flex-shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
+                            <span>Dedicated support</span>
+                        </li>
+                    </ul>
+                    <div class="card-actions mt-6">
+                        <a href="/auth/register?plan=business" class="btn btn-outline btn-block">Start Trial</a>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Comparison callout -->
+        <div class="mt-12 space-y-4 max-w-3xl mx-auto">
+            <div class="alert bg-base-100 shadow-sm">
+                <svg class="h-6 w-6 text-info" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                <div>
+                    <div class="font-semibold">Search is nearly free to serve</div>
+                    <div class="text-sm text-base-content/60">
+                        Search uses vector lookups + BM25 index &mdash; zero LLM cost. Chat burns AI tokens.
+                        That's why search limits are generous and chat limits are separate.
+                    </div>
+                </div>
+            </div>
+            <div class="alert bg-base-100 shadow-sm">
+                <svg class="h-6 w-6 text-success" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                <div>
+                    <div class="font-semibold">How we compare</div>
+                    <div class="text-sm text-base-content/60">
+                        Chatbase charges <strong>$39/mo just to remove their badge</strong>.
+                        Kapa.ai starts at ~$99/mo. Inkeep at ~$200/mo. My AskAI at $149/mo for 1K conversations.
+                        We start at <strong>$19/mo with no badge, 200 chats/day, and 100 docs</strong>.
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+
+<!-- API Section -->
+<section id="docs" class="py-20 lg:py-28">
+    <div class="max-w-7xl mx-auto px-4">
+        <div class="text-center mb-16">
+            <h2 class="text-3xl lg:text-4xl font-bold font-brand mb-4">Clean REST API</h2>
+            <p class="text-lg text-base-content/60 max-w-2xl mx-auto">
+                Use the widget or call the API directly. Your choice.
+            </p>
+        </div>
+
+        <div class="grid lg:grid-cols-2 gap-8">
+            <div class="code-block">
+                <div class="flex items-center gap-2 px-4 py-2 border-b border-slate-700">
+                    <span class="text-slate-400 text-xs">Search API</span>
+                </div>
+<pre><code><span class="comment">// POST /api/saas/search</span>
+<span class="tag">curl</span> -X POST https://search.lucidrag.com/api/saas/search \
+  -H <span class="string">"X-Api-Key: lrag_your_key_here"</span> \
+  -H <span class="string">"Content-Type: application/json"</span> \
+  -d <span class="string">'{"query": "how to configure auth"}'</span>
+
+<span class="comment">// Response</span>
+{
+  <span class="attr">"results"</span>: [
+    {
+      <span class="attr">"title"</span>: <span class="string">"Authentication Guide"</span>,
+      <span class="attr">"text"</span>: <span class="string">"Configure OAuth in config.yaml..."</span>,
+      <span class="attr">"score"</span>: <span class="string">0.89</span>,
+      <span class="attr">"pageOrSection"</span>: <span class="string">"Getting Started"</span>
+    }
+  ],
+  <span class="attr">"totalResults"</span>: <span class="string">12</span>,
+  <span class="attr">"responseTimeMs"</span>: <span class="string">45</span>
+}</code></pre>
+            </div>
+
+            <div class="code-block">
+                <div class="flex items-center gap-2 px-4 py-2 border-b border-slate-700">
+                    <span class="text-slate-400 text-xs">Chat API (SSE Streaming)</span>
+                </div>
+<pre><code><span class="comment">// POST /api/saas/chat/stream</span>
+<span class="tag">curl</span> -N -X POST https://search.lucidrag.com/api/saas/chat/stream \
+  -H <span class="string">"X-Api-Key: lrag_your_key_here"</span> \
+  -H <span class="string">"Content-Type: application/json"</span> \
+  -d <span class="string">'{"query": "explain the auth flow"}'</span>
+
+<span class="comment">// Server-Sent Events</span>
+data: {<span class="attr">"type"</span>:<span class="string">"sources"</span>, <span class="attr">"sources"</span>:[...]}
+data: {<span class="attr">"type"</span>:<span class="string">"text"</span>, <span class="attr">"text"</span>:<span class="string">"Based on your docs..."</span>}
+data: {<span class="attr">"type"</span>:<span class="string">"text"</span>, <span class="attr">"text"</span>:<span class="string">" the auth flow uses..."</span>}
+data: [DONE]</code></pre>
+            </div>
+        </div>
+
+        <div class="text-center mt-12">
+            <div class="flex flex-wrap justify-center gap-4 text-sm">
+                <div class="badge badge-lg badge-outline gap-2">
+                    <code class="text-primary font-mono">POST</code> /api/saas/search
+                </div>
+                <div class="badge badge-lg badge-outline gap-2">
+                    <code class="text-primary font-mono">POST</code> /api/saas/chat
+                </div>
+                <div class="badge badge-lg badge-outline gap-2">
+                    <code class="text-primary font-mono">POST</code> /api/saas/chat/stream
+                </div>
+                <div class="badge badge-lg badge-outline gap-2">
+                    <code class="text-primary font-mono">GET</code> /api/saas/autocomplete
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+
+<!-- CTA Section -->
+<section class="hero-gradient text-white py-20">
+    <div class="max-w-4xl mx-auto px-4 text-center">
+        <h2 class="text-3xl lg:text-5xl font-bold font-brand mb-6">Ready to add AI search?</h2>
+        <p class="text-xl text-slate-300 mb-8">
+            Free tier. No credit card. 25 documents. 5 minutes to set up.
+        </p>
+        <div class="flex flex-wrap justify-center gap-4">
+            <a href="/auth/register" class="btn btn-primary btn-lg">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
+                Create Free Account
+            </a>
+            <a href="https://github.com/scottgal/lucidrag" target="_blank" class="btn btn-outline btn-lg text-white border-slate-500 hover:bg-slate-700 hover:border-slate-500">
+                <svg class="h-5 w-5" fill="currentColor" viewBox="0 0 24 24"><path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/></svg>
+                View on GitHub
+            </a>
+        </div>
+    </div>
+</section>
+
+<!-- Footer -->
+<footer class="bg-slate-900 text-slate-400 py-12">
+    <div class="max-w-7xl mx-auto px-4">
+        <div class="grid md:grid-cols-4 gap-8">
+            <div>
+                <div class="text-2xl font-brand mb-4">
+                    <span class="italic text-[#dddddd]">lucid</span><span class="font-bold text-white">RAG</span>
+                </div>
+                <p class="text-sm">AI-powered search and chat for your content. Built with .NET, Qdrant, and ONNX embeddings.</p>
+            </div>
+            <div>
+                <h4 class="text-white font-semibold mb-3">Product</h4>
+                <ul class="space-y-2 text-sm">
+                    <li><a href="#features" class="hover:text-white transition-colors">Features</a></li>
+                    <li><a href="#pricing" class="hover:text-white transition-colors">Pricing</a></li>
+                    <li><a href="#widget" class="hover:text-white transition-colors">Widget</a></li>
+                    <li><a href="#docs" class="hover:text-white transition-colors">API Docs</a></li>
+                </ul>
+            </div>
+            <div>
+                <h4 class="text-white font-semibold mb-3">Resources</h4>
+                <ul class="space-y-2 text-sm">
+                    <li><a href="https://github.com/scottgal/lucidrag" class="hover:text-white transition-colors">GitHub</a></li>
+                    <li><a href="/auth/login" class="hover:text-white transition-colors">Dashboard</a></li>
+                    <li><a href="/scalar/v1" class="hover:text-white transition-colors">API Reference</a></li>
+                </ul>
+            </div>
+            <div>
+                <h4 class="text-white font-semibold mb-3">Legal</h4>
+                <ul class="space-y-2 text-sm">
+                    <li><a href="#" class="hover:text-white transition-colors">Privacy Policy</a></li>
+                    <li><a href="#" class="hover:text-white transition-colors">Terms of Service</a></li>
+                </ul>
+            </div>
+        </div>
+        <div class="border-t border-slate-800 mt-8 pt-8 text-sm text-center">
+            <p>&copy; 2026 lucidRAG. All rights reserved.</p>
+        </div>
+    </div>
+</footer>
+
+<!-- Smooth scroll -->
+<script>
+    document.querySelectorAll('a[href^="#"]').forEach(a => {
+        a.addEventListener('click', e => {
+            e.preventDefault();
+            const target = document.querySelector(a.getAttribute('href'));
+            if (target) target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        });
+    });
+</script>
+
+</body>
+</html>

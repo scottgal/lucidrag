@@ -1,4 +1,5 @@
 using LucidRAG.Services.Sentinel;
+using Mostlylucid.DocSummarizer.Models;
 
 namespace LucidRAG.Services;
 
@@ -62,6 +63,17 @@ public record SearchResult(
     ///     Contains decomposed sub-queries and execution details.
     /// </summary>
     public QueryPlan? QueryPlan { get; init; }
+
+    /// <summary>
+    ///     Raw segments from search (with embeddings) for salient segment caching.
+    ///     Only populated when called from ChatAsync.
+    /// </summary>
+    internal List<Segment>? RawSegments { get; init; }
+
+    /// <summary>
+    ///     Collection routing result (if auto-routing was applied).
+    /// </summary>
+    public CollectionRoutingResult? RoutingResult { get; init; }
 }
 
 public record SearchResultItem(

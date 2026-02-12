@@ -177,9 +177,10 @@ At startup, `CommandBootstrap.CreateAsync` does:
    Best complex exemplar match > 0.50 AND >= 85% of best overall -> flag IsComplex
    (prevents false sentinel escalation on simple queries that share topic space)
 
-8. Composite detection              <- consensus of top 2 composite matches
-   Both above 0.82 threshold -> flag IsComposite
-   Feature-based conjunction ("and also", "and compare", etc.) -> relax by 15%
+8. Composite detection              <- consensus + multi-topic heuristic
+   Both top-2 composite matches above 0.82 -> flag IsComposite
+   Feature-based conjunction ("and also", "and compare", ";", "/", "+") -> relax by 15%
+   Multi-topic fallback: 2+ strong topics (>0.70) + punctuation separator -> composite
 
 9. Short-query confidence scaling   <- type confidence * 0.85 for short queries
 
@@ -394,19 +395,66 @@ classifier:
   short_query_confidence_scale: 0.85   # Scale confidence for short queries
 ```
 
-### Tuning Guidelines
+### Tuning Checklist
 
-**More aggressive sentinel skipping** (trust embedding more):
-- Lower `min_candidate_threshold` to 0.30
-- Lower `vibe_threshold` to 0.55
+When something goes wrong, start here:
 
-**More sentinel usage** (better decomposition, higher latency):
-- Raise `composite_raw_threshold` to 0.85 (fewer composite detections)
-- Set `short_query_confidence_scale` to 0.70 (more uncertainty on short queries)
+| Symptom | Knob | Direction |
+|---------|------|-----------|
+| Neutral queries get a vibe (e.g. "tech news" → snarky) | `vibe_min_ratio` | Raise toward 0.90 |
+| Intentional vibes not detected ("doom-scroll the worst news" → null) | `vibe_threshold` | Lower toward 0.55 |
+| Simple queries trigger sentinel via complex flag | `complex_min_ratio` | Raise toward 0.90 |
+| Too many queries skip sentinel (poor decomposition) | `StrongMatchThreshold` in PromptInterpreter | Raise toward 0.65 |
+| Too few queries skip sentinel (unnecessary latency) | `StrongMatchThreshold` | Lower toward 0.45 |
+| Non-composite queries flagged composite | `composite_raw_threshold` | Raise toward 0.85 |
+| Composite queries missed | Add composite exemplars or punctuation patterns to `CompositeConjunctionPattern` |
+| Wrong topic on short queries (2-3 words) | Add more exemplars for that topic (need 5+ per topic for voting to work) |
+| Type detection returns "roundup" for everything | `default_roundup_boost` | Lower to 0.04 |
+| Short queries over-confident | `short_query_confidence_scale` | Lower to 0.70 |
+
+**Model calibration warning:** All thresholds are calibrated for `all-MiniLM-L6-v2` (384-dim).
+Cosine similarity distributions vary between embedding models and quantization settings.
+If you swap the ONNX model, run `exemplars --test` and `exemplars --benchmark` to recalibrate.
+A quick sanity check: run `exemplars --rebuild` and verify that sample queries get reasonable scores.
+The strong-match threshold (0.55) should sit around P90-P95 of non-self exemplar-to-exemplar similarities.
 
 **Device profiles:**
 - Desktop with GPU: defaults are fine
 - Raspberry Pi: consider raising `min_candidate_threshold` to 0.40 (fewer candidates to vote on)
+
+### Exemplar Design Rules
+
+- **Minimum coverage:** Don't add a topic unless you can supply at least 5 exemplars across 2+ types.
+  Thin topics with 1-2 exemplars win IDF lottery (rare = high weight) and can beat broader topics unexpectedly.
+- **Pattern over entity:** "Latest news from [region]" not "What happened to Boris Johnson?"
+  NER handles entities; exemplars capture query *structure*.
+- **Tag vibes on vibe-adjacent exemplars.** If an exemplar's question clearly carries a tone
+  ("Funniest news stories"), tag it with `vibe: funny`. Untagged exemplars in the same semantic
+  space will block vibe detection via the ratio guard.
+
+### Score Naming
+
+Two different score types appear in output — don't confuse them:
+
+- **BestMatchScore** (0.0–1.0): Raw cosine similarity to the single closest exemplar. This is what the strong-match gate (0.55) checks.
+- **Category/Type scores** (can exceed 1.0): IDF-weighted voted scores: `max_sim + CountBoost * log2(count) * idf`. Multiple matching exemplars boost the score above the raw cosine sim.
+
+Example: `ai=1.51` means the best AI exemplar scored 0.75 cosine sim, but 30+ AI exemplars voted with IDF weight, pushing the aggregate above 1.0.
+
+### Example: Misclassification and Fix
+
+**Before ratio guard** — "What's the latest tech news?" returned `vibe=snarky (0.71)`:
+
+```
+Best overall: "What's the latest tech news?" at 1.00 (technology/roundup, NO vibe)
+Best vibe:    "Roast the latest tech announcements" at 0.71 (technology/roundup, vibe=snarky)
+
+Old check: 0.71 > vibe_threshold(0.60) → vibe=snarky  ← WRONG
+Ratio:     0.71 / 1.00 = 0.71 < vibe_min_ratio(0.85) → vibe=null  ← FIXED
+```
+
+The snarky exemplar shares the tech-news semantic neighborhood but isn't actually
+closer to the query than the neutral exemplar. The ratio guard catches this.
 
 ## CLI Commands
 
@@ -435,7 +483,7 @@ doomsummarizer exemplars --rebuild --gpu 1
 
 ### Diagnostic Test
 
-Run the full 82-query test matrix to verify classification accuracy across all dimensions:
+Run the full 88-query test matrix to verify classification accuracy across all dimensions:
 
 ```bash
 # Compact mode: shows only failures
@@ -448,7 +496,7 @@ doomsummarizer exemplars --test -v
 The test matrix covers:
 - **33 topic detection** tests (all major + niche topics)
 - **27 type detection** tests (roundup, howto, comparison, deep_dive, search_only, qa, news)
-- **13 vibe detection** tests (doom, snarky, hopeful, funny)
+- **17 vibe detection** tests (doom, snarky, hopeful, funny + 4 negative "should be neutral" assertions)
 - **8 composite detection** tests (4 positive, 3 negative)
 - **5 complex detection** tests (2 positive, 2 negative)
 

@@ -116,9 +116,9 @@ internal static partial class QueryFeatures
         RegexOptions.IgnoreCase)]
     private static partial Regex QaPattern();
 
-    /// <summary>Detects composite query conjunctions (multi-part queries).</summary>
+    /// <summary>Detects composite query conjunctions and list-like patterns (multi-part queries).</summary>
     [GeneratedRegex(
-        @"\b(and\s+also|and\s+(compare|summarize|check|find|show|tell)|also\s+(check|show|get|find|look)|plus\s+\w+|as\s+well\s+as|in\s+addition\s+to|along\s+with)\b",
+        @"\b(and\s+also|and\s+(compare|summarize|check|find|show|tell)|also\s+(check|show|get|find|look)|plus\s+\w+|as\s+well\s+as|in\s+addition\s+to|along\s+with)\b|;\s*\w|(?<=\w)\s*[/+]\s*(?=\w{3,})",
         RegexOptions.IgnoreCase)]
     private static partial Regex CompositeConjunctionPattern();
 

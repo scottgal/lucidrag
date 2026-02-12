@@ -31,7 +31,7 @@ public class LuceneBm25SearchService : IBm25SearchService
         IEnumerable<Guid>? documentIds = null,
         CancellationToken ct = default)
     {
-        if (string.IsNullOrWhiteSpace(query))
+        if (string.IsNullOrWhiteSpace(query) || topK <= 0)
             return [];
 
         var stopwatch = Stopwatch.StartNew();
@@ -56,10 +56,17 @@ public class LuceneBm25SearchService : IBm25SearchService
             var ids = idScores.Select(x => x.id).ToList();
 
             // Fetch full artifacts from database
-            var artifacts = await _db.EvidenceArtifacts
-                .Where(ea => ids.Contains(ea.Id))
-                .AsNoTracking()
-                .ToListAsync(ct);
+            var query2 = _db.EvidenceArtifacts
+                .Where(ea => ids.Contains(ea.Id));
+
+            // Apply document ID filter (same semantics as PostgreSQL service)
+            if (documentIds != null)
+            {
+                var docIdList = documentIds.ToList();
+                query2 = query2.Where(ea => docIdList.Contains(ea.EntityId));
+            }
+
+            var artifacts = await query2.AsNoTracking().ToListAsync(ct);
 
             // Pair artifacts with scores, preserving Lucene ranking order
             var artifactLookup = artifacts.ToDictionary(a => a.Id);

@@ -45,6 +45,23 @@ public class RagDocumentsDbContext(DbContextOptions<RagDocumentsDbContext> optio
     // Intra-document segment graphs
     public DbSet<SegmentLink> SegmentLinks => Set<SegmentLink>();
 
+    // SaaS API keys
+    public DbSet<ApiKeyEntity> ApiKeys => Set<ApiKeyEntity>();
+    public DbSet<ApiKeyIndexingSource> ApiKeyIndexingSources => Set<ApiKeyIndexingSource>();
+    public DbSet<ApiKeyReadDomain> ApiKeyReadDomains => Set<ApiKeyReadDomain>();
+    public DbSet<ApiKeyCollectionLink> ApiKeyCollectionLinks => Set<ApiKeyCollectionLink>();
+
+    // SaaS analytics
+    public DbSet<SaasQueryLogEntity> SaasQueryLogs => Set<SaasQueryLogEntity>();
+    public DbSet<SaasUsageRollupEntity> SaasUsageRollups => Set<SaasUsageRollupEntity>();
+
+    // Processing signals (lifecycle event log)
+    public DbSet<ProcessingSignalEntity> ProcessingSignals => Set<ProcessingSignalEntity>();
+
+    // Widget config & custom domains
+    public DbSet<WidgetConfigEntity> WidgetConfigs => Set<WidgetConfigEntity>();
+    public DbSet<CustomDomainEntity> CustomDomains => Set<CustomDomainEntity>();
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);
@@ -114,6 +131,14 @@ public class RagDocumentsDbContext(DbContextOptions<RagDocumentsDbContext> optio
             entity.HasIndex(e => e.Status);
             entity.HasIndex(e => e.ContentHash);
             entity.HasIndex(e => e.SourceUrl);
+
+            // Unique constraint on (SourcePath, CollectionId) — prevents duplicate imports
+            entity.HasIndex(e => new { e.SourcePath, e.CollectionId })
+                .IsUnique()
+                .HasFilter("source_path IS NOT NULL")
+                .HasDatabaseName("ix_documents_source_path_collection");
+
+            entity.Property(e => e.StagingPath).HasMaxLength(1000);
 
             entity.HasOne(e => e.Collection)
                 .WithMany(c => c.Documents)
@@ -516,6 +541,184 @@ public class RagDocumentsDbContext(DbContextOptions<RagDocumentsDbContext> optio
                 .WithMany()
                 .HasForeignKey(e => e.DocumentId)
                 .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        // ApiKeyEntity - SaaS API keys
+        modelBuilder.Entity<ApiKeyEntity>(entity =>
+        {
+            entity.ToTable("api_keys");
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.KeyPrefix).HasMaxLength(16).IsRequired();
+            entity.Property(e => e.KeyHash).HasMaxLength(64).IsRequired();
+            entity.Property(e => e.Description).HasMaxLength(500);
+            entity.Property(e => e.UserId).HasMaxLength(450);
+            entity.Property(e => e.NormalizedOwnerEmail).HasMaxLength(320);
+            entity.Property(e => e.Plan).HasMaxLength(20).IsRequired();
+
+            entity.Property(e => e.Slug).HasMaxLength(20);
+
+            entity.HasIndex(e => e.KeyHash).IsUnique();
+            entity.HasIndex(e => e.KeyPrefix).IsUnique();
+            entity.HasIndex(e => e.Slug).IsUnique().HasFilter("\"Slug\" IS NOT NULL");
+            entity.HasIndex(e => e.UserId);
+            entity.HasIndex(e => e.NormalizedOwnerEmail);
+
+            entity.HasOne(e => e.Collection)
+                .WithMany()
+                .HasForeignKey(e => e.CollectionId)
+                .OnDelete(DeleteBehavior.SetNull);
+        });
+
+        // ApiKeyIndexingSource - 1 per key
+        modelBuilder.Entity<ApiKeyIndexingSource>(entity =>
+        {
+            entity.ToTable("api_key_indexing_sources");
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.SourceType).HasConversion<string>().HasMaxLength(20).IsRequired();
+            entity.Property(e => e.SourceValue).HasMaxLength(500).IsRequired();
+            entity.Property(e => e.CrawlStatus).HasMaxLength(20);
+
+            entity.HasIndex(e => e.ApiKeyId).IsUnique();
+
+            entity.HasOne(e => e.ApiKey)
+                .WithOne(k => k.IndexingSource)
+                .HasForeignKey<ApiKeyIndexingSource>(e => e.ApiKeyId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        // ApiKeyCollectionLink - many-to-many between keys and collections
+        modelBuilder.Entity<ApiKeyCollectionLink>(entity =>
+        {
+            entity.ToTable("api_key_collection_links");
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.Label).HasMaxLength(100);
+
+            entity.HasIndex(e => new { e.ApiKeyId, e.CollectionId }).IsUnique();
+
+            entity.HasOne(e => e.ApiKey)
+                .WithMany(k => k.CollectionLinks)
+                .HasForeignKey(e => e.ApiKeyId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne(e => e.Collection)
+                .WithMany()
+                .HasForeignKey(e => e.CollectionId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        // ApiKeyReadDomain - up to 5 per key
+        modelBuilder.Entity<ApiKeyReadDomain>(entity =>
+        {
+            entity.ToTable("api_key_read_domains");
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.Domain).HasMaxLength(253).IsRequired();
+
+            entity.HasIndex(e => new { e.ApiKeyId, e.Domain }).IsUnique();
+
+            entity.HasOne(e => e.ApiKey)
+                .WithMany(k => k.ReadDomains)
+                .HasForeignKey(e => e.ApiKeyId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        // WidgetConfigEntity - 1:1 per API key
+        modelBuilder.Entity<WidgetConfigEntity>(entity =>
+        {
+            entity.ToTable("widget_configs");
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.Theme).HasMaxLength(10);
+            entity.Property(e => e.AccentColor).HasMaxLength(20);
+            entity.Property(e => e.FontFamily).HasMaxLength(200);
+            entity.Property(e => e.CustomCss).HasMaxLength(10000);
+            entity.Property(e => e.LogoUrl).HasMaxLength(500);
+            entity.Property(e => e.Position).HasMaxLength(10).IsRequired();
+            entity.Property(e => e.Mode).HasMaxLength(10).IsRequired();
+            entity.Property(e => e.Placeholder).HasMaxLength(200);
+            entity.Property(e => e.CorpusStyle).HasMaxLength(10).IsRequired();
+            entity.Property(e => e.PageTitle).HasMaxLength(200);
+            entity.Property(e => e.PageDescription).HasMaxLength(500);
+            entity.Property(e => e.FaviconUrl).HasMaxLength(500);
+            entity.Property(e => e.WelcomeMessage).HasMaxLength(1000);
+
+            entity.HasIndex(e => e.ApiKeyId).IsUnique();
+
+            entity.HasOne(e => e.ApiKey)
+                .WithOne(k => k.WidgetConfig)
+                .HasForeignKey<WidgetConfigEntity>(e => e.ApiKeyId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        // CustomDomainEntity - custom domain mapping per API key
+        modelBuilder.Entity<CustomDomainEntity>(entity =>
+        {
+            entity.ToTable("custom_domains");
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.Domain).HasMaxLength(253).IsRequired();
+            entity.Property(e => e.VerificationToken).HasMaxLength(64);
+
+            entity.HasIndex(e => e.Domain).IsUnique();
+            entity.HasIndex(e => e.ApiKeyId).IsUnique();
+
+            entity.HasOne(e => e.ApiKey)
+                .WithOne(k => k.CustomDomain)
+                .HasForeignKey<CustomDomainEntity>(e => e.ApiKeyId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        // SaasQueryLogEntity - per-query audit log
+        modelBuilder.Entity<SaasQueryLogEntity>(entity =>
+        {
+            entity.ToTable("saas_query_logs");
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.QueryText).HasMaxLength(2000).IsRequired();
+            entity.Property(e => e.QueryType).HasMaxLength(20).IsRequired();
+            entity.Property(e => e.SearchMode).HasMaxLength(20);
+            entity.Property(e => e.ErrorCode).HasMaxLength(100);
+            entity.Property(e => e.RequestDomain).HasMaxLength(253);
+            entity.Property(e => e.CountryCode).HasMaxLength(2);
+            entity.Property(e => e.UserAgent).HasMaxLength(500);
+
+            entity.HasIndex(e => new { e.ApiKeyId, e.CreatedAt });
+            entity.HasIndex(e => new { e.ApiKeyId, e.Success, e.CreatedAt });
+            entity.HasIndex(e => e.CreatedAt);
+            entity.HasIndex(e => e.CountryCode);
+            entity.HasIndex(e => e.QueryType);
+
+            entity.HasOne(e => e.ApiKey)
+                .WithMany()
+                .HasForeignKey(e => e.ApiKeyId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        // SaasUsageRollupEntity - pre-aggregated daily stats
+        modelBuilder.Entity<SaasUsageRollupEntity>(entity =>
+        {
+            entity.ToTable("saas_usage_rollups");
+            entity.HasKey(e => e.Id);
+
+            entity.HasIndex(e => new { e.ApiKeyId, e.Date }).IsUnique();
+
+            entity.HasOne(e => e.ApiKey)
+                .WithMany()
+                .HasForeignKey(e => e.ApiKeyId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        // ProcessingSignalEntity - processing lifecycle signals
+        modelBuilder.Entity<ProcessingSignalEntity>(entity =>
+        {
+            entity.ToTable("processing_signals");
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.SignalType).HasMaxLength(50).IsRequired();
+            entity.Property(e => e.Message).HasMaxLength(2000);
+            if (!isSqlite) entity.Property(e => e.Metadata).HasColumnType("jsonb");
+            entity.Property(e => e.StagingPath).HasMaxLength(1000);
+
+            entity.HasIndex(e => new { e.DocumentId, e.CreatedAt });
+            entity.HasIndex(e => new { e.SignalType, e.CreatedAt });
+            entity.HasIndex(e => e.CorrelationId);
+            entity.HasIndex(e => e.CollectionId);
+            entity.HasIndex(e => e.CreatedAt);
         });
     }
 

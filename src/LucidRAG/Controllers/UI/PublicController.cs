@@ -12,17 +12,12 @@ namespace LucidRAG.Controllers.UI;
 public class PublicController : Controller
 {
     /// <summary>
-    ///     Public chat home page.
+    ///     Public chat/search page.
     /// </summary>
-    [HttpGet("/")]
     [HttpGet("/public")]
+    [HttpGet("/search")]
     public IActionResult Index()
     {
-        // If user is authenticated with admin role, redirect to admin dashboard
-        if (User.Identity?.IsAuthenticated == true &&
-            (User.IsInRole(Roles.SystemAdmin) || User.IsInRole(Roles.TenantAdmin) || User.IsInRole(Roles.User)))
-            return Redirect("/admin");
-
         return View();
     }
 

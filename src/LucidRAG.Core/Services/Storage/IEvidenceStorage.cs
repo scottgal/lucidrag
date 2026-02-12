@@ -57,6 +57,11 @@ public interface IEvidenceStorage
         CancellationToken ct = default);
 
     /// <summary>
+    ///     List objects under a prefix (for cleanup enumeration).
+    /// </summary>
+    IAsyncEnumerable<EvidenceStorageInfo> ListAsync(string prefix, CancellationToken ct = default);
+
+    /// <summary>
     ///     Generate a public/presigned URL for direct download.
     ///     May return null if not supported by the provider.
     /// </summary>
@@ -72,6 +77,7 @@ public interface IEvidenceStorage
 ///     Information about stored evidence.
 /// </summary>
 public record EvidenceStorageInfo(
+    string Path,
     long SizeBytes,
     string? ContentHash,
     DateTimeOffset LastModified,

@@ -6,6 +6,8 @@ namespace LucidRAG.Services.Background;
 
 public class DocumentProcessingQueue
 {
+    public const int QueueCapacity = 500;
+
     // Max age for progress channels before cleanup (handles abandoned channels)
     private static readonly TimeSpan ProgressChannelMaxAge = TimeSpan.FromHours(1);
 
@@ -14,9 +16,9 @@ public class DocumentProcessingQueue
     // Track progress channels with creation time for cleanup
     private readonly ConcurrentDictionary<Guid, ProgressChannelEntry> _progressChannels = new();
 
-    // Bounded queue to prevent unbounded memory growth - max 100 documents waiting
+    // Bounded queue to prevent unbounded memory growth
     private readonly Channel<DocumentProcessingJob> _queue = Channel.CreateBounded<DocumentProcessingJob>(
-        new BoundedChannelOptions(100)
+        new BoundedChannelOptions(QueueCapacity)
         {
             FullMode = BoundedChannelFullMode.Wait, // Block when full
             SingleReader = true, // Only one processor reads

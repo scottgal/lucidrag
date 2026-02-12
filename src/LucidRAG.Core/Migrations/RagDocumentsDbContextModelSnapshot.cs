@@ -22,6 +22,175 @@ namespace LucidRAG.Migrations
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
 
+            modelBuilder.Entity("LucidRAG.Entities.ApiKeyEntity", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<bool>("AllowChat")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("AllowSearch")
+                        .HasColumnType("boolean");
+
+                    b.Property<Guid?>("CollectionId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Description")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<DateTimeOffset?>("ExpiresAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("KeyHash")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("KeyPrefix")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<DateTimeOffset?>("LastUsedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("NormalizedOwnerEmail")
+                        .HasMaxLength(320)
+                        .HasColumnType("character varying(320)");
+
+                    b.Property<string>("Plan")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<int>("RateLimitPerDay")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("RateLimitPerMinute")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTimeOffset?>("RevokedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<long>("TotalRequests")
+                        .HasColumnType("bigint");
+
+                    b.Property<string>("UserId")
+                        .HasMaxLength(450)
+                        .HasColumnType("character varying(450)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CollectionId");
+
+                    b.HasIndex("KeyHash")
+                        .IsUnique();
+
+                    b.HasIndex("KeyPrefix")
+                        .IsUnique();
+
+                    b.HasIndex("NormalizedOwnerEmail");
+
+                    b.HasIndex("UserId");
+
+                    b.ToTable("api_keys", (string)null);
+                });
+
+            modelBuilder.Entity("LucidRAG.Entities.ApiKeyIndexingSource", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("ApiKeyId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("ConsecutiveFailures")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("CrawlStatus")
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("DocumentCount")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("ETag")
+                        .HasColumnType("text");
+
+                    b.Property<DateTimeOffset?>("LastCrawledAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("LastError")
+                        .HasColumnType("text");
+
+                    b.Property<string>("LastModifiedHeader")
+                        .HasColumnType("text");
+
+                    b.Property<int>("MaxDocuments")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTimeOffset?>("NextScheduledAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("SourceType")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<string>("SourceValue")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<bool>("TriggerCrawlNow")
+                        .HasColumnType("boolean");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ApiKeyId")
+                        .IsUnique();
+
+                    b.ToTable("api_key_indexing_sources", (string)null);
+                });
+
+            modelBuilder.Entity("LucidRAG.Entities.ApiKeyReadDomain", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("ApiKeyId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Domain")
+                        .IsRequired()
+                        .HasMaxLength(253)
+                        .HasColumnType("character varying(253)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ApiKeyId", "Domain")
+                        .IsUnique();
+
+                    b.ToTable("api_key_read_domains", (string)null);
+                });
+
             modelBuilder.Entity("LucidRAG.Entities.CollectionEntity", b =>
                 {
                     b.Property<Guid>("Id")
@@ -1110,6 +1279,38 @@ namespace LucidRAG.Migrations
                     b.ToTable("AspNetUserTokens", (string)null);
                 });
 
+            modelBuilder.Entity("LucidRAG.Entities.ApiKeyEntity", b =>
+                {
+                    b.HasOne("LucidRAG.Entities.CollectionEntity", "Collection")
+                        .WithMany()
+                        .HasForeignKey("CollectionId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.Navigation("Collection");
+                });
+
+            modelBuilder.Entity("LucidRAG.Entities.ApiKeyIndexingSource", b =>
+                {
+                    b.HasOne("LucidRAG.Entities.ApiKeyEntity", "ApiKey")
+                        .WithOne("IndexingSource")
+                        .HasForeignKey("LucidRAG.Entities.ApiKeyIndexingSource", "ApiKeyId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("ApiKey");
+                });
+
+            modelBuilder.Entity("LucidRAG.Entities.ApiKeyReadDomain", b =>
+                {
+                    b.HasOne("LucidRAG.Entities.ApiKeyEntity", "ApiKey")
+                        .WithMany("ReadDomains")
+                        .HasForeignKey("ApiKeyId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("ApiKey");
+                });
+
             modelBuilder.Entity("LucidRAG.Entities.CollectionSalientTerm", b =>
                 {
                     b.HasOne("LucidRAG.Entities.CollectionEntity", "Collection")
@@ -1383,6 +1584,13 @@ namespace LucidRAG.Migrations
                         .HasForeignKey("UserId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
+                });
+
+            modelBuilder.Entity("LucidRAG.Entities.ApiKeyEntity", b =>
+                {
+                    b.Navigation("IndexingSource");
+
+                    b.Navigation("ReadDomains");
                 });
 
             modelBuilder.Entity("LucidRAG.Entities.CollectionEntity", b =>

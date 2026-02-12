@@ -1,3 +1,4 @@
+using System.Runtime.CompilerServices;
 using System.Security.Cryptography;
 using Microsoft.Extensions.Options;
 
@@ -121,10 +122,36 @@ public class FilesystemEvidenceStorage : IEvidenceStorage
         }
 
         return new EvidenceStorageInfo(
+            path,
             fileInfo.Length,
             hash,
             new DateTimeOffset(fileInfo.LastWriteTimeUtc, TimeSpan.Zero),
             null);
+    }
+
+    public async IAsyncEnumerable<EvidenceStorageInfo> ListAsync(
+        string prefix,
+        [EnumeratorCancellation] CancellationToken ct = default)
+    {
+        var fullPath = GetFullPath(prefix);
+        if (!Directory.Exists(fullPath))
+            yield break;
+
+        foreach (var file in Directory.EnumerateFiles(fullPath, "*", SearchOption.AllDirectories))
+        {
+            ct.ThrowIfCancellationRequested();
+            var fileInfo = new FileInfo(file);
+            var relativePath = Path.GetRelativePath(_basePath, file).Replace('\\', '/');
+
+            yield return new EvidenceStorageInfo(
+                relativePath,
+                fileInfo.Length,
+                null,
+                new DateTimeOffset(fileInfo.LastWriteTimeUtc, TimeSpan.Zero),
+                null);
+        }
+
+        await Task.CompletedTask; // Satisfy async requirement
     }
 
     public Uri? GetPublicUri(string path, TimeSpan? expiry = null)
