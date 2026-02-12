@@ -55,6 +55,9 @@ public class RagDocumentsDbContext(DbContextOptions<RagDocumentsDbContext> optio
     public DbSet<SaasQueryLogEntity> SaasQueryLogs => Set<SaasQueryLogEntity>();
     public DbSet<SaasUsageRollupEntity> SaasUsageRollups => Set<SaasUsageRollupEntity>();
 
+    // Processing signals (lifecycle event log)
+    public DbSet<ProcessingSignalEntity> ProcessingSignals => Set<ProcessingSignalEntity>();
+
     // Widget config & custom domains
     public DbSet<WidgetConfigEntity> WidgetConfigs => Set<WidgetConfigEntity>();
     public DbSet<CustomDomainEntity> CustomDomains => Set<CustomDomainEntity>();
@@ -128,6 +131,14 @@ public class RagDocumentsDbContext(DbContextOptions<RagDocumentsDbContext> optio
             entity.HasIndex(e => e.Status);
             entity.HasIndex(e => e.ContentHash);
             entity.HasIndex(e => e.SourceUrl);
+
+            // Unique constraint on (SourcePath, CollectionId) — prevents duplicate imports
+            entity.HasIndex(e => new { e.SourcePath, e.CollectionId })
+                .IsUnique()
+                .HasFilter("source_path IS NOT NULL")
+                .HasDatabaseName("ix_documents_source_path_collection");
+
+            entity.Property(e => e.StagingPath).HasMaxLength(1000);
 
             entity.HasOne(e => e.Collection)
                 .WithMany(c => c.Documents)
@@ -691,6 +702,23 @@ public class RagDocumentsDbContext(DbContextOptions<RagDocumentsDbContext> optio
                 .WithMany()
                 .HasForeignKey(e => e.ApiKeyId)
                 .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        // ProcessingSignalEntity - processing lifecycle signals
+        modelBuilder.Entity<ProcessingSignalEntity>(entity =>
+        {
+            entity.ToTable("processing_signals");
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.SignalType).HasMaxLength(50).IsRequired();
+            entity.Property(e => e.Message).HasMaxLength(2000);
+            if (!isSqlite) entity.Property(e => e.Metadata).HasColumnType("jsonb");
+            entity.Property(e => e.StagingPath).HasMaxLength(1000);
+
+            entity.HasIndex(e => new { e.DocumentId, e.CreatedAt });
+            entity.HasIndex(e => new { e.SignalType, e.CreatedAt });
+            entity.HasIndex(e => e.CorrelationId);
+            entity.HasIndex(e => e.CollectionId);
+            entity.HasIndex(e => e.CreatedAt);
         });
     }
 
