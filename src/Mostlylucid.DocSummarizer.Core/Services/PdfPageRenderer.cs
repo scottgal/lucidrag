@@ -1,6 +1,7 @@
 using Microsoft.Extensions.Logging;
 using PDFtoImage;
 using SkiaSharp;
+using System.Runtime.Versioning;
 
 namespace Mostlylucid.DocSummarizer.Core.Services;
 
@@ -30,11 +31,23 @@ public class PdfPageRenderer
     /// </summary>
     public int MaxDimension { get; set; } = 4096;
 
+    [SupportedOSPlatformGuard("windows")]
+    [SupportedOSPlatformGuard("linux")]
+    [SupportedOSPlatformGuard("macos")]
+    [SupportedOSPlatformGuard("android31.0")]
+    [SupportedOSPlatformGuard("ios13.6")]
+    [SupportedOSPlatformGuard("maccatalyst13.5")]
+    private static bool IsRenderingSupported =>
+        OperatingSystem.IsWindows() || OperatingSystem.IsLinux() || OperatingSystem.IsMacOS() ||
+        OperatingSystem.IsAndroidVersionAtLeast(31) || OperatingSystem.IsIOSVersionAtLeast(13, 6) ||
+        OperatingSystem.IsMacCatalystVersionAtLeast(13, 5);
+
     /// <summary>
     ///     Get the number of pages in a PDF document.
     /// </summary>
     public int GetPageCount(string pdfPath)
     {
+        if (!IsRenderingSupported) throw new PlatformNotSupportedException("PDF rendering is not supported on this platform.");
         using var stream = File.OpenRead(pdfPath);
         return Conversion.GetPageCount(stream);
     }
@@ -53,6 +66,7 @@ public class PdfPageRenderer
         int? dpi = null,
         CancellationToken ct = default)
     {
+        if (!IsRenderingSupported) throw new PlatformNotSupportedException("PDF rendering is not supported on this platform.");
         var effectiveDpi = dpi ?? DefaultDpi;
         var baseName = Path.GetFileNameWithoutExtension(pdfPath);
         var outputPath = Path.Combine(_outputDirectory, $"{baseName}_page_{pageIndex + 1}.png");
@@ -62,6 +76,7 @@ public class PdfPageRenderer
 
         await Task.Run(() =>
         {
+            if (!IsRenderingSupported) throw new PlatformNotSupportedException("PDF rendering is not supported on this platform.");
             using var inputStream = File.OpenRead(pdfPath);
             var options = new RenderOptions(effectiveDpi);
             // Use Index for page parameter (PDFtoImage 5.x API)

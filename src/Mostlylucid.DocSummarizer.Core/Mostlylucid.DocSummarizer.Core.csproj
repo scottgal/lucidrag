@@ -101,8 +101,7 @@
         <PackageReference Include="Polly.Core" Version="8.6.6" />
 
         <!-- OpenTelemetry for observability -->
-        <PackageReference Include="OpenTelemetry.Api" Version="1.15.1" />
-        <PackageReference Include="System.Diagnostics.DiagnosticSource" Version="10.0.5" />
+        <PackageReference Include="OpenTelemetry.Api" Version="1.18.0" />
 
         <!-- ML/Embeddings -->
         <!-- ONNX Runtime: DirectML on Windows (GPU auto-detect), base CPU on other platforms or when GPU excluded -->
@@ -114,7 +113,7 @@
 
         <!-- Document Processing (lightweight: PDF text + HTML) -->
         <PackageReference Include="PdfPig" Version="0.1.14" />
-        <PackageReference Include="AngleSharp" Version="1.4.1-beta.506"/>
+        <PackageReference Include="AngleSharp" Version="1.8.1"/>
 
         <!-- Web Fetching (for URL processing with JS-rendered pages) -->
         <PackageReference Include="Microsoft.Playwright" Version="1.58.0"/>
@@ -130,7 +129,7 @@
         <PackageReference Include="YamlDotNet" Version="16.3.0"/>
 
         <!-- Override vulnerable transitive dependency from Qdrant.Client -->
-        <PackageReference Include="Newtonsoft.Json" Version="13.0.5-beta1"/>
+        <PackageReference Include="Newtonsoft.Json" Version="13.0.4"/>
     </ItemGroup>
 
     <!-- DOCX support: included in ALL builds (small dependency, high value) -->
