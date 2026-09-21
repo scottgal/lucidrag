@@ -88,7 +88,7 @@
         <PackageReference Include="Microsoft.ML.Tokenizers" Version="2.0.0"/>
 
         <!-- HTML parsing -->
-        <PackageReference Include="AngleSharp" Version="1.4.1-beta.506"/>
+        <PackageReference Include="AngleSharp" Version="1.8.1"/>
 
         <!-- Markdown generation -->
         <PackageReference Include="Markdig" Version="1.1.2" />
