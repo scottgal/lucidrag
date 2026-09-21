@@ -1,7 +1,7 @@
 {
   "devDependencies": {
-    "@playwright/test": "^1.57.0",
-    "@types/node": "^25.0.9",
+    "@playwright/test": "^1.63.0",
+    "@types/node": "^26.6.1",
     "cross-env": "^10.1.0",
     "puppeteer": "^25.11.0"
   },
