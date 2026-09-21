@@ -93,33 +93,40 @@ fi
 # TEST 4: Profile MoMA Artworks
 # ============================================================================
 test_header "TEST 4: Profile MoMA Artworks"
-OUTPUT=$(dotnet run -- -f "sampledata/MoMA+Art+Collection/Artworks.csv" --no-llm 2>&1 | cat -v)
-
-if echo "$OUTPUT" | grep -q "rows"; then
-    pass "MoMA Artworks profiled"
+if [ -f "sampledata/MoMA+Art+Collection/Artworks.csv" ]; then
+    OUTPUT=$(dotnet run -- -f "sampledata/MoMA+Art+Collection/Artworks.csv" --no-llm 2>&1 | cat -v)
+    if echo "$OUTPUT" | grep -q "rows"; then
+        pass "MoMA Artworks profiled"
+    else
+        fail "MoMA Artworks profiling failed"
+    fi
 else
-    fail "MoMA Artworks profiling failed"
+    info "Skipping optional MoMA dataset (not present)"
 fi
 
 # ============================================================================
 # TEST 5: Profile Wine Reviews (130k rows)
 # ============================================================================
 test_header "TEST 5: Profile Wine Reviews (130k rows)"
-START_TIME=$(date +%s)
-OUTPUT=$(dotnet run -- -f "sampledata/winemag-data-130k-v2.csv/winemag-data-130k-v2.csv" --no-llm 2>&1 | cat -v)
-END_TIME=$(date +%s)
-ELAPSED=$((END_TIME - START_TIME))
+if [ -f "sampledata/winemag-data-130k-v2.csv/winemag-data-130k-v2.csv" ]; then
+    START_TIME=$(date +%s)
+    OUTPUT=$(dotnet run -- -f "sampledata/winemag-data-130k-v2.csv/winemag-data-130k-v2.csv" --no-llm 2>&1 | cat -v)
+    END_TIME=$(date +%s)
+    ELAPSED=$((END_TIME - START_TIME))
 
-if echo "$OUTPUT" | grep -q "rows"; then
-    pass "Wine reviews profiled in ${ELAPSED}s"
-else
-    fail "Wine reviews profiling failed"
-fi
+    if echo "$OUTPUT" | grep -q "rows"; then
+        pass "Wine reviews profiled in ${ELAPSED}s"
+    else
+        fail "Wine reviews profiling failed"
+    fi
 
-if [ "$ELAPSED" -lt 60 ]; then
-    pass "Performance acceptable (<60s for 130k rows)"
+    if [ "$ELAPSED" -lt 60 ]; then
+        pass "Performance acceptable (<60s for 130k rows)"
+    else
+        fail "Performance too slow (>${ELAPSED}s)"
+    fi
 else
-    fail "Performance too slow (>${ELAPSED}s)"
+    info "Skipping optional wine dataset (not present)"
 fi
 
 # ============================================================================

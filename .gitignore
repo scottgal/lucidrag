@@ -329,3 +329,4 @@ test-publish/
 /blob-report/
 /playwright/.cache/
 /playwright/.auth/
+.DS_Store

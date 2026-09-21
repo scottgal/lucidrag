@@ -138,47 +138,61 @@ else
 # TEST 4: Profile MoMA Artworks (larger dataset)
 # ============================================================================
 Write-Test "TEST 4: Profile MoMA Artworks"
-$output = dotnet run -- -f "sampledata/MoMA+Art+Collection/Artworks.csv" --no-llm 2>&1 | Out-String
-
-if ($output -match "rows" -and $output -match "columns")
+if (Test-Path "sampledata/MoMA+Art+Collection/Artworks.csv")
 {
-    Write-Success "MoMA Artworks profiled"
-    $passed++
+    $output = dotnet run -- -f "sampledata/MoMA+Art+Collection/Artworks.csv" --no-llm 2>&1 | Out-String
+
+    if ($output -match "rows" -and $output -match "columns")
+    {
+        Write-Success "MoMA Artworks profiled"
+        $passed++
+    }
+    else
+    {
+        Write-Fail "MoMA Artworks profiling failed"
+        $failed++
+    }
 }
 else
 {
-    Write-Fail "MoMA Artworks profiling failed"
-    $failed++
+    Write-Info "Skipping optional MoMA dataset (not present)"
 }
 
 # ============================================================================
 # TEST 5: Profile Wine Reviews (130k rows - performance test)
 # ============================================================================
 Write-Test "TEST 5: Profile Wine Reviews (130k rows - performance)"
-$sw = [Diagnostics.Stopwatch]::StartNew()
-$output = dotnet run -- -f "sampledata/winemag-data-130k-v2.csv/winemag-data-130k-v2.csv" --no-llm 2>&1 | Out-String
-$sw.Stop()
-
-if ($output -match "rows" -and $output -match "columns")
+if (Test-Path "sampledata/winemag-data-130k-v2.csv/winemag-data-130k-v2.csv")
 {
-    Write-Success "Wine reviews profiled in $($sw.Elapsed.TotalSeconds.ToString('F1') )s"
-    $passed++
+    $sw = [Diagnostics.Stopwatch]::StartNew()
+    $output = dotnet run -- -f "sampledata/winemag-data-130k-v2.csv/winemag-data-130k-v2.csv" --no-llm 2>&1 | Out-String
+    $sw.Stop()
 
-    if ($sw.Elapsed.TotalSeconds -lt 30)
+    if ($output -match "rows" -and $output -match "columns")
     {
-        Write-Success "Performance acceptable (<30s for 130k rows)"
+        Write-Success "Wine reviews profiled in $($sw.Elapsed.TotalSeconds.ToString('F1') )s"
         $passed++
+
+        if ($sw.Elapsed.TotalSeconds -lt 30)
+        {
+            Write-Success "Performance acceptable (<30s for 130k rows)"
+            $passed++
+        }
+        else
+        {
+            Write-Fail "Performance too slow (>30s)"
+            $failed++
+        }
     }
     else
     {
-        Write-Fail "Performance too slow (>30s)"
+        Write-Fail "Wine reviews profiling failed"
         $failed++
     }
 }
 else
 {
-    Write-Fail "Wine reviews profiling failed"
-    $failed++
+    Write-Info "Skipping optional wine dataset (not present)"
 }
 
 # ============================================================================
