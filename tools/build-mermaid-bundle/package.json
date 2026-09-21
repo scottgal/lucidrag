@@ -7,8 +7,8 @@
     "build": "node build.mjs"
   },
   "devDependencies": {
-    "esbuild": "^0.25.0",
-    "mermaid": "^11.16.1"
+    "esbuild": "^0.28.2",
+    "mermaid": "^12.0.0"
   },
   "overrides": {
     "lodash-es": ">=4.18.0"
