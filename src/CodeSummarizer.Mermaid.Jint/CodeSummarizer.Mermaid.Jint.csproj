@@ -51,8 +51,8 @@
         <PackageReference Include="Jint" Version="4.7.0" />
 
         <!-- Core dependencies -->
-        <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.5" />
-        <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="10.0.5" />
+        <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.12" />
+        <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="10.0.12" />
     </ItemGroup>
 
     <!-- CodeSummarizer.Core dependency (conditional: ProjectRef local, PackageRef CI) -->

@@ -92,12 +92,12 @@
         </PackageReference>
 
         <!-- Core dependencies - .NET 10 -->
-        <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="10.0.5" />
-        <PackageReference Include="Microsoft.Extensions.Options" Version="10.0.5" />
-        <PackageReference Include="Microsoft.Extensions.Options.ConfigurationExtensions" Version="10.0.5" />
-        <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.5" />
-        <PackageReference Include="Microsoft.Extensions.Hosting.Abstractions" Version="10.0.5" />
-        <PackageReference Include="Microsoft.Extensions.Configuration.Abstractions" Version="10.0.5" />
+        <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="10.0.12" />
+        <PackageReference Include="Microsoft.Extensions.Options" Version="10.0.12" />
+        <PackageReference Include="Microsoft.Extensions.Options.ConfigurationExtensions" Version="10.0.12" />
+        <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.12" />
+        <PackageReference Include="Microsoft.Extensions.Hosting.Abstractions" Version="10.0.12" />
+        <PackageReference Include="Microsoft.Extensions.Configuration.Abstractions" Version="10.0.12" />
         <PackageReference Include="Polly.Core" Version="8.6.6" />
 
         <!-- OpenTelemetry for observability -->
@@ -122,7 +122,7 @@
         <PackageReference Include="Qdrant.Client" Version="1.17.0" />
 
         <!-- Utilities -->
-        <PackageReference Include="System.IO.Hashing" Version="10.0.5" />
+        <PackageReference Include="System.IO.Hashing" Version="10.0.12" />
         <PackageReference Include="dotnet-stop-words" Version="1.1.0"/>
 
         <!-- YAML parsing for wave manifests -->

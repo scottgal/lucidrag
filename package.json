@@ -3,10 +3,10 @@
     "@playwright/test": "^1.57.0",
     "@types/node": "^25.0.9",
     "cross-env": "^10.1.0",
-    "puppeteer": "^24.34.0"
+    "puppeteer": "^25.11.0"
   },
   "dependencies": {
-    "@anthropic-ai/claude-code": "^2.1.12",
+    "@anthropic-ai/claude-code": "^2.1.278",
     "claude": "^0.1.2"
   },
   "scripts": {

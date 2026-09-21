@@ -22,9 +22,9 @@
         <PackageReference Include="FluentAssertions" Version="8.9.0" />
         <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="10.0.1" />
         <PackageReference Include="Pgvector.EntityFrameworkCore" Version="0.3.0"/>
-        <PackageReference Include="Microsoft.AspNetCore.Mvc.Testing" Version="10.0.5" />
-        <PackageReference Include="Microsoft.Extensions.Configuration" Version="10.0.5" />
-        <PackageReference Include="Testcontainers.PostgreSql" Version="4.11.0" />
+        <PackageReference Include="Microsoft.AspNetCore.Mvc.Testing" Version="10.0.12" />
+        <PackageReference Include="Microsoft.Extensions.Configuration" Version="10.0.12" />
+        <PackageReference Include="Testcontainers.PostgreSql" Version="4.15.0" />
         <PackageReference Include="PuppeteerSharp" Version="24.40.0" />
     </ItemGroup>
 

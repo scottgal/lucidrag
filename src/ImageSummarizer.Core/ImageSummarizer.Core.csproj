@@ -67,6 +67,9 @@
         <!-- Legacy ephemeral.complete for old code - to be removed after migration -->
         <PackageReference Include="mostlylucid.ephemeral.complete" Version="2.3.2" Aliases="EphemeralComplete"/>
         <PackageReference Include="Mostlylucid.Ephemeral.Atoms.Taxonomy" Version="2.3.2"/>
+        <!-- Override vulnerable transitive mail dependencies. -->
+        <PackageReference Include="MailKit" Version="4.16.0"/>
+        <PackageReference Include="MimeKit" Version="4.16.0"/>
 
         <!-- Tesseract for OCR -->
         <PackageReference Include="Tesseract" Version="5.2.0"/>
@@ -75,10 +78,10 @@
         <PackageReference Include="WeCantSpell.Hunspell" Version="7.0.1"/>
 
         <!-- SQLite for signal storage -->
-        <PackageReference Include="Microsoft.Data.Sqlite" Version="10.0.5" />
+        <PackageReference Include="Microsoft.Data.Sqlite" Version="10.0.12" />
 
         <!-- Override vulnerable transitive dependencies -->
-        <PackageReference Include="Microsoft.Extensions.Caching.Memory" Version="10.0.5" />
+        <PackageReference Include="Microsoft.Extensions.Caching.Memory" Version="10.0.12" />
         <PackageReference Include="Npgsql" Version="10.0.2" />
 
         <!-- OpenCV for motion analysis -->

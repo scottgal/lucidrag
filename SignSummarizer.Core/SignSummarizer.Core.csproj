@@ -38,15 +38,15 @@
         <PackageReference Include="Microsoft.ML.Vision" Version="5.0.0"/>
 
         <!-- Signal storage and retrieval -->
-        <PackageReference Include="Microsoft.Data.Sqlite" Version="10.0.5" />
+        <PackageReference Include="Microsoft.Data.Sqlite" Version="10.0.12" />
         <PackageReference Include="System.Linq.Async" Version="7.0.0"/>
 
         <!-- Configuration -->
-        <PackageReference Include="Microsoft.Extensions.Configuration" Version="10.0.5" />
-        <PackageReference Include="Microsoft.Extensions.Configuration.Json" Version="10.0.5" />
-        <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="10.0.5" />
-        <PackageReference Include="Microsoft.Extensions.Logging" Version="10.0.5" />
-        <PackageReference Include="Microsoft.Extensions.Logging.Debug" Version="10.0.5" />
+        <PackageReference Include="Microsoft.Extensions.Configuration" Version="10.0.12" />
+        <PackageReference Include="Microsoft.Extensions.Configuration.Json" Version="10.0.12" />
+        <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="10.0.12" />
+        <PackageReference Include="Microsoft.Extensions.Logging" Version="10.0.12" />
+        <PackageReference Include="Microsoft.Extensions.Logging.Debug" Version="10.0.12" />
 
         <!-- YAML support for wave definitions -->
         <PackageReference Include="YamlDotNet" Version="16.3.0"/>

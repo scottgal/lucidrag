@@ -28,19 +28,19 @@
 
     <!-- Core ASP.NET packages -->
     <ItemGroup>
-        <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="10.0.5" />
-        <PackageReference Include="System.ServiceModel.Syndication" Version="10.0.5" />
+        <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="10.0.12" />
+        <PackageReference Include="System.ServiceModel.Syndication" Version="10.0.12" />
     </ItemGroup>
 
     <!-- Entity Framework Core + PostgreSQL + SQLite (for standalone) -->
     <ItemGroup>
-        <PackageReference Include="Microsoft.EntityFrameworkCore" Version="10.0.5" />
-        <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="10.0.5">
+        <PackageReference Include="Microsoft.EntityFrameworkCore" Version="10.0.12" />
+        <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="10.0.12">
             <PrivateAssets>all</PrivateAssets>
             <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
         </PackageReference>
         <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="10.0.1" />
-        <PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" Version="10.0.5" />
+        <PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" Version="10.0.12" />
     </ItemGroup>
 
     <!-- Logging -->
@@ -68,13 +68,13 @@
 
     <!-- GraphQL -->
     <ItemGroup>
-        <PackageReference Include="HotChocolate.AspNetCore" Version="15.1.12"/>
-        <PackageReference Include="HotChocolate.Data.EntityFramework" Version="15.1.12"/>
+        <PackageReference Include="HotChocolate.AspNetCore" Version="15.1.18"/>
+        <PackageReference Include="HotChocolate.Data.EntityFramework" Version="15.1.18"/>
     </ItemGroup>
 
     <!-- Authentication -->
     <ItemGroup>
-        <PackageReference Include="Microsoft.AspNetCore.Identity.EntityFrameworkCore" Version="10.0.5" />
+        <PackageReference Include="Microsoft.AspNetCore.Identity.EntityFrameworkCore" Version="10.0.12" />
     </ItemGroup>
 
     <!-- Project references -->

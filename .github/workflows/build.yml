@@ -7,6 +7,46 @@ on:
     branches: [ main ]
 
 jobs:
+  dependency-audit:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+
+      - name: Restore .NET dependencies
+        run: dotnet restore LucidRAG.sln
+
+      - name: Audit direct and transitive NuGet dependencies
+        run: |
+          dotnet list LucidRAG.sln package \
+            --vulnerable \
+            --include-transitive \
+            --format json \
+            --output-version 1 > vulnerabilities.json
+          jq -e '[
+            .projects[]?.frameworks[]?
+            | ((.topLevelPackages // []) + (.transitivePackages // []))[]?
+            | select((.vulnerabilities // []) | length > 0)
+          ] | length == 0' vulnerabilities.json
+
+      - name: Audit npm lockfiles
+        run: |
+          npm audit --ignore-scripts
+          npm --prefix LucidRAG.Website audit --ignore-scripts
+          npm --prefix src/LucidRAG audit --ignore-scripts
+          npm --prefix test-screenshots audit --ignore-scripts
+          npm --prefix tools/build-mermaid-bundle audit --ignore-scripts
+
   build:
     runs-on: ubuntu-latest
 

@@ -31,7 +31,7 @@
     </ItemGroup>
 
     <ItemGroup>
-        <PackageReference Include="Microsoft.Extensions.Http" Version="10.0.5" />
+        <PackageReference Include="Microsoft.Extensions.Http" Version="10.0.12" />
     </ItemGroup>
 
     <!-- DocSummarizer dependency (conditional: ProjectRef local, PackageRef CI) -->

@@ -95,12 +95,12 @@
 
         <!-- MCP server for AI agent integration -->
         <PackageReference Include="ModelContextProtocol" Version="1.2.0" />
-        <PackageReference Include="Microsoft.Extensions.Hosting" Version="10.0.5" />
+        <PackageReference Include="Microsoft.Extensions.Hosting" Version="10.0.12" />
     </ItemGroup>
 
     <!-- Complete-only: email delivery, console image display -->
     <ItemGroup Condition="'$(CompleteBuild)' == 'true'">
-        <PackageReference Include="MailKit" Version="4.14.1"/>
+        <PackageReference Include="MailKit" Version="4.16.0"/>
         <PackageReference Include="SendGrid" Version="9.29.3"/>
         <PackageReference Include="mostlylucid.consoleimage" Version="4.5.1"/>
         <PackageReference Include="mostlylucid.consoleimage.player" Version="4.5.1"/>

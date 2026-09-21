@@ -29,12 +29,12 @@
         <PackageReference Include="XenoAtom.Terminal.UI" Version="1.13.1" />
         <!-- MCP server -->
         <PackageReference Include="ModelContextProtocol" Version="1.2.0" />
-        <PackageReference Include="Microsoft.Extensions.Hosting" Version="10.0.5" />
+        <PackageReference Include="Microsoft.Extensions.Hosting" Version="10.0.12" />
         <!-- File logging (stdout owned by TUI) -->
         <PackageReference Include="Serilog.Extensions.Hosting" Version="10.0.0" />
         <PackageReference Include="Serilog.Sinks.File" Version="7.0.0" />
         <!-- EF Core SQLite for standalone metadata -->
-        <PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" Version="10.0.5" />
+        <PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" Version="10.0.12" />
     </ItemGroup>
 
     <ItemGroup>

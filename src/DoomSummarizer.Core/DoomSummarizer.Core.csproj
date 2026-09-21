@@ -72,7 +72,7 @@
 
         <!-- Exclude NuGet.CommandLine pulled transitively by Microsoft.Recognizers.Text — it's a
              tools package not needed at runtime and triggers GHSA-68w7-72jg-6qpp vulnerability warning -->
-        <PackageReference Include="NuGet.CommandLine" Version="7.3.0" ExcludeAssets="all" PrivateAssets="all">
+        <PackageReference Include="NuGet.CommandLine" Version="7.3.1" ExcludeAssets="all" PrivateAssets="all">
           <IncludeAssets>none</IncludeAssets>
         </PackageReference>
         <PackageReference Include="SmartReader" Version="0.11.0"/>
@@ -100,7 +100,7 @@
         <PackageReference Include="YamlDotNet" Version="16.3.0"/>
 
         <!-- Logging abstraction -->
-        <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.5" />
+        <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.12" />
     </ItemGroup>
 
     <!-- MinVer -->

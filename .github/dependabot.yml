@@ -1,0 +1,60 @@
+version: 2
+updates:
+  - package-ecosystem: nuget
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      dotnet-dependencies:
+        patterns:
+          - "*"
+
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      npm-dependencies:
+        patterns:
+          - "*"
+
+  - package-ecosystem: npm
+    directory: /LucidRAG.Website
+    schedule:
+      interval: weekly
+    groups:
+      website-dependencies:
+        patterns:
+          - "*"
+
+  - package-ecosystem: npm
+    directory: /src/LucidRAG
+    schedule:
+      interval: weekly
+    groups:
+      lucidrag-web-dependencies:
+        patterns:
+          - "*"
+
+  - package-ecosystem: npm
+    directory: /test-screenshots
+    schedule:
+      interval: weekly
+    groups:
+      screenshot-dependencies:
+        patterns:
+          - "*"
+
+  - package-ecosystem: npm
+    directory: /tools/build-mermaid-bundle
+    schedule:
+      interval: weekly
+    groups:
+      mermaid-build-dependencies:
+        patterns:
+          - "*"
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly

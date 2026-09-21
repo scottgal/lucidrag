@@ -37,9 +37,9 @@
         <PackageReference Include="Qdrant.Client" Version="1.17.0" />
 
         <!-- Microsoft Extensions for DI and configuration - match Summarizer.Core versions -->
-        <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="10.0.5" />
-        <PackageReference Include="Microsoft.Extensions.Options" Version="10.0.5" />
-        <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.5" />
+        <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="10.0.12" />
+        <PackageReference Include="Microsoft.Extensions.Options" Version="10.0.12" />
+        <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.12" />
     </ItemGroup>
 
     <!-- Summarizer.Core (ProjectRef local, PackageRef CI) -->
