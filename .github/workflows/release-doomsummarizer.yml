@@ -152,7 +152,7 @@ jobs:
           tar -czvf "../publish/${name}-${{ matrix.rid }}.tar.gz" *
 
       - name: Upload artifact
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: ${{ steps.archive_name.outputs.name }}-${{ matrix.rid }}
           path: ./publish/${{ steps.archive_name.outputs.name }}-${{ matrix.rid }}.*

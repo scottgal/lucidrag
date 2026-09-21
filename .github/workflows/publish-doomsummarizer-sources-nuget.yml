@@ -156,7 +156,7 @@ jobs:
             --skip-duplicate --no-symbols
 
       - name: Upload artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: nuget-${{ needs.resolve-package.outputs.package_name }}
           path: |
