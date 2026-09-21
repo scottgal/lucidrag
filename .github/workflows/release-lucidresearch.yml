@@ -100,7 +100,7 @@ jobs:
           tar -czvf "../publish/lucidresearch-${{ matrix.rid }}.tar.gz" *
 
       - name: Upload artifact
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: lucidresearch-${{ matrix.rid }}
           path: ./publish/lucidresearch-${{ matrix.rid }}.*
