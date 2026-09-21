@@ -12,15 +12,15 @@
   },
   "devDependencies": {
     "@tailwindcss/forms": "^0.5.7",
-    "@tailwindcss/typography": "^0.5.10",
-    "autoprefixer": "^10.4.16",
-    "daisyui": "^4.12.10",
+    "@tailwindcss/typography": "^0.5.20",
+    "autoprefixer": "^10.6.1",
+    "daisyui": "^5.7.42",
     "postcss": "^8.5.28",
-    "tailwindcss": "^3.4.1",
-    "vite": "^6.4.3"
+    "tailwindcss": "^4.3.3",
+    "vite": "^8.3.0"
   },
   "dependencies": {
-    "alpinejs": "^3.14.1",
-    "htmx.org": "^2.0.3"
+    "alpinejs": "^3.17.3",
+    "htmx.org": "^2.0.10"
   }
 }
