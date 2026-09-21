@@ -584,8 +584,8 @@ public class DoclingClient : IDisposable
     {
         var sb = new StringBuilder();
         foreach (var run in para.Elements<Run>())
-        foreach (var text in run.Elements<Text>())
-            sb.Append(text.Text);
+            foreach (var text in run.Elements<Text>())
+                sb.Append(text.Text);
         return sb.ToString().Trim();
     }
 

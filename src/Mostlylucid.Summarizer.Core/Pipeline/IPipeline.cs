@@ -104,7 +104,7 @@ public class PipelineResult
         TimeSpan time)
     {
         return new PipelineResult
-            { Success = true, FilePath = filePath, PipelineId = pipelineId, Chunks = chunks, ProcessingTime = time };
+        { Success = true, FilePath = filePath, PipelineId = pipelineId, Chunks = chunks, ProcessingTime = time };
     }
 
     /// <summary>
@@ -113,7 +113,7 @@ public class PipelineResult
     public static PipelineResult Fail(string filePath, string pipelineId, string error, TimeSpan time)
     {
         return new PipelineResult
-            { Success = false, FilePath = filePath, PipelineId = pipelineId, Error = error, ProcessingTime = time };
+        { Success = false, FilePath = filePath, PipelineId = pipelineId, Error = error, ProcessingTime = time };
     }
 }
 

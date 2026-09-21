@@ -617,21 +617,21 @@ public class StructuredMapReduceSummarizer
 
         // Simple contradiction detection: look for negation patterns
         for (var i = 0; i < allFacts.Count; i++)
-        for (var j = i + 1; j < allFacts.Count; j++)
-        {
-            var fact1 = allFacts[i];
-            var fact2 = allFacts[j];
+            for (var j = i + 1; j < allFacts.Count; j++)
+            {
+                var fact1 = allFacts[i];
+                var fact2 = allFacts[j];
 
-            if (fact1.SourceChunk == fact2.SourceChunk)
-                continue;
+                if (fact1.SourceChunk == fact2.SourceChunk)
+                    continue;
 
-            // Check for potential contradiction patterns
-            if (MightContradict(fact1.Statement, fact2.Statement))
-                contradictions.Add(new Contradiction(
-                    $"'{fact1.Statement}' vs '{fact2.Statement}'",
-                    [fact1.SourceChunk ?? "unknown", fact2.SourceChunk ?? "unknown"],
-                    "Different source chunks make conflicting claims"));
-        }
+                // Check for potential contradiction patterns
+                if (MightContradict(fact1.Statement, fact2.Statement))
+                    contradictions.Add(new Contradiction(
+                        $"'{fact1.Statement}' vs '{fact2.Statement}'",
+                        [fact1.SourceChunk ?? "unknown", fact2.SourceChunk ?? "unknown"],
+                        "Different source chunks make conflicting claims"));
+            }
 
         return contradictions;
     }
@@ -749,10 +749,10 @@ public class StructuredMapReduceSummarizer
 
         // Generate questions from uncertainties
         foreach (var output in mapOutputs)
-        foreach (var uncertainty in output.Uncertainties)
-            if (uncertainty.Type == UncertaintyType.MissingContext ||
-                uncertainty.Type == UncertaintyType.IncompleteData)
-                questions.Add($"What is {uncertainty.Description}?");
+            foreach (var uncertainty in output.Uncertainties)
+                if (uncertainty.Type == UncertaintyType.MissingContext ||
+                    uncertainty.Type == UncertaintyType.IncompleteData)
+                    questions.Add($"What is {uncertainty.Description}?");
 
         // Limit to top 5
         return questions.Distinct().Take(5).ToList();

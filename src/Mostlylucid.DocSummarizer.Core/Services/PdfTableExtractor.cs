@@ -275,8 +275,8 @@ public class PdfTableExtractor : ITableExtractor
         var xCoords = new List<double>();
 
         foreach (var row in region)
-        foreach (var word in row)
-            xCoords.Add(word.BoundingBox.Left);
+            foreach (var word in row)
+                xCoords.Add(word.BoundingBox.Left);
 
         if (xCoords.Count == 0) return new List<(double, double)>();
 

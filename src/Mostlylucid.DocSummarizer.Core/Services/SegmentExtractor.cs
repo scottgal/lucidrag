@@ -558,8 +558,8 @@ public class SegmentExtractor : IDisposable
             .ToList();
 
         foreach (var section in sections)
-        foreach (var sentence in section.OrderBy(s => s.Index).Take(2))
-            result.Add(sentence);
+            foreach (var sentence in section.OrderBy(s => s.Index).Take(2))
+                result.Add(sentence);
 
         // 3. Stratified sampling: allocate remaining budget proportionally to sections
         var remainingBudget = maxToKeep - result.Count;

@@ -781,16 +781,16 @@ public class QualityAnalyzer
         var duplicates = new List<string>();
 
         for (var i = 0; i < sentences.Count; i++)
-        for (var j = i + 1; j < sentences.Count; j++)
-        {
-            var similarity = _textAnalysis.ComputeCombinedSimilarity(
-                sentences[i], sentences[j]);
+            for (var j = i + 1; j < sentences.Count; j++)
+            {
+                var similarity = _textAnalysis.ComputeCombinedSimilarity(
+                    sentences[i], sentences[j]);
 
-            if (similarity > 0.8)
-                duplicates.Add(sentences[j].Length > 50
-                    ? sentences[j][..50] + "..."
-                    : sentences[j]);
-        }
+                if (similarity > 0.8)
+                    duplicates.Add(sentences[j].Length > 50
+                        ? sentences[j][..50] + "..."
+                        : sentences[j]);
+            }
 
         return duplicates.Distinct().ToList();
     }

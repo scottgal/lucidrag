@@ -122,7 +122,7 @@ public record WaveResult
     public static WaveResult Success(string waveName, IEnumerable<Signal> signals, TimeSpan duration)
     {
         return new WaveResult
-            { IsSuccess = true, WaveName = waveName, Signals = signals.ToList(), Duration = duration };
+        { IsSuccess = true, WaveName = waveName, Signals = signals.ToList(), Duration = duration };
     }
 
     public static WaveResult Failure(string waveName, string error, TimeSpan duration)

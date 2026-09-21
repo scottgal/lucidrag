@@ -546,25 +546,25 @@ public class DuckDBVectorStore : IMultiVectorStore
         var namedTable = GetNamedVectorTableName(collectionName);
 
         foreach (var doc in docList)
-        foreach (var (name, vector) in doc.NamedVectors)
-        {
-            var embeddingJson = JsonSerializer.Serialize(vector);
+            foreach (var (name, vector) in doc.NamedVectors)
+            {
+                var embeddingJson = JsonSerializer.Serialize(vector);
 
-            var sql = $@"
+                var sql = $@"
                     INSERT OR REPLACE INTO {namedTable}
                     (document_id, vector_name, embedding_json, dimension)
                     VALUES (@doc_id, @vec_name, @embedding_json, @dimension);
                 ";
 
-            using var cmd = _connection!.CreateCommand();
-            cmd.CommandText = sql;
-            AddParameter(cmd, "@doc_id", doc.Id);
-            AddParameter(cmd, "@vec_name", name);
-            AddParameter(cmd, "@embedding_json", embeddingJson);
-            AddParameter(cmd, "@dimension", vector.Length);
+                using var cmd = _connection!.CreateCommand();
+                cmd.CommandText = sql;
+                AddParameter(cmd, "@doc_id", doc.Id);
+                AddParameter(cmd, "@vec_name", name);
+                AddParameter(cmd, "@embedding_json", embeddingJson);
+                AddParameter(cmd, "@dimension", vector.Length);
 
-            await cmd.ExecuteNonQueryAsync(ct);
-        }
+                await cmd.ExecuteNonQueryAsync(ct);
+            }
 
         _logger.LogDebug("Upserted {Count} multi-vector documents to collection {Collection}",
             docList.Count, collectionName);

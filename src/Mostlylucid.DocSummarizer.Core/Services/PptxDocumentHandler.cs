@@ -449,12 +449,12 @@ public class PptxDocumentHandler : IDocumentHandler
         {
             var sb = new StringBuilder();
             foreach (var para in chartText.RichText.Elements<A.Paragraph>())
-            foreach (var run in para.Elements<A.Run>())
-            {
-                var text = run.Text?.Text;
-                if (!string.IsNullOrEmpty(text))
-                    sb.Append(text);
-            }
+                foreach (var run in para.Elements<A.Run>())
+                {
+                    var text = run.Text?.Text;
+                    if (!string.IsNullOrEmpty(text))
+                        sb.Append(text);
+                }
 
             return sb.ToString().Trim();
         }

@@ -132,7 +132,7 @@ public static class ProgressUpdates
             totalBytes > 0 ? bytesDownloaded * 100.0 / totalBytes : 0,
             ElapsedMs: elapsedMs,
             Data: new Dictionary<string, object>
-                { ["model"] = modelName, ["bytes"] = bytesDownloaded, ["totalBytes"] = totalBytes });
+            { ["model"] = modelName, ["bytes"] = bytesDownloaded, ["totalBytes"] = totalBytes });
     }
 }
 

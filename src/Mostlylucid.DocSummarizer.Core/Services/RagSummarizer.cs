@@ -612,8 +612,8 @@ public class RagSummarizer
             }
 
             foreach (var result in retrievalResults)
-            foreach (var c in result.retrieved)
-                allRetrievedChunks.Add(c.Id);
+                foreach (var c in result.retrieved)
+                    allRetrievedChunks.Add(c.Id);
 
             // Clear retrieval results to free memory - we've extracted what we need
             retrievalResults = null!;

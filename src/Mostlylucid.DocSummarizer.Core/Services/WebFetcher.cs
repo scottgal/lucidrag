@@ -880,8 +880,8 @@ public class WebFetcher
 
         // Remove dangerous elements
         foreach (var selector in DangerousElements)
-        foreach (var element in document.QuerySelectorAll(selector).ToList())
-            element.Remove();
+            foreach (var element in document.QuerySelectorAll(selector).ToList())
+                element.Remove();
 
         // Process all elements
         var imageCount = 0;

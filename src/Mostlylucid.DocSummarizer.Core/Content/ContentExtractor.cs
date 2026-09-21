@@ -185,8 +185,8 @@ public partial class ContentExtractor
             };
 
             foreach (var selector in boilerplateSelectors)
-            foreach (var el in contentElement.QuerySelectorAll(selector).ToList())
-                el.Remove();
+                foreach (var el in contentElement.QuerySelectorAll(selector).ToList())
+                    el.Remove();
 
             var title = document.QuerySelector("title")?.TextContent ??
                         document.QuerySelector("h1")?.TextContent ?? "";
